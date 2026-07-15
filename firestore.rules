@@ -1,0 +1,104 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && myProfile().role == 'admin';
+    }
+
+    function myClientId() {
+      return isSignedIn() ? myProfile().clientId : null;
+    }
+
+    function belongsToClient(clientId) {
+      return isSignedIn() && myProfile().role == 'client' && myProfile().clientId == clientId;
+    }
+
+    // ---- users ----
+    match /users/{userId} {
+      allow get: if request.auth.uid == userId || isAdmin();
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+      );
+    }
+
+    // ---- clients ----
+    match /clients/{clientId} {
+      allow get: if isAdmin() || belongsToClient(clientId);
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- projects ----
+    match /projects/{projectId} {
+      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow list: if isSignedIn(); // 쿼리 결과는 where(clientId==...) 절로 클라이언트가 제한, 각 문서는 위 get 규칙으로 재검증됨
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- tasks ----
+    match /tasks/{taskId} {
+      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow list: if isSignedIn();
+      allow create, delete: if isAdmin();
+      // 클라이언트는 상태/진행률 등 협업에 필요한 필드만 수정 가능
+      allow update: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'progress', 'statusHistory', 'updatedAt', 'completedAt'])
+      );
+
+      match /comments/{commentId} {
+        allow get, list: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+          && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+      }
+
+      match /files/{fileId} {
+        allow get, list: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+          && request.resource.data.uploadedBy == request.auth.uid;
+        allow delete: if isAdmin() || resource.data.uploadedBy == request.auth.uid;
+      }
+    }
+
+    // ---- notifications ----
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // ---- workflow templates (관리자 전용 도구) ----
+    match /templates/{templateId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---- notices (공지사항) ----
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+    }
+
+    // ---- inquiries (문의하기) ----
+    match /inquiries/{inquiryId} {
+      allow list, get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx firebase *)",
+      "Bash(npm install *)",
+      "Bash(cp node_modules/occt-import-js/dist/occt-import-js.wasm public/)",
+      "Bash(cp node_modules/occt-import-js/dist/occt-import-js-worker.js public/)",
+      "Bash(node *)",
+      "Bash(npx tsc *)",
+      "Bash(whois handyhand.co.kr)",
+      "Bash(whois handyhand.kr)",
+      "Bash(npm run *)",
+      "Bash(npx next *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(kill %1)",
+      "Bash(curl -s http://localhost:3002/home)",
+      "Bash(curl -s \"http://localhost:3002/clients\")",
+      "Bash(npm list *)",
+      "Bash(vercel --version)",
+      "Bash(npm i *)",
+      "Bash(vercel *)",
+      "Bash(xargs ls)",
+      "Bash(npx vercel *)",
+      "Bash(brew install *)",
+      "Bash(pdftotext \"/Users/choi/Desktop/기타/핸디핸드 기업소개서.pdf.pdf\" -)",
+      "Bash(pdftotext \"/Users/choi/Desktop/기타/핸디핸드 기업소개서.pdf.pdf\" /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/2ac6af64-03ed-4b4e-aba8-ae1dcc91a6aa/scratchpad/brochure.txt)",
+      "Bash(pdftoppm -r 150 -l 5 \"/Users/choi/Desktop/기타/핸디핸드 기업소개서.pdf.pdf\" /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/2ac6af64-03ed-4b4e-aba8-ae1dcc91a6aa/scratchpad/page)",
+      "Bash(pdftoppm -r 120 -png -l 8 \"/Users/choi/Desktop/기타/핸디핸드 기업소개서.pdf.pdf\" /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/2ac6af64-03ed-4b4e-aba8-ae1dcc91a6aa/scratchpad/pg)",
+      "Bash(cp \"/Users/choi/Desktop/사이트_png_파비콘.png\" \"/Users/choi/Desktop/pm-platform/src/app/icon.png\")",
+      "Bash(cp \"/Users/choi/Desktop/사이트_png_파비콘.png\" \"/Users/choi/Desktop/pm-platform/public/og-image.png\")",
+      "WebSearch",
+      "WebFetch(domain:unsplash.com)",
+      "Bash(curl *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(chmod +x *)",
+      "WebFetch(domain:www.pexels.com)",
+      "Bash(bash *)",
+      "Read(//tmp/**)",
+      "Bash(rm /tmp/env-check.txt)",
+      "Bash(wait *)",
+      "Skill(run)",
+      "Skill(update-config)",
+      "Bash(open *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(ipconfig getifaddr *)",
+      "Bash(npx ngrok *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d['tunnels'][0]['public_url']\\)\")",
+      "Bash(echo \"ngrok PID: $!\")",
+      "Bash(brew list *)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh api *)",
+      "Bash(python3 -c \"import json,sys; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(python3 -c ' *)",
+      "Bash(sips -g pixelWidth -g pixelHeight public/mockup-macbook.png public/mockup-iphone.png public/mockup-ipad.png)",
+      "Bash(identify public/mockup-macbook.png public/mockup-iphone.png public/mockup-ipad.png)",
+      "Bash(awk '{print $1, $3}')",
+      "Bash(python3 *)",
+      "Bash(pip3 install *)",
+      "Bash(kill 18647)",
+      "Bash(cloudflared tunnel *)",
+      "Bash(sed -i '' 's/와디즈 공식 컨설턴트 · 개발부터 런칭까지/전 와디즈 컨설턴트 · 개발부터 런칭까지/g' /Users/choi/Desktop/pm-platform/src/app/page.tsx)",
+      "Bash(sed -i '' 's/>와디즈 공식</>전 와디즈 컨설턴트</g' /Users/choi/Desktop/pm-platform/src/app/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 컨설턴트의 제품 개발 + 캠페인 원큐 지원/전 와디즈 컨설턴트의 제품 개발 + 캠페인 원큐 지원/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 컨설턴트가 제품 개발/전 와디즈 컨설턴트가 제품 개발/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 컨설턴트 직접 진행/전 와디즈 컨설턴트 경험 기반 진행/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/전 와디즈 컨설턴트 경험 기반 진행/와디즈 공식 파트너 출신 경험 기반 진행/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/전 와디즈 컨설턴트의 제품 개발/와디즈 공식 파트너 출신의 제품 개발/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/전 와디즈 컨설턴트가 제품 개발/와디즈와 공식 협력한 경험을 바탕으로 제품 개발/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/badge: \"전 와디즈 컨설턴트\"/badge: \"와디즈 공식 파트너 출신\"/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 컨설턴트 · 개발부터 런칭까지/와디즈 공식 파트너 출신 · 개발부터 런칭까지/g' /Users/choi/Desktop/pm-platform/src/app/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 파트너 출신 · 개발부터 런칭까지/와디즈 파트너스·펀딩플래너 출신 · 개발부터 런칭까지/g' /Users/choi/Desktop/pm-platform/src/app/page.tsx)",
+      "Bash(sed -i '' 's/>와디즈 공식 파트너 출신</>와디즈 파트너스·펀딩플래너 출신</g' /Users/choi/Desktop/pm-platform/src/app/page.tsx)",
+      "Bash(sed -i '' 's/badge: \"와디즈 공식 파트너 출신\"/badge: \"와디즈 파트너스·펀딩플래너 출신\"/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/와디즈 공식 파트너 출신의 제품 개발/와디즈 파트너스·펀딩플래너 출신의 제품 개발/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(sed -i '' 's/와디즈와 공식 협력한 경험을 바탕으로 제품 개발/와디즈 파트너스·펀딩플래너 출신으로, 제품 개발/g' /Users/choi/Desktop/pm-platform/src/app/service/page.tsx)",
+      "Bash(file /Users/choi/Desktop/pm-platform/public/mockup*.png)",
+      "Bash(lsof -i :3000 -sTCP:LISTEN)",
+      "Bash(disown)",
+      "Bash(chromium-cli --help)",
+      "Bash(npx --no-install playwright --version)",
+      "Bash(find / -maxdepth 6 -iname \"chromium-cli*\")",
+      "Bash(npm ls *)",
+      "Bash(sw_vers)",
+      "Bash(mkdir -p /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/cf60d742-1c0e-4484-881b-8a433f9a70ba/scratchpad/pw)",
+      "Bash(npm init *)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(lsof -i :3000 -sTCP:LISTEN -t)",
+      "Bash(npx --version)",
+      "Bash(screencapture -x /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/32a7b3a5-9ee2-4067-8fda-57f0c4002882/scratchpad/loading_check.png)",
+      "Bash(osascript -e 'tell application \"Google Chrome\" to activate')",
+      "Bash(screencapture -x /private/tmp/claude-501/-Users-choi-Desktop-pm-platform/32a7b3a5-9ee2-4067-8fda-57f0c4002882/scratchpad/loading_check2.png)",
+      "Bash(osascript -e 'tell application \"Google Chrome\" to get bounds of every window')",
+      "Bash(osascript -e 'tell application \"System Events\" to tell process \"Google Chrome\" to get windows')",
+      "Bash(echo \"exit: $?\")",
+      "Bash(ps -o pid,etime,command -p 15548,15529)",
+      "Bash(kill 15527 15528 15529 15548)",
+      "Bash(ls -la .vercel)",
+      "Bash(cat .vercel/project.json)",
+      "Bash(ps -o pid,etime,command -p 15634,15620)",
+      "Bash(ps -o pid,etime,time,command -p 15634,15620)",
+      "Bash(kill 15618 15620 15634)",
+      "Bash(pkill -f \"until npx vercel ls\")",
+      "Bash(pkill -f \"b4nyub1ri|8a09kgdcf|lc0nsus8v|hemtndwst\")",
+      "Bash(sips -Z 1920 -s format jpeg -s formatOptions 70 about-office.jpeg --out about-office.jpeg)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "touch /tmp/pm-platform-needs-deploy"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f /tmp/pm-platform-needs-deploy ]; then rm /tmp/pm-platform-needs-deploy && cd /Users/choi/Desktop/pm-platform && npm run deploy 2>&1; fi",
+            "timeout": 180,
+            "statusMessage": "handyhand.co.kr 배포 중..."
+          }
+        ]
+      }
+    ]
+  }
+}

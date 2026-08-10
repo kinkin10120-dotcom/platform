@@ -5,6 +5,7 @@ const COLOR: Record<TaskStatus, string> = {
   todo: "bg-slate-100 text-slate-600",
   in_progress: "bg-blue-100 text-blue-700",
   done: "bg-green-100 text-green-700",
+  on_hold: "bg-amber-100 text-amber-700",
 };
 
 export default function StatusBadge({ status }: { status: TaskStatus }) {

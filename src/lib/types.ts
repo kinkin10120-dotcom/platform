@@ -48,6 +48,7 @@ export interface Project {
   endDate: string; // YYYY-MM-DD
   status: ProjectStatus;
   sortOrder?: number;
+  calendarToken?: string;
   createdAt: number;
   createdBy: string;
 }
@@ -56,20 +57,37 @@ export interface Project {
 // todo: 시작 가능 (대기열)
 // in_progress: 진행 중
 // done: 완료
-export type TaskStatus = "pending" | "todo" | "in_progress" | "done";
+export type TaskStatus = "pending" | "todo" | "in_progress" | "done" | "on_hold";
 
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
   pending: "대기(선행업무)",
   todo: "진행 전",
   in_progress: "진행 중",
   done: "완료",
+  on_hold: "보류",
 };
 
-export const TASK_STATUS_ORDER: TaskStatus[] = ["pending", "todo", "in_progress", "done"];
+export const TASK_STATUS_ORDER: TaskStatus[] = ["pending", "todo", "in_progress", "on_hold", "done"];
 
 export interface StatusHistoryEntry {
   status: TaskStatus;
   enteredAt: number;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface DateChangeEntry {
+  fromStartDate: string;
+  toStartDate: string;
+  fromDueDate: string;
+  toDueDate: string;
+  changedAt: number;
+  changedBy: string;
+  cascaded?: boolean; // 선행 업무 일정 변경으로 인한 자동 조정 여부
 }
 
 export interface Task {
@@ -84,23 +102,48 @@ export interface Task {
   dueDate: string; // YYYY-MM-DD
   status: TaskStatus;
   progress: number; // 0-100
+  checklist: ChecklistItem[];
   order: number;
   dependsOn: string[]; // 선행 업무 taskId 목록
   templateId?: string;
   statusHistory: StatusHistoryEntry[];
+  dateHistory?: DateChangeEntry[];
   createdAt: number;
   updatedAt: number;
   completedAt?: number;
 }
+
+// 코멘트 작성자 표시용 역할. 실제 로그인 계정 역할(UserRole)에 "claude-auto"(자동 생성/수정)를 더한 표시 전용 확장.
+export type CommentAuthorRole = UserRole | "claude-auto";
 
 export interface TaskComment {
   id: string;
   taskId: string;
   authorId: string;
   authorName: string;
-  authorRole: UserRole;
+  authorRole: CommentAuthorRole;
   text: string;
   createdAt: number;
+}
+
+export interface TaskFileAiMethod {
+  method: string;
+  confidence: number;
+  reason: string;
+  initialCostLevel: number;
+  unitCostLevel: number;
+}
+
+export interface TaskFileAiAnalysis {
+  status: "pending" | "done" | "error";
+  partName?: string;
+  complexity?: string;
+  material?: string;
+  surfaceTreatment?: string;
+  recommendedMethods?: TaskFileAiMethod[];
+  summary?: string;
+  error?: string;
+  analyzedAt?: number;
 }
 
 export interface TaskFile {
@@ -114,6 +157,8 @@ export interface TaskFile {
   uploadedBy: string;
   uploadedByName: string;
   uploadedAt: number;
+  version: number;
+  aiAnalysis?: TaskFileAiAnalysis;
 }
 
 export type NotificationType =
@@ -121,13 +166,16 @@ export type NotificationType =
   | "status_change"
   | "comment"
   | "unblocked"
-  | "due_soon";
+  | "due_soon"
+  | "rescheduled"
+  | "notice";
 
 export interface AppNotification {
   id: string;
   userId: string;
-  projectId: string;
+  projectId?: string;
   taskId?: string;
+  noticeId?: string;
   type: NotificationType;
   message: string;
   read: boolean;
@@ -139,6 +187,7 @@ export interface TemplateStep {
   offsetDays: number; // 프로젝트/적용 시작일로부터 며칠 뒤 시작
   durationDays: number; // 소요 기간(일)
   dependsOnIndex: number | null; // steps 배열 내 선행 업무 인덱스 (없으면 null)
+  checklist?: string[]; // 적용 시 업무의 체크리스트로 그대로 생성됨
 }
 
 export interface Notice {
@@ -148,6 +197,7 @@ export interface Notice {
   createdAt: number;
   createdBy: string;
   createdByName: string;
+  readBy?: string[];
 }
 
 export type InquiryStatus = "pending" | "answered";
@@ -164,6 +214,9 @@ export interface Inquiry {
   answeredAt?: number;
   answeredBy?: string;
   createdAt: number;
+  email?: string;
+  phone?: string;
+  type?: string;
 }
 
 export interface WorkflowTemplate {

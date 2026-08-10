@@ -28,18 +28,20 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete }: {
   }
 
   return (
-    <div className="group rounded-lg bg-gray-50 p-3">
+    <div className="group rounded-2xl bg-[#f5f5f7] p-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-800">
+        <span className="text-sm font-medium text-[#1d1d1f]">
           {c.authorName}
-          <span className="ml-1 text-xs text-gray-400">{c.authorRole === "admin" ? "(운영팀)" : "(클라이언트)"}</span>
+          <span className="ml-1 text-xs text-[#86868b]">
+            {c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : "(클라이언트)"}
+          </span>
         </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-300">{formatDistanceToNow(c.createdAt, { addSuffix: true, locale: ko })}</span>
+          <span className="text-xs text-[#d1d1d6]">{formatDistanceToNow(c.createdAt, { addSuffix: true, locale: ko })}</span>
           {isMine && !editing && (
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-              <button onClick={() => { setEditText(c.text); setEditing(true); }} className="text-gray-400 hover:text-brand-600"><Pencil size={12} /></button>
-              <button onClick={onDelete} className="text-gray-400 hover:text-red-500"><Trash2 size={12} /></button>
+            <div className="flex gap-1">
+              <button onClick={() => { setEditText(c.text); setEditing(true); }} className="text-[#86868b] hover:text-[#1d1d1f]"><Pencil size={12} /></button>
+              <button onClick={onDelete} className="text-[#86868b] hover:text-red-500"><Trash2 size={12} /></button>
             </div>
           )}
         </div>
@@ -47,19 +49,19 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete }: {
       {editing ? (
         <div className="mt-2 flex gap-2">
           <textarea
-            className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+            className="flex-1 rounded-xl border border-[#d1d1d6] px-2 py-1 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
             rows={2}
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
             autoFocus
           />
           <div className="flex flex-col gap-1">
-            <button onClick={handleSave} disabled={saving} className="text-brand-600 hover:text-brand-800"><Check size={14} /></button>
-            <button onClick={() => setEditing(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+            <button onClick={handleSave} disabled={saving} className="text-[#1d1d1f] hover:text-[#86868b]"><Check size={14} /></button>
+            <button onClick={() => setEditing(false)} className="text-[#86868b] hover:text-[#1d1d1f]"><X size={14} /></button>
           </div>
         </div>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{c.text}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.text}</p>
       )}
     </div>
   );
@@ -102,7 +104,7 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
   return (
     <div className="space-y-3">
       <div className="scrollbar-thin max-h-64 space-y-3 overflow-y-auto">
-        {comments.length === 0 && <p className="text-sm text-gray-400">아직 코멘트가 없습니다.</p>}
+        {comments.length === 0 && <p className="text-sm text-[#86868b]">아직 코멘트가 없습니다.</p>}
         {comments.map((c) => (
           <CommentItem
             key={c.id}
@@ -119,12 +121,12 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="코멘트를 입력하세요"
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
         />
         <button
           type="submit"
           disabled={submitting || !text.trim()}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          className="rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition hover:bg-black disabled:opacity-50"
         >
           등록
         </button>

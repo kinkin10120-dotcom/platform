@@ -1,9 +1,25 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { TaskComment, UserRole } from "@/lib/types";
+import { TaskComment, CommentAuthorRole } from "@/lib/types";
 
 function colRef(taskId: string) {
   return collection(db, "tasks", taskId, "comments");
+}
+
+export async function getComments(taskId: string): Promise<TaskComment[]> {
+  const snap = await getDocs(query(colRef(taskId), orderBy("createdAt", "asc")));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      taskId,
+      authorId: data.authorId,
+      authorName: data.authorName,
+      authorRole: data.authorRole,
+      text: data.text,
+      createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+    } as TaskComment;
+  });
 }
 
 export function listenComments(taskId: string, cb: (comments: TaskComment[]) => void) {
@@ -38,7 +54,7 @@ export async function addComment(
   taskId: string,
   authorId: string,
   authorName: string,
-  authorRole: UserRole,
+  authorRole: CommentAuthorRole,
   text: string
 ) {
   return addDoc(colRef(taskId), {

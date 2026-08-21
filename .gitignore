@@ -11,3 +11,4 @@ functions/lib
 firebase-debug.log
 .firebase
 .vercel
+*.json

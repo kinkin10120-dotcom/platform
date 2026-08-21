@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { createQuoteRequest } from "@/lib/firestore/quotes";
 
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const formData = await req.formData();
   const name = formData.get("name") as string;
   const company = formData.get("company") as string;
@@ -70,5 +70,12 @@ export async function POST(req: NextRequest) {
   }
 
   console.log("Resend sent:", data?.id);
+
+  try {
+    await createQuoteRequest({ name, company, email, phone, stage, description, hasAttachment: attachments.length > 0 });
+  } catch (e) {
+    console.error("견적 요청 저장 실패:", e);
+  }
+
   return NextResponse.json({ ok: true });
 }

@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { addDays, format, parseISO } from "date-fns";
 import { db } from "@/lib/firebase";
 import { WorkflowTemplate, TemplateStep } from "@/lib/types";
@@ -34,6 +34,13 @@ export async function createTemplate(input: {
   return addDoc(colRef, { ...input, createdAt: serverTimestamp() });
 }
 
+export async function updateTemplate(
+  id: string,
+  input: { name: string; description?: string; steps: TemplateStep[] }
+) {
+  return updateDoc(doc(db, "templates", id), { ...input });
+}
+
 export async function deleteTemplate(id: string) {
   return deleteDoc(doc(db, "templates", id));
 }
@@ -66,6 +73,7 @@ export async function applyTemplateToProject(
       dependsOn: dependsOn.filter(Boolean),
       order: Date.now() + i,
       templateId: template.id,
+      checklist: (step.checklist ?? []).map((text, ci) => ({ id: `${Date.now()}-${i}-${ci}`, text, done: false })),
     });
     createdIds.push(ref.id);
   }

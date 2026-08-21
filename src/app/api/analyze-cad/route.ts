@@ -9,34 +9,54 @@ export async function POST(req: NextRequest) {
   const purpose = (formData.get("purpose") as string | null) ?? "";
   const quantity = (formData.get("quantity") as string | null) ?? "";
 
-  if (!file) {
-    return NextResponse.json({ error: "파일이 필요합니다." }, { status: 400 });
+  if (!file && !purpose.trim()) {
+    return NextResponse.json({ error: "파일을 업로드하거나 제품 용도를 입력해주세요." }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (!["stp", "step", "dxf", "dwg"].includes(ext ?? "")) {
+  const TEXT_EXTS = ["stp", "step", "dxf"];
+  const BINARY_EXTS = ["dwg", "ipt", "iam", "sldprt", "sldasm"];
+  const BINARY_LABELS: Record<string, string> = {
+    dwg: "AutoCAD DWG",
+    ipt: "Autodesk Inventor 파트",
+    iam: "Autodesk Inventor 조립품",
+    sldprt: "SolidWorks 파트",
+    sldasm: "SolidWorks 조립품",
+  };
+
+  const ext = file?.name.split(".").pop()?.toLowerCase();
+
+  if (file && !TEXT_EXTS.includes(ext ?? "") && !BINARY_EXTS.includes(ext ?? "")) {
     return NextResponse.json(
-      { error: "STP, STEP, DXF 또는 DWG 파일만 지원합니다." },
+      { error: "STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, SLDASM 파일만 지원합니다." },
       { status: 400 }
     );
   }
 
-  const isDwg = ext === "dwg";
+  const isBinary = !!file && BINARY_EXTS.includes(ext ?? "");
   let fileContent: string;
+  let accuracyNote = "";
 
-  if (isDwg) {
-    const buf = await file.arrayBuffer();
-    const header = new TextDecoder("ascii", { fatal: false }).decode(buf.slice(0, 6));
-    const versionMap: Record<string, string> = {
-      AC1036: "AutoCAD 2023",
-      AC1032: "AutoCAD 2018",
-      AC1027: "AutoCAD 2013",
-      AC1024: "AutoCAD 2010",
-      AC1021: "AutoCAD 2007",
-      AC1015: "AutoCAD 2000",
-    };
-    const acVersion = versionMap[header] ?? (header.startsWith("AC") ? `AutoCAD (${header})` : "AutoCAD");
-    fileContent = `[DWG 바이너리 파일 — 텍스트 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB\nCAD 버전: ${acVersion}`;
+  if (!file) {
+    fileContent = "";
+    accuracyNote = "\n※ 도면 파일 없이 텍스트 설명만으로 추정한 결과입니다. 실제 형상을 확인하지 않은 추정치이므로 정확도가 매우 낮을 수 있습니다.";
+  } else if (isBinary) {
+    if (ext === "dwg") {
+      const buf = await file.arrayBuffer();
+      const header = new TextDecoder("ascii", { fatal: false }).decode(buf.slice(0, 6));
+      const versionMap: Record<string, string> = {
+        AC1036: "AutoCAD 2023",
+        AC1032: "AutoCAD 2018",
+        AC1027: "AutoCAD 2013",
+        AC1024: "AutoCAD 2010",
+        AC1021: "AutoCAD 2007",
+        AC1015: "AutoCAD 2000",
+      };
+      const acVersion = versionMap[header] ?? (header.startsWith("AC") ? `AutoCAD (${header})` : "AutoCAD");
+      fileContent = `[DWG 바이너리 파일 — 텍스트 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB\nCAD 버전: ${acVersion}`;
+    } else {
+      fileContent = `[${BINARY_LABELS[ext ?? ""]} 바이너리 파일 — 형상 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB`;
+    }
+    accuracyNote = `\n※ 이 파일은 ${BINARY_LABELS[ext ?? ""]} 바이너리 형식입니다. 파일명과 메타데이터를 기반으로 추정 분석하며, 정확도가 낮을 수 있습니다. 더 정확한 분석을 원하시면 STP/STEP 파일로 내보내기 후 업로드해주세요.`;
   } else {
     fileContent = await file.text();
     if (fileContent.length > 60000) {
@@ -49,19 +69,19 @@ export async function POST(req: NextRequest) {
     quantity ? `생산 수량: ${quantity}` : "",
   ].filter(Boolean).join("\n");
 
-  const isAssembly = material === "조립품";
-  const dwgNote = isDwg
-    ? "\n※ 이 파일은 DWG 바이너리 형식입니다. 파일명과 메타데이터를 기반으로 추정 분석하며, 정확도가 낮을 수 있습니다."
-    : "";
+  const isAssembly = material.startsWith("조립품");
+  const assemblyMaterialHint = material.match(/주요 재질: (.+)\)$/)?.[1] ?? "";
+  const dwgNote = accuracyNote;
+  const fileSection = file
+    ? `CAD 파일:\n\`\`\`\n${fileContent}\n\`\`\``
+    : `도면 파일이 제공되지 않았습니다. 아래 텍스트 설명만으로 일반적인 제조 방법을 추정하세요.`;
 
   const prompt = isAssembly
     ? `당신은 제조 공학 전문가입니다. 아래 CAD 파일은 조립품입니다. 파일에서 개별 파트를 식별하고 각 파트별로 재질, 최적 제조방법, 표면처리를 추천하세요.
+${assemblyMaterialHint ? `전체 조립품의 주요 재질: ${assemblyMaterialHint} (각 파트 재질 추정 시 참고하되, 파트별로 다른 재질이 명백하면 그에 맞게 추정하세요)` : ""}
 ${contextLines}${dwgNote}
 
-CAD 파일:
-\`\`\`
-${fileContent}
-\`\`\`
+${fileSection}
 
 다음 JSON 형식으로만 응답하세요:
 {
@@ -74,22 +94,22 @@ ${fileContent}
       "method": "제조방법",
       "confidence": 85,
       "reason": "한 줄 이유",
-      "surfaceTreatment": "표면처리 추천 (없으면 '없음')"
+      "surfaceTreatment": "표면처리 추천 (없으면 '없음')",
+      "initialCostLevel": 2,
+      "unitCostLevel": 2
     }
   ],
   "summary": "전체 조립품 한 줄 요약"
 }
 
-제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출프레임 / 레이저커팅 / 톰슨칼금형 / 실리콘금형 / 판금가공 / 3D프린팅
-파트는 최대 6개까지만 식별하세요. confidence는 0~100 정수.`
+제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출 프로파일 / 레이저 커팅 / 판금가공 / 실리콘 압축성형 / 실리콘 사출성형 / 실리콘 압출성형 / 실리콘 샘플금형 / 프레스금형 / 3D프린팅 / 진공주형
+파트는 최대 6개까지만 식별하세요. confidence는 0~100 정수.
+initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 수량 기준 개당 단가)을 각각 1(낮음)~3(높음) 정수로 독립적으로 평가하세요. 예: 실리콘금형은 initialCostLevel 낮음·unitCostLevel 높음, 사출금형/다이캐스팅은 initialCostLevel 높음·unitCostLevel 낮음처럼 트레이드오프를 반영하세요. 절대 금액은 언급하지 마세요.`
     : `당신은 제조 공학 전문가입니다. 아래 CAD 파일을 분석해 최적 제조방법을 추천하세요.
 ${material !== "미정" ? `지정 재질: ${material}` : "재질 미지정 — 형상으로 추정하세요."}
 ${contextLines}${dwgNote}
 
-CAD 파일:
-\`\`\`
-${fileContent}
-\`\`\`
+${fileSection}
 
 다음 JSON 형식으로만 응답하세요:
 {
@@ -98,7 +118,7 @@ ${fileContent}
   "complexity": "단순 | 중간 | 복잡",
   "size": "소형(~100mm) | 중형(100~500mm) | 대형(500mm~) | 판단불가",
   "recommendedMethods": [
-    { "method": "제조방법명", "confidence": 85, "reason": "한 줄 이유" }
+    { "method": "제조방법명", "confidence": 85, "reason": "한 줄 이유", "initialCostLevel": 2, "unitCostLevel": 2 }
   ],
   "material": "재질명만 간단히",
   "surfaceTreatment": "표면처리 추천 (예: 아노다이징, 도장, 도금, 없음)",
@@ -106,8 +126,9 @@ ${fileContent}
   "summary": "한 문장 요약"
 }
 
-제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출프레임 / 레이저커팅 / 톰슨칼금형 / 실리콘금형 / 판금가공 / 3D프린팅
-recommendedMethods는 상위 3개만, confidence는 0~100 정수, 추천 순서대로.`;
+제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출 프로파일 / 레이저 커팅 / 판금가공 / 실리콘 압축성형 / 실리콘 사출성형 / 실리콘 압출성형 / 실리콘 샘플금형 / 프레스금형 / 3D프린팅 / 진공주형
+recommendedMethods는 상위 2개만, confidence는 0~100 정수, 추천 순서대로.
+initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 수량 기준 개당 단가)을 각각 1(낮음)~3(높음) 정수로 독립적으로 평가하세요. 예: 실리콘금형은 initialCostLevel 낮음·unitCostLevel 높음, 사출금형/다이캐스팅은 initialCostLevel 높음·unitCostLevel 낮음처럼 트레이드오프를 반영하세요. 절대 금액은 언급하지 마세요.`;
 
   try {
     const response = await client.messages.create({
@@ -123,6 +144,7 @@ recommendedMethods는 상위 3개만, confidence는 0~100 정수, 추천 순서�
     if (!jsonMatch) throw new Error("분석 결과를 파싱할 수 없습니다.");
 
     const result = JSON.parse(jsonMatch[0]);
+    result.isAssembly = isAssembly;
     return NextResponse.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "분석 중 오류 발생";

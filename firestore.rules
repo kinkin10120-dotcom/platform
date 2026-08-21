@@ -26,11 +26,16 @@ service cloud.firestore {
     // ---- users ----
     match /users/{userId} {
       allow get: if request.auth.uid == userId || isAdmin();
-      allow list: if isAdmin();
+      // list 규칙은 쿼리 대상 문서 하나하나에 대해 개별 재평가되므로(Firestore 공식 동작),
+      // 조건 없이 isSignedIn()만 걸어두면 앱의 where절과 무관하게 로그인한 아무나 전체
+      // users 컬렉션(다른 회사 팀원 포함)을 그대로 읽어갈 수 있었다 — 같은 클라이언트
+      // 팀원 조회(where clientId==)와 담당 관리자 조회(where role=='admin') 두 쿼리
+      // 패턴만 실제로 필요하므로 그 조건만 허용한다.
+      allow list: if isAdmin() || belongsToClient(resource.data.clientId) || resource.data.role == 'admin';
       allow create, delete: if isAdmin();
       allow update: if isAdmin() || (
         request.auth.uid == userId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'fcmTokens', 'notificationPrefs'])
       );
     }
 
@@ -43,36 +48,84 @@ service cloud.firestore {
 
     // ---- projects ----
     match /projects/{projectId} {
-      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
-      allow list: if isSignedIn(); // 쿼리 결과는 where(clientId==...) 절로 클라이언트가 제한, 각 문서는 위 get 규칙으로 재검증됨
-      allow create, update, delete: if isAdmin();
+      // clientVisible이 false면(세팅 중인 신규 프로젝트 기본값) 관리자가 아직 "고객에게 공개"를
+      // 켜기 전이라 클라이언트에게는 완전히 안 보여야 한다. 필드가 아예 없는(이 기능 이전에
+      // 만들어진) 기존 프로젝트는 true로 취급해 지금까지 보이던 게 갑자기 사라지지 않게 한다.
+      allow get: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        resource.data.get('clientVisible', true) != false
+      );
+      // list 규칙은 문서별로 재평가되지만, get 규칙이 자동으로 재사용되는 게 아니라
+      // list 규칙 자체에 조건을 직접 걸어야 한다 — 그래서 위 get 규칙과 동일한 조건을
+      // 그대로 반복한다. (isSignedIn()만으로는 앱의 where절과 무관하게 아무 클라이언트나
+      // 전체 projects를 쿼리해 다른 회사 데이터를 가져갈 수 있었다.)
+      allow list: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        resource.data.get('clientVisible', true) != false
+      );
+      allow create, delete: if isAdmin();
+      // 캘린더 구독 링크는 클라이언트도 최초 생성할 수 있어야 하므로 그 필드만 예외적으로 허용
+      allow update: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['calendarToken'])
+      );
     }
 
     // ---- tasks ----
     match /tasks/{taskId} {
-      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
-      allow list: if isSignedIn();
+      // 업무 자체엔 공개 여부 필드가 따로 없다 — 소속 프로젝트가 비공개면 그 프로젝트의 업무도
+      // 똑같이 안 보여야 하므로, 부모 projects 문서를 조회해 그 값을 그대로 따른다.
+      allow get: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
+      );
+      allow list: if isAdmin() || (
+        belongsToClient(resource.data.clientId) &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
+      );
       allow create, delete: if isAdmin();
-      // 클라이언트는 상태/진행률 등 협업에 필요한 필드만 수정 가능
+      // 상태/진행률/체크리스트는 관리자 전용 관리 지표라 클라이언트는 못 건드리게 막고,
+      // 확인/승인 요청 응답에 필요한 필드만 예외적으로 열어둔다.
       allow update: if isAdmin() || (
         belongsToClient(resource.data.clientId) &&
         request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'progress', 'statusHistory', 'updatedAt', 'completedAt'])
+          .hasOnly(['needsDecision', 'decisionHistory', 'updatedAt'])
       );
 
       match /comments/{commentId} {
-        allow get, list: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        // 아래 list 규칙들은 이 경로(tasks/{taskId}/comments)로 직접 조회할 때만 적용된다.
+        // collectionGroup("comments") 쿼리(전역 검색용)는 이 중첩 규칙을 전혀 적용받지 않고
+        // 파일 하단의 별도 {pathSegs=**} 와일드카드 규칙으로만 판단된다(Firestore 공식 동작).
+        allow list: if isAdmin();
+        allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        allow get: if isAdmin();
         allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
           && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
       }
 
       match /files/{fileId} {
-        allow get, list: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        allow list: if isAdmin();
+        allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+        allow get: if isAdmin();
         allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
           && request.resource.data.uploadedBy == request.auth.uid;
+        // AI 형상 분석 결과 기록용 — aiAnalysis 필드만 수정 가능(다른 필드 변조 방지)
+        allow update: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiAnalysis']);
         allow delete: if isAdmin() || resource.data.uploadedBy == request.auth.uid;
       }
+    }
+
+    // ---- 전역 검색용 collectionGroup 쿼리 규칙 ----
+    // collectionGroup() 쿼리는 위쪽의 tasks/{taskId}/comments 같은 고정 경로 중첩 규칙을
+    // 전혀 적용받지 않으며, 반드시 {path=**} 와일드카드로 별도 선언해야 매칭된다.
+    // (에뮬레이터로 직접 검증: 중첩 규칙만 있으면 admin이어도 항상 permission-denied)
+    match /{pathSegs=**}/comments/{commentId} {
+      allow list: if isAdmin();
+    }
+    match /{pathSegs=**}/files/{fileId} {
+      allow list: if isAdmin();
     }
 
     // ---- notifications ----
@@ -92,13 +145,70 @@ service cloud.firestore {
     match /notices/{noticeId} {
       allow read: if isSignedIn();
       allow create, delete: if isAdmin();
+      // 클라이언트는 자신의 읽음 처리(readBy)만 갱신 가능
+      allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
     }
 
     // ---- inquiries (문의하기) ----
     match /inquiries/{inquiryId} {
       allow list, get: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAdmin();
+      allow create: if (isSignedIn() && request.resource.data.userId == request.auth.uid)
+        || request.resource.data.userId == 'website';
+      // 작성자 본인은 제목·내용만 수정 가능(상태·답변 등은 관리자만)
+      allow update: if isAdmin() || (
+        isSignedIn() && resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content'])
+      );
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // ---- quote requests (견적 요청, 사이트 공개 폼) ----
+    match /quoteRequests/{quoteId} {
+      allow list, get, update, delete: if isAdmin();
+      allow create: if true;
+    }
+
+    // ---- client products (고객별 발주 제품 카탈로그) ----
+    match /clientProducts/{productId} {
+      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow list: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- client product internal (매입/통관 내부 정보, 관리자 전용) ----
+    match /clientProductInternal/{productId} {
+      allow get, list, create, update, delete: if isAdmin();
+    }
+
+    // ---- purchase orders (발주) ----
+    match /purchaseOrders/{orderId} {
+      allow get: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow list: if isAdmin() || belongsToClient(resource.data.clientId);
+      // "발주 없이 직접 등록"(관리자가 클라이언트 담당자 대신 청구서용 발주를 생성하는 기능)은
+      // orderedBy가 관리자 본인이 아니라 그 담당자의 uid로 저장되므로, isAdmin() 예외가 없으면
+      // 관리자 계정으로는 항상 권한 거부로 조용히 실패한다.
+      allow create: if isAdmin() || (
+        belongsToClient(request.resource.data.clientId) &&
+        request.resource.data.orderedBy == request.auth.uid
+      );
+      // 발주 작성자 본인은 취소 요청 필드만 예외적으로 수정 가능 (그 외 모든 필드는 관리자 전용)
+      allow update: if isAdmin() || (
+        resource.data.orderedBy == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancelRequested', 'cancelRequestedAt', 'cancelReason', 'updatedAt'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---- contracts (계약 관리/전자서명) ----
+    // 비로그인 상대방(서명자)의 모든 접근은 Cloud Functions(Admin SDK, 이메일 대조로 본인확인)를
+    // 통해서만 이뤄지므로, 이 컬렉션 자체는 완전히 관리자 전용으로 잠가도 된다.
+    match /contracts/{contractId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---- contract templates (계약서 본문 재사용 템플릿, 관리자 전용) ----
+    match /contractTemplates/{templateId} {
+      allow read, write: if isAdmin();
     }
   }
 }

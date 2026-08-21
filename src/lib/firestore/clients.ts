@@ -12,6 +12,7 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { Client } from "@/lib/types";
+import { compressImage } from "@/lib/imageCompress";
 
 const colRef = collection(db, "clients");
 
@@ -60,8 +61,9 @@ export async function updateClient(id: string, patch: Partial<Pick<Client, "name
 }
 
 export async function uploadClientLogo(clientId: string, file: File): Promise<string> {
+  const compressed = await compressImage(file, 800);
   const storageRef = ref(storage, `clients/${clientId}/logo`);
-  await uploadBytes(storageRef, file);
+  await uploadBytes(storageRef, compressed);
   const url = await getDownloadURL(storageRef);
   await updateClient(clientId, { logoUrl: url });
   return url;

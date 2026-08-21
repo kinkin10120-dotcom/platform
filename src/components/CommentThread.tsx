@@ -49,7 +49,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete }: {
       {editing ? (
         <div className="mt-2 flex gap-2">
           <textarea
-            className="flex-1 rounded-xl border border-[#d1d1d6] px-2 py-1 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] px-2 py-1 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
             rows={2}
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
@@ -121,7 +121,7 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="코멘트를 입력하세요"
-          className="flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+          className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
         />
         <button
           type="submit"

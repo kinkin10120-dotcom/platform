@@ -1,10 +1,43 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { TaskFile } from "@/lib/types";
 
+const CAD_EXTS = ["stp", "step", "dxf", "dwg", "ipt", "iam", "sldprt", "sldasm"];
+
 function colRef(taskId: string) {
   return collection(db, "tasks", taskId, "files");
+}
+
+async function runAiAnalysis(taskId: string, fileId: string, file: File) {
+  const fileDoc = doc(db, "tasks", taskId, "files", fileId);
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/analyze-cad", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error ?? "분석 실패");
+
+    await updateDoc(fileDoc, {
+      aiAnalysis: {
+        status: "done",
+        partName: data.partName ?? data.assemblyName ?? "",
+        complexity: data.complexity ?? "",
+        material: data.material ?? "",
+        surfaceTreatment: data.surfaceTreatment ?? "",
+        recommendedMethods: data.recommendedMethods ?? [],
+        summary: data.summary ?? "",
+        analyzedAt: Date.now(),
+      },
+    });
+  } catch (e) {
+    await updateDoc(fileDoc, {
+      aiAnalysis: {
+        status: "error",
+        error: e instanceof Error ? e.message : "분석 중 오류가 발생했습니다.",
+      },
+    });
+  }
 }
 
 export function listenFiles(taskId: string, cb: (files: TaskFile[]) => void) {
@@ -24,6 +57,8 @@ export function listenFiles(taskId: string, cb: (files: TaskFile[]) => void) {
           uploadedBy: data.uploadedBy,
           uploadedByName: data.uploadedByName,
           uploadedAt: data.uploadedAt?.toMillis ? data.uploadedAt.toMillis() : Date.now(),
+          version: data.version ?? 1,
+          aiAnalysis: data.aiAnalysis,
         } as TaskFile;
       })
     );
@@ -42,7 +77,13 @@ export async function uploadTaskFile(
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
 
-  return addDoc(colRef(taskId), {
+  const existingSnap = await getDocs(query(colRef(taskId), where("name", "==", file.name)));
+  const version = existingSnap.size + 1;
+
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const isCad = CAD_EXTS.includes(ext);
+
+  const docRef = await addDoc(colRef(taskId), {
     name: file.name,
     url,
     storagePath,
@@ -51,7 +92,15 @@ export async function uploadTaskFile(
     uploadedBy,
     uploadedByName,
     uploadedAt: serverTimestamp(),
+    version,
+    ...(isCad ? { aiAnalysis: { status: "pending" } } : {}),
   });
+
+  if (isCad) {
+    runAiAnalysis(taskId, docRef.id, file);
+  }
+
+  return docRef;
 }
 
 export async function deleteTaskFile(taskId: string, fileId: string, storagePath: string) {

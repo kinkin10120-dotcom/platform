@@ -1,7 +1,12 @@
+import Link from "next/link";
+
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-white px-6 py-16">
       <div className="mx-auto max-w-3xl">
+        <Link href="/" className="mb-6 inline-flex items-center gap-1 text-sm text-[#86868b] transition hover:text-[#1d1d1f]">
+          ← HANDYHAND 홈으로
+        </Link>
         <h1 className="mb-2 text-2xl font-bold text-[#1d1d1f]">이용약관</h1>
         <p className="mb-10 text-sm text-[#86868b]">최종 수정일: 2025년 1월 1일</p>
 

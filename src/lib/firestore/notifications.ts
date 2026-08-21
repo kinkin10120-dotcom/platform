@@ -1,12 +1,14 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   query,
   serverTimestamp,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { AppNotification, NotificationType } from "@/lib/types";
@@ -24,6 +26,10 @@ export function listenNotifications(userId: string, cb: (items: AppNotification[
           userId: data.userId,
           projectId: data.projectId,
           taskId: data.taskId,
+          noticeId: data.noticeId,
+          orderId: data.orderId,
+          invoiceIndex: data.invoiceIndex,
+          contractId: data.contractId,
           type: data.type,
           message: data.message,
           read: !!data.read,
@@ -38,8 +44,11 @@ export function listenNotifications(userId: string, cb: (items: AppNotification[
 
 export async function createNotification(input: {
   userId: string;
-  projectId: string;
+  projectId?: string;
   taskId?: string;
+  noticeId?: string;
+  orderId?: string;
+  invoiceIndex?: number;
   type: NotificationType;
   message: string;
 }) {
@@ -49,4 +58,22 @@ export async function createNotification(input: {
 
 export async function markNotificationRead(id: string) {
   return updateDoc(doc(db, "notifications", id), { read: true });
+}
+
+export async function markAllNotificationsRead(unreadIds: string[]) {
+  if (unreadIds.length === 0) return;
+  const batch = writeBatch(db);
+  unreadIds.forEach((id) => batch.update(doc(db, "notifications", id), { read: true }));
+  await batch.commit();
+}
+
+export async function deleteNotification(id: string) {
+  return deleteDoc(doc(db, "notifications", id));
+}
+
+export async function deleteAllNotifications(ids: string[]) {
+  if (ids.length === 0) return;
+  const batch = writeBatch(db);
+  ids.forEach((id) => batch.delete(doc(db, "notifications", id)));
+  await batch.commit();
 }

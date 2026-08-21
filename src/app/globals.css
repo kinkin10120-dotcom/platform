@@ -1,8 +1,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@900&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* iOS Safari는 포커스된 input/select/textarea의 글자 크기가 16px 미만이면
+   화면을 자동으로 확대한다. 모바일에서만 최소 16px로 강제해 이를 방지한다. */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  /* 작은 칩 형태로 쓰이는 input(예: 업무 그룹명)은 주변 배지와 같은 크기로 보여야 하므로
+     입력 중에도 확대 방지용 16px를 적용하지 않고 항상 같은 크기를 유지한다. */
+  input.chip-input,
+  input.chip-input:focus {
+    font-size: 12px !important;
+  }
+}
 
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -23,17 +38,62 @@ body {
   height: 100%;
 }
 
+/* 모달 배경(fixed inset-0)이 페이지 섹션들을 감싸는 space-y-* 컨테이너의 형제 요소로
+   조건부 렌더링되는 곳이 많은데(첫 번째 자식이 아니면), 이 프로젝트의 Tailwind 버전은
+   space-y를 `:where()` 없이 `.space-y-6 > :not([hidden]) ~ :not([hidden])`로 생성한다
+   (특이도 0,0,3,0) — 그래서 margin-top이 실제로 강제 적용되어, fixed 오버레이가 뷰포트
+   맨 위(top:0)가 아니라 그만큼 아래로 밀려 렌더링됐다 — 상단 앱 바 아이콘 줄 한가운데를
+   배경 딤 처리 경계선이 가로지르는 버그로 나타났다. fixed 배치는 애초에 문서 흐름 밖이라
+   형제 간 여백 개념이 적용될 이유가 없다 — 단순 클래스 선택자(0,0,2,0)로는 이 특이도를
+   못 이겨서 !important로 확실히 무효화한다.
+*/
+/* 계약서 본문 툴바(템플릿 불러오기/저장·크게 편집·미리보기 버튼)의 텍스트 라벨은
+   "화면 폭"이 아니라 "이 툴바 자신이 실제로 받은 폭"에 따라 보여야 한다 — 예전엔
+   Tailwind의 sm: (뷰포트 640px 기준)을 썼는데, 데스크탑에서도 이 화면이 좁은 상세
+   컬럼 안에 들어가면 뷰포트는 충분히 넓은데도 버튼 줄이 넘쳐서 오른쪽이 잘렸다.
+   컨테이너 쿼리로 바꿔서 실제 이 영역의 폭만 본다. */
+.contract-body-toolbar {
+  container-type: inline-size;
+}
+.contract-body-toolbar-label {
+  display: none;
+}
+@container (min-width: 420px) {
+  .contract-body-toolbar-label {
+    display: inline;
+  }
+}
+
+.fixed.inset-0 {
+  margin-top: 0 !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   overflow-x: hidden;
   color-scheme: light;
   background-color: #000000;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
   background-color: #000000;
   color: #1c1f2b;
   overflow-x: hidden;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 * {
@@ -76,15 +136,196 @@ body {
   scrollbar-width: none;
 }
 
-.demo-card {
-  transform: scale(0.8);
-  transform-origin: top center;
-  margin-bottom: -169px;
+/* 계약서 리치 텍스트(Tiptap) 콘텐츠 — 에디터 입력 영역과 미리보기/인쇄 렌더링 양쪽에서
+   같은 클래스를 써서 편집 화면과 실제 결과물이 항상 동일하게 보이게 한다. */
+.tiptap-content p {
+  margin: 0 0 0.5em;
+}
+/* 편집기 화면에서는 빈 문단(조 사이 여백용 <p></p>)에 커서용 줄바꿈이 자동으로 들어가 한 줄
+   높이를 차지하지만, 저장되는 실제 HTML은 내용이 전혀 없는 <p></p> 그대로라 읽기 전용
+   렌더링(미리보기·인쇄·서명 페이지)에서는 줄 상자가 생기지 않아 높이가 0으로 접혀버린다 —
+   min-height로 편집 화면과 동일한 한 줄 분량을 강제로 확보한다. */
+.tiptap-content p:empty {
+  min-height: 1.9em;
+}
+/* 서명/직인 영역(signatureBlock 커스텀 노드) — Tiptap 기본 스키마는 등록 안 된 태그(div)나
+   선언 안 된 속성(style)을 파싱 시 그냥 버리기 때문에, 이 노드가 만드는 마크업은 인라인
+   style이 아니라 여기 클래스로만 꾸민다 — "크게 편집" 에디터와 읽기 전용 미리보기가 항상
+   같은 모습으로 보이게 하기 위함.
+   src/lib/tiptapSignatureBlock.ts 참고. */
+.tiptap-content .signature-block {
+  margin: 12px 0;
+}
+.tiptap-content .signature-seal-image {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 0 6px;
+  object-fit: contain;
+}
+.tiptap-content .signature-image {
+  height: 64px;
+  object-fit: contain;
+}
+/* 서명 전 갑 쪽 자리 표시 박스 — 을의 직인 이미지(.signature-seal-image)와 정확히 같은
+   64x64 크기로 만들어, 서명 여부와 상관없이 두 서명 영역이 같은 크기로 나란히 보이게 한다. */
+.tiptap-content .signature-placeholder-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 0 6px;
+  border: 1px dashed #86868b;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #86868b;
+  box-sizing: border-box;
+}
+.tiptap-content .signature-line {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #1d1d1f;
+}
+.tiptap-content .signature-line-empty {
+  color: #86868b;
+}
+/* 고객이 "수정 요청"에서 직접 고친 부분 — 인라인 style로도 이미 빨간색을 넣지만(sanitizer가
+   class를 지우는 경우 대비), 여기서도 한 번 더 명시해 항상 같은 색으로 보이게 한다. */
+.tiptap-content .revision-mark {
+  color: #ef4444;
+}
+.tiptap-content ul,
+.tiptap-content ol {
+  margin: 0 0 0.5em;
+  padding-left: 1.4em;
+}
+.tiptap-content ul {
+  list-style: disc;
+}
+.tiptap-content ol {
+  list-style: decimal;
+}
+.tiptap-content h1,
+.tiptap-content h2,
+.tiptap-content h3 {
+  font-weight: 700;
+  margin: 0.8em 0 0.4em;
+}
+.tiptap-content h1 { font-size: 1.4em; }
+.tiptap-content h2 { font-size: 1.2em; }
+.tiptap-content h3 { font-size: 1.1em; }
+.tiptap-content table {
+  /* width는 지정하지 않는다 — 이 확장은 표 각 열의 실제 너비(또는 최소 너비)를 인라인
+     style로 직접 계산해서 넣어주는데, 여기서 width:100%로 강제하면 아직 너비가 지정되지
+     않은 다른 열들이 남은 공간을 나눠 갖게 되어, 열 하나만 드래그해도 옆의 다른 경계선까지
+     같이 움직이는 것처럼 보이는 문제가 있었다. */
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin: 0.5em 0;
+  /* 열을 넓게 드래그해도 A4 본문 폭(.tiptap-content 너비) 밖으로는 못 나가게 상한을 둔다 —
+     인쇄/PDF에서 잘리는 걸 막기 위함. 표 전체 너비가 이 상한에 닿으면 table-layout:fixed
+     특성상 아직 너비를 지정 안 한 다른 열들이 남은 공간을 나눠 갖게 된다(정상 동작). */
+  max-width: 100%;
+  overflow: hidden;
+}
+.tiptap-content th,
+.tiptap-content td {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid #d1d1d6;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.tiptap-content th {
+  background: #f5f5f7;
+  font-weight: 600;
+}
+/* 표 열 너비를 워드/엑셀처럼 마우스 드래그로 조절할 때 잡을 수 있는 손잡이 —
+   Table.configure({ resizable: true })가 켜져 있으면 열 경계마다 자동으로 생긴다. */
+.tiptap-content .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  z-index: 20;
+  background-color: #1d1d1f;
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+/* 셀을 마우스로 드래그해 여러 칸을 한 번에 선택했을 때의 표시 — 이 상태에서 Backspace/Delete를
+   누르면 선택된 셀들의 내용이 한 번에 지워진다(표 자체 구조는 유지). */
+.tiptap-content .selectedCell:after {
+  position: absolute;
+  z-index: 2;
+  content: "";
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(29, 29, 31, 0.12);
+  pointer-events: none;
+}
+.tiptap-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
 }
 
-@media (min-width: 640px) {
-  .demo-card {
-    transform: scale(0.82);
-    margin-bottom: -141px;
-  }
+/* 계약서 본문 에디터에서 이미지 모서리를 드래그해 크기를 조절할 때 쓰는 손잡이.
+   이 Tiptap 버전의 Image resize 옵션은 커스텀 className을 받지 않아 항상
+   data-resize-handle 속성만 붙은 채로 렌더링되므로, 그 속성을 직접 선택해 스타일을 준다. */
+.tiptap-content [data-resize-handle] {
+  width: 12px;
+  height: 12px;
+  background: #1d1d1f;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  z-index: 10;
 }
+.tiptap-content [data-resize-handle="bottom-right"],
+.tiptap-content [data-resize-handle="top-left"] {
+  cursor: nwse-resize;
+}
+.tiptap-content [data-resize-handle="bottom-left"],
+.tiptap-content [data-resize-handle="top-right"] {
+  cursor: nesw-resize;
+}
+
+/* "크게 편집" 화면에서 실제 쪽 나눔 위치에 끼워 넣는 빈 공간(회색 띠) — 미리보기와 동일한
+   기준으로 계산된 위치에 삽입되는 화면 표시 전용 요소로, 저장되는 본문 내용에는 포함되지 않는다. */
+.contract-page-gap {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  background: #f2f2f2;
+  user-select: none;
+}
+.contract-page-gap::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 2px dashed #86868b;
+}
+.contract-page-gap-label {
+  position: relative;
+  margin-right: 12px;
+  white-space: nowrap;
+  border-radius: 9999px;
+  background: #1d1d1f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+}
+

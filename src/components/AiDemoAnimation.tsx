@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 
-const PURPOSE_TEXT = "스마트폰 거치대 브라켓";
-
 const PLASTIC_ITEMS = [
   { label: "ABS", sub: "범용" },
   { label: "PP", sub: "폴리프로필렌" },
@@ -18,6 +16,47 @@ const QUANTITY_OPTIONS = [
   { label: "중량", sub: "100~500개" },
   { label: "양산", sub: "1000개+" },
 ];
+
+const SCENARIOS = [
+  {
+    category: "플라스틱",
+    hasSubgrid: true,
+    material: "ABS",
+    purpose: "스마트폰 거치대 브라켓",
+    quantityLabel: "소량",
+    quantitySub: "10~100개",
+    size: "소형 (~100mm)",
+    method1: "사출금형",
+    pct1: 92,
+    method1Desc: "소형 ABS 부품, 언더컷 없는 단순 구조",
+    method1Initial: 3,
+    method1Unit: 1,
+    method2: "3D프린팅",
+    pct2: 65,
+    method2Desc: "시제품 제작에 적합, 소량 생산 가능",
+    method2Initial: 1,
+    method2Unit: 3,
+    summary: "소형 ABS 브라켓으로 사출금형이 가장 적합합니다. 언더컷 없는 단순 구조로 금형 비용이 낮고 대량 생산에 유리합니다.",
+  },
+];
+
+const COST_LABEL: Record<number, string> = { 1: "낮음", 2: "보통", 3: "높음" };
+
+function CostBadges({ initial, unit, dark = false }: { initial?: number; unit?: number; dark?: boolean }) {
+  if (!initial && !unit) return null;
+  const textClass = dark ? "text-white/50" : "text-[#86868b]";
+  const strongClass = dark ? "text-white/80" : "text-[#1d1d1f]";
+  return (
+    <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] ${textClass}`}>
+      {!!initial && COST_LABEL[initial] && (
+        <span>초기 설비투자 <span className={`font-semibold ${strongClass}`}>{COST_LABEL[initial]}</span></span>
+      )}
+      {!!unit && COST_LABEL[unit] && (
+        <span>개당 단가 <span className={`font-semibold ${strongClass}`}>{COST_LABEL[unit]}</span></span>
+      )}
+    </div>
+  );
+}
 
 type Screen = "input" | "loading" | "results";
 
@@ -34,9 +73,11 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
   const [bar1, setBar1] = useState(0);
   const [bar2, setBar2] = useState(0);
   const [resultsVisible, setResultsVisible] = useState(false);
+  const [scenario, setScenario] = useState(SCENARIOS[0]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [fixedHeight, setFixedHeight] = useState<number | null>(null);
+  const scenarioIndexRef = useRef(0);
 
   // 초기 렌더링 후 높이 측정 → 이후 모든 화면에 고정
   useEffect(() => {
@@ -53,6 +94,10 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
     const t = (fn: () => void, ms: number) => { const id = setTimeout(fn, ms); ids.push(id); };
 
     function cycle() {
+      const current = SCENARIOS[scenarioIndexRef.current % SCENARIOS.length];
+      scenarioIndexRef.current += 1;
+      setScenario(current);
+
       setScreen("input");
       setShowFile(false);
       setSelectedCategory(null);
@@ -67,15 +112,15 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
       setResultsVisible(false);
 
       t(() => setShowFile(true), 300);
-      t(() => { setSelectedCategory("플라스틱"); setShowSubGrid(true); }, 800);
-      t(() => { setSelectedMaterial("ABS"); setShowSubGrid(false); }, 1400);
-      t(() => setSelectedQuantity("소량 (10~100개)"), 2000);
+      t(() => { setSelectedCategory(current.category); setShowSubGrid(current.hasSubgrid); }, 800);
+      t(() => { setSelectedMaterial(current.material); setShowSubGrid(false); }, 1400);
+      t(() => setSelectedQuantity(`${current.quantityLabel} (${current.quantitySub})`), 2000);
       t(() => {
         let i = 0;
         const iv = setInterval(() => {
           i++;
-          setTypedText(PURPOSE_TEXT.slice(0, i));
-          if (i >= PURPOSE_TEXT.length) clearInterval(iv);
+          setTypedText(current.purpose.slice(0, i));
+          if (i >= current.purpose.length) clearInterval(iv);
         }, 30);
         ids.push(iv as unknown as ReturnType<typeof setTimeout>);
       }, 2600);
@@ -84,8 +129,8 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
       t(() => setLoadStep(2), 4500);
       t(() => setLoadStep(3), 5100);
       t(() => { setScreen("results"); setTimeout(() => setResultsVisible(true), 50); }, 5800);
-      t(() => setBar1(92), 6100);
-      t(() => setBar2(65), 6500);
+      t(() => setBar1(current.pct1), 6100);
+      t(() => setBar2(current.pct2), 6500);
       t(cycle, 11000);
     }
 
@@ -100,7 +145,7 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
       style={{
         ...(fixedHeight ? { height: fixedHeight } : {}),
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.5), 0 0 0 1px rgba(255,255,255,0.12), 0 8px 24px rgba(0,0,0,0.45), 0 24px 56px rgba(0,0,0,0.5), 0 56px 100px rgba(0,0,0,0.35)",
+          "0 0 0 1px rgba(0,0,0,0.06), 0 8px 20px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.07)",
       }}
     >
       {/* 헤더 */}
@@ -114,11 +159,11 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
         <>
           {/* 스크롤 가능 콘텐츠 영역 — 내부 확장이 모달 크기에 영향 없음 */}
           <div
-            className="flex-1 overflow-y-auto px-6 pt-5 pb-2"
+            className="no-scrollbar flex-1 overflow-y-auto px-6 pt-5 pb-2"
             style={{ scrollbarWidth: "none" }}
           >
             <p className="mb-5 text-sm leading-relaxed text-[#86868b]">
-              CAD 파일을 업로드하면 AI가 형상을 분석해 최적 제조방법을 추천합니다. 재질·수량·용도를 입력할수록 분석 정확도가 높아집니다. 조립품 도면은 재질에서 <span className="font-medium text-[#1d1d1f]">조립품</span>을 선택해주세요.
+              CAD 파일을 업로드하면 AI가 형상을 분석해 최적 제조방법을 추천합니다. 도면이 없다면 제품 용도만 입력해도 대략적인 분석이 가능합니다. 재질·수량·용도를 입력할수록 분석 정확도가 높아집니다. 조립품 도면은 재질에서 <span className="font-medium text-[#1d1d1f]">조립품</span>을 선택해주세요.
             </p>
 
             {/* 파일 업로드 */}
@@ -132,7 +177,8 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
                   </div>
                   <div className="text-center">
                     <p className="text-sm font-medium text-[#1d1d1f]">CAD 파일을 드래그하거나 클릭하여 업로드</p>
-                    <p className="mt-1 text-xs text-[#86868b]">.stp · .step · .dxf · .dwg 지원 · 최대 50MB</p>
+                    <p className="mt-1 text-xs text-[#86868b]">.stp · .step · .dxf · .dwg · .ipt · .iam · .sldprt · .sldasm 지원 · 최대 50MB</p>
+                    <p className="mt-1 text-xs text-[#c7c7cc]">도면이 없다면 아래 용도만 입력해도 분석할 수 있습니다</p>
                   </div>
                 </>
               ) : (
@@ -168,11 +214,11 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
                     className="absolute left-0 right-0 top-full z-20 mt-1 rounded-2xl border border-[#e5e5e5] bg-white p-3 shadow-lg"
                     style={{ animation: "fadeSlideIn 0.2s ease forwards" }}
                   >
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {PLASTIC_ITEMS.map((mat) => (
                         <button key={mat.label} type="button" className="rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] px-3 py-1.5 text-left">
-                          <span className="text-xs font-semibold text-[#1d1d1f]">{mat.label}</span>
-                          <span className="ml-1.5 text-[10px] text-[#86868b]">{mat.sub}</span>
+                          <span className="block whitespace-nowrap text-xs font-semibold text-[#1d1d1f]">{mat.label}</span>
+                          <span className="block whitespace-nowrap text-[10px] text-[#86868b]">{mat.sub}</span>
                         </button>
                       ))}
                     </div>
@@ -221,7 +267,7 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
                 ) : (
                   <span className="text-sm text-[#1d1d1f]">
                     {typedText}
-                    {typedText.length < PURPOSE_TEXT.length && (
+                    {typedText.length < scenario.purpose.length && (
                       <span className="ml-0.5 inline-block h-[14px] w-[2px] translate-y-[2px] animate-pulse bg-[#1d1d1f]" />
                     )}
                   </span>
@@ -230,7 +276,7 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
             </div>
 
             <p className="mt-4 pb-1 text-xs text-[#86868b]">
-              * DWG 파일은 파일명 및 메타데이터 기반으로 분석됩니다. 더 정확한 분석을 원하시면 STP/STEP 파일을 사용하세요.
+              * DWG · IPT · IAM · SLDPRT · SLDASM 파일과 도면 없이 진행하는 분석은 파일명·메타데이터·텍스트 설명 기반으로 추정되어 정확도가 낮을 수 있습니다. 더 정확한 분석을 원하시면 STP/STEP 파일을 사용하세요.
             </p>
           </div>
 
@@ -268,7 +314,7 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
       {screen === "results" && (
         <>
           <div
-            className="flex-1 overflow-y-auto px-6 pt-6 pb-2"
+            className="no-scrollbar flex-1 overflow-y-auto px-6 pt-6 pb-2"
             style={{
               scrollbarWidth: "none",
               opacity: resultsVisible ? 1 : 0,
@@ -279,12 +325,12 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
               <div className="rounded-2xl bg-[#f5f5f7] p-4">
                 <div>
                   <p className="text-xs text-[#86868b]">추정 부품명</p>
-                  <p className="mt-0.5 text-base font-bold text-[#1d1d1f]">스마트폰 거치대 브라켓</p>
+                  <p className="mt-0.5 text-base font-bold text-[#1d1d1f]">{scenario.purpose}</p>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86868b]">
-                  <span>크기: <span className="font-medium text-[#1d1d1f]">소형 (~100mm)</span></span>
-                  <span>재질: <span className="font-medium text-[#1d1d1f]">ABS</span></span>
-                  <span>수량: <span className="font-medium text-[#1d1d1f]">소량 (10~100개)</span></span>
+                  <span>크기: <span className="font-medium text-[#1d1d1f]">{scenario.size}</span></span>
+                  <span>재질: <span className="font-medium text-[#1d1d1f]">{scenario.material}</span></span>
+                  <span>수량: <span className="font-medium text-[#1d1d1f]">{scenario.quantityLabel} ({scenario.quantitySub})</span></span>
                 </div>
               </div>
 
@@ -292,29 +338,31 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
               <div className="space-y-2">
                 <div className="rounded-2xl border border-black bg-black p-4">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-sm font-bold text-white"><span className="mr-1.5 text-xs font-normal opacity-50">1순위</span>사출성형</span>
+                    <span className="text-sm font-bold text-white"><span className="mr-1.5 text-xs font-normal opacity-50">1순위</span>{scenario.method1}</span>
                     <span className="text-xs font-semibold text-white/60">{bar1}%</span>
                   </div>
                   <div className="mb-2 h-0.5 w-full rounded-full bg-white/20">
                     <div className="h-0.5 rounded-full bg-white transition-all duration-1000 ease-out" style={{ width: `${bar1}%` }} />
                   </div>
-                  <p className="text-xs text-white/60">소형 ABS 부품, 언더컷 없는 단순 구조</p>
+                  <p className="text-xs text-white/60">{scenario.method1Desc}</p>
+                  <CostBadges initial={scenario.method1Initial} unit={scenario.method1Unit} dark />
                 </div>
                 <div className="rounded-2xl border border-[#e5e5e5] p-4">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-sm font-bold text-[#1d1d1f]">3D프린팅</span>
+                    <span className="text-sm font-bold text-[#1d1d1f]"><span className="mr-1.5 text-xs font-normal opacity-50">2순위</span>{scenario.method2}</span>
                     <span className="text-xs font-semibold text-[#86868b]">{bar2}%</span>
                   </div>
                   <div className="mb-2 h-0.5 w-full rounded-full bg-[#f0f0f0]">
                     <div className="h-0.5 rounded-full bg-black transition-all duration-1000 ease-out" style={{ width: `${bar2}%` }} />
                   </div>
-                  <p className="text-xs text-[#86868b]">시제품 제작에 적합, 소량 생산 가능</p>
+                  <p className="text-xs text-[#86868b]">{scenario.method2Desc}</p>
+                  <CostBadges initial={scenario.method2Initial} unit={scenario.method2Unit} />
                 </div>
               </div>
 
               <div className="rounded-2xl bg-[#f5f5f7] px-4 py-3">
                 <p className="mb-1 text-xs font-semibold text-[#86868b]">AI 요약</p>
-                <p className="text-sm leading-relaxed text-[#1d1d1f]">소형 ABS 브라켓으로 사출성형이 가장 적합합니다. 언더컷 없는 단순 구조로 금형 비용이 낮고 대량 생산에 유리합니다.</p>
+                <p className="text-sm leading-relaxed text-[#1d1d1f]">{scenario.summary}</p>
               </div>
 
               <p className="text-[11px] leading-relaxed text-[#b0b0b5]">
@@ -325,9 +373,9 @@ export function AiDemoAnimation({ onCta }: { onCta?: () => void }) {
 
           <div className="shrink-0 flex gap-2 px-6 pb-6 pt-4">
             <div className="flex-1 rounded-full border border-[#e5e5e5] py-3 text-center text-sm font-medium text-[#1d1d1f]">다시 분석</div>
-            <button onClick={onCta} className="flex flex-1 items-center justify-center gap-1 rounded-full bg-black py-3 text-sm font-semibold text-white transition hover:bg-[#1d1d1f]">
+            <div className="flex flex-1 items-center justify-center gap-1 rounded-full bg-black py-3 text-sm font-semibold text-white">
               견적 요청하기 ›
-            </button>
+            </div>
           </div>
         </>
       )}

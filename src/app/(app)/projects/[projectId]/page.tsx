@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
-import { GanttChartSquare, ListChecks, LayoutDashboard, Pencil, Paperclip, Download } from "lucide-react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { GanttChartSquare, ListChecks, LayoutDashboard, Pencil, Paperclip, Download, CalendarDays, MessageSquare, ImageIcon, AlertCircle, Eye, EyeOff } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -21,39 +21,45 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/lib/auth-context";
 import { listenProject, updateProject } from "@/lib/firestore/projects";
-import { listenClient } from "@/lib/firestore/clients";
+import { listenClient, uploadClientLogo } from "@/lib/firestore/clients";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenUsersByClient, listenAdmins } from "@/lib/firestore/users";
-import { listenTemplates, applyTemplateToProject } from "@/lib/firestore/templates";
-import { Project, Task, AppUser, WorkflowTemplate, ProjectType, PROJECT_TYPE_LABEL, ALL_PROJECT_TYPES, Client, TASK_STATUS_LABEL } from "@/lib/types";
+import { Project, Task, AppUser, ProjectType, PROJECT_TYPE_LABEL, ALL_PROJECT_TYPES, Client, TASK_STATUS_LABEL } from "@/lib/types";
+import { isOverdue } from "@/lib/bottleneck";
 import GanttChart from "@/components/GanttChart";
 import TaskList from "@/components/TaskList";
 import TaskCreateForm from "@/components/TaskCreateForm";
 import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
 import ProjectFilesTab from "@/components/ProjectFilesTab";
+import ProjectCommentsTab from "@/components/ProjectCommentsTab";
+import AiDiagnosisPanel from "@/components/AiDiagnosisPanel";
 
-type Tab = "gantt" | "list" | "dashboard" | "files";
+type Tab = "gantt" | "list" | "dashboard" | "files" | "comments";
 
-const DEFAULT_TAB_ORDER: Tab[] = ["gantt", "list", "dashboard", "files"];
+const DEFAULT_TAB_ORDER: Tab[] = ["gantt", "list", "dashboard", "files", "comments"];
 
 const TAB_LABEL: Record<Tab, string> = {
   gantt: "프로젝트 일정",
   list: "업무 리스트",
   dashboard: "대시보드",
   files: "첨부 자료",
+  comments: "코멘트",
 };
 
 function getTabIcon(id: Tab) {
   if (id === "gantt") return <GanttChartSquare size={15} />;
   if (id === "list") return <ListChecks size={15} />;
   if (id === "dashboard") return <LayoutDashboard size={15} />;
-  return <Paperclip size={15} />;
+  if (id === "files") return <Paperclip size={15} />;
+  return <MessageSquare size={15} />;
 }
 
 export default function ProjectWorkspacePage() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
 
@@ -61,11 +67,9 @@ export default function ProjectWorkspacePage() {
   const [client, setClient] = useState<Client | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<AppUser[]>([]);
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [tab, setTab] = useState<Tab>("gantt");
   const [tabOrder, setTabOrder] = useState<Tab[]>(DEFAULT_TAB_ORDER);
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   useEffect(() => {
     try {
@@ -101,13 +105,18 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => listenProject(projectId, setProject), [projectId]);
   useEffect(() => listenTasksByProject(projectId, setTasks), [projectId]);
-  useEffect(() => {
-    if (isAdmin) {
-      const unsub = listenTemplates(setTemplates);
-      return () => unsub();
-    }
-  }, [isAdmin]);
 
+  // 검색 결과(코멘트·자료)에서 ?task=taskId 로 들어오면 해당 업무 상세를 바로 연다.
+  useEffect(() => {
+    const taskId = searchParams.get("task");
+    if (!taskId || tasks.length === 0) return;
+    const target = tasks.find((t) => t.id === taskId);
+    if (target) {
+      setSelectedTask(target);
+      router.replace(`/projects/${projectId}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, searchParams]);
   const projectClientId = project?.clientId;
 
   useEffect(() => {
@@ -139,6 +148,22 @@ export default function ProjectWorkspacePage() {
     [selectedTask, tasks]
   );
 
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const done = tasks.filter((t) => t.status === "done").length;
+    const progress = total === 0 ? 0 : Math.round(tasks.reduce((sum, t) => sum + t.progress, 0) / total);
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    const overdue = tasks.filter((t) => t.status !== "done" && t.dueDate < todayStr).length;
+    return { total, done, progress, overdue };
+  }, [tasks]);
+
+  const decisionTasks = useMemo(() => tasks.filter((t) => t.needsDecision), [tasks]);
+
+  async function handleToggleClientVisible() {
+    if (!project) return;
+    await updateProject(project.id, { clientVisible: !(project.clientVisible ?? true) });
+  }
+
   function openEdit() {
     if (!project) return;
     setEditForm({ name: project.name, description: project.description ?? "", startDate: project.startDate, endDate: project.endDate, status: project.status, projectType: project.projectType ?? [] });
@@ -158,122 +183,229 @@ export default function ProjectWorkspacePage() {
 
   async function handleExportExcel() {
     const { utils, writeFile } = await import("xlsx");
+    const taskById = new Map(tasks.map((t) => [t.id, t]));
     const rows = tasks
       .slice()
       .sort((a, b) => a.order - b.order)
-      .map((t) => ({
-        업무명: t.name,
-        담당자: t.assigneeName ?? "미지정",
-        시작일: t.startDate,
-        마감일: t.dueDate,
-        상태: TASK_STATUS_LABEL[t.status],
-        "진행률(%)": t.progress,
-        설명: t.description ?? "",
-      }));
+      .map((t) => {
+        const checklistTotal = t.checklist?.length ?? 0;
+        const checklistDone = t.checklist?.filter((c) => c.done).length ?? 0;
+        const checklistDetail = (t.checklist ?? [])
+          .map((c) => `${c.done ? "☑" : "☐"} ${c.text}`)
+          .join("\n");
+        return {
+          업무명: t.name,
+          그룹: t.group ?? "",
+          담당자: t.assigneeName ?? "미지정",
+          시작일: t.startDate,
+          마감일: t.dueDate,
+          상태: TASK_STATUS_LABEL[t.status],
+          "진행률(%)": t.progress,
+          지연여부: isOverdue(t) ? "지연" : "",
+          선행업무: t.dependsOn.map((id) => taskById.get(id)?.name).filter(Boolean).join(", "),
+          체크리스트: checklistTotal > 0 ? `${checklistDone}/${checklistTotal}` : "",
+          "체크리스트 항목": checklistDetail,
+          설명: t.description ?? "",
+        };
+      });
     const ws = utils.json_to_sheet(rows);
-    ws["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 24 }, { wch: 10 }, { wch: 36 }, { wch: 40 }];
     const wb = utils.book_new();
     utils.book_append_sheet(wb, ws, "업무일정");
     writeFile(wb, `${project?.name ?? "프로젝트"}_업무일정.xlsx`);
   }
 
-  async function handleApplyTemplate(templateId: string) {
-    if (!project || !templateId) return;
-    const template = templates.find((t) => t.id === templateId);
-    if (!template) return;
-    setApplyingTemplate(true);
+  const [calendarUrl, setCalendarUrl] = useState<string | null>(null);
+  const [calendarError, setCalendarError] = useState("");
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarCopied, setCalendarCopied] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  async function handleLogoUpload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    setUploadingLogo(true);
     try {
-      await applyTemplateToProject(template, project.id, project.clientId, project.startDate);
+      await uploadClientLogo(client.id, file);
     } finally {
-      setApplyingTemplate(false);
+      setUploadingLogo(false);
+      e.target.value = "";
+    }
+  }
+
+  async function handleOpenCalendarLink() {
+    if (!project) return;
+    setCalendarError("");
+    setCalendarCopied(false);
+    setCalendarLoading(true);
+    try {
+      let token = project.calendarToken;
+      if (!token) {
+        token = crypto.randomUUID();
+        await updateProject(project.id, { calendarToken: token });
+      }
+      setCalendarUrl(`https://asia-northeast3-handyhand-a175a.cloudfunctions.net/projectCalendarFeed?projectId=${project.id}&token=${token}`);
+    } catch (e) {
+      setCalendarError(e instanceof Error ? e.message : "링크를 준비하지 못했습니다.");
+    } finally {
+      setCalendarLoading(false);
+    }
+  }
+
+  async function handleCopyCalendarUrl() {
+    if (!calendarUrl) return;
+    try {
+      await navigator.clipboard.writeText(calendarUrl);
+      setCalendarCopied(true);
+    } catch {
+      setCalendarCopied(false);
     }
   }
 
   if (project === undefined) {
-    return <p className="text-sm text-gray-400">불러오는 중...</p>;
+    return <p className="text-sm text-[#86868b]">불러오는 중...</p>;
   }
   if (project === null) {
-    return <p className="text-sm text-gray-400">프로젝트를 찾을 수 없습니다.</p>;
+    return <p className="text-sm text-[#86868b]">프로젝트를 찾을 수 없습니다.</p>;
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex items-start gap-4">
-          {/* 클라이언트 로고 */}
-          {client?.logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={client.logoUrl}
-              alt={`${client.name} 로고`}
-              className="h-16 w-16 shrink-0 rounded-2xl border border-[#e5e5e5] bg-white object-contain p-1.5"
-            />
-          )}
-          <div>
+    <div className="space-y-6">
+      <div className="rounded-3xl bg-white p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex min-w-0 flex-1 items-stretch gap-4">
+            {/* 클라이언트 로고 */}
             {client && (
-              <p className="mb-0.5 text-xs font-medium text-[#86868b]">{client.name}</p>
+              <div className="group relative shrink-0 self-start">
+                {client.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={client.logoUrl}
+                    alt={`${client.name} 로고`}
+                    className="aspect-square h-24 sm:h-32 rounded-2xl border border-[#e5e5e5] bg-white object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-square h-24 sm:h-32 items-center justify-center rounded-2xl border border-dashed border-[#d1d1d6] bg-[#f5f5f7]">
+                    <ImageIcon size={24} className="text-[#c7c7cc]" />
+                  </div>
+                )}
+                {isAdmin && (
+                  <label className="absolute inset-0 flex cursor-pointer items-center justify-center rounded-2xl bg-black/0 opacity-0 transition group-hover:bg-black/30 group-hover:opacity-100">
+                    <span className="text-xs font-medium text-white">{uploadingLogo ? "..." : "변경"}</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                  </label>
+                )}
+                {isAdmin && (
+                  <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-[#e5e5e5] bg-white text-[#86868b] shadow-[0_1px_4px_rgba(0,0,0,0.1)] sm:hidden">
+                    <Pencil size={11} />
+                  </span>
+                )}
+              </div>
             )}
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-[#1d1d1f]">{project.name}</h1>
-              {isAdmin && (
-                <button onClick={openEdit} className="text-[#d1d1d6] hover:text-[#86868b]">
-                  <Pencil size={15} />
-                </button>
+            <div>
+              {client && (
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{client.name}</p>
               )}
-            </div>
-            {project.description && <p className="mt-0.5 text-sm text-[#86868b]">{project.description}</p>}
-            {project.projectType && project.projectType.length > 0 && (
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {project.projectType.map((t) => (
-                  <span key={t} className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#1d1d1f]">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#1d1d1f]">{project.name}</h1>
+                {isAdmin && (
+                  <button onClick={openEdit} className="text-[#d1d1d6] hover:text-[#86868b]">
+                    <Pencil size={15} />
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={handleToggleClientVisible}
+                    title={project.clientVisible === false ? "고객에게 비공개 — 눌러서 공개" : "고객에게 공개됨 — 눌러서 비공개"}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                      project.clientVisible === false
+                        ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                        : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#ececee]"
+                    }`}
+                  >
+                    {project.clientVisible === false ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {project.clientVisible === false ? "비공개" : "공개"}
+                  </button>
+                )}
+              </div>
+              {project.description && <p className="mt-1 text-sm text-[#86868b]">{project.description}</p>}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1">
+                {project.projectType?.map((t) => (
+                  <span key={t} className="whitespace-nowrap rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs font-medium text-[#1d1d1f]">
                     {PROJECT_TYPE_LABEL[t]}
                   </span>
                 ))}
               </div>
-            )}
-            <p className="mt-1 text-xs text-[#86868b]">
-              {project.startDate} ~ {project.endDate}
-            </p>
+              <p className="mt-1.5 whitespace-nowrap text-xs text-[#86868b]">{project.startDate} ~ {project.endDate}</p>
+            </div>
           </div>
+
+          {isAdmin && (
+            <div className="hidden shrink-0 items-center gap-2 sm:flex">
+              <TaskCreateForm
+                projectId={project.id}
+                clientId={project.clientId}
+                existingTasks={tasks}
+                assigneeOptions={assigneeOptions}
+              />
+            </div>
+          )}
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            {templates.length > 0 && (
-              <select
-                defaultValue=""
-                disabled={applyingTemplate}
-                onChange={(e) => {
-                  if (e.target.value) handleApplyTemplate(e.target.value);
-                  e.target.value = "";
-                }}
-                className="rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] outline-none"
-              >
-                <option value="" disabled>
-                  {applyingTemplate ? "적용 중..." : "템플릿으로 업무 일괄 생성"}
-                </option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
-            <TaskCreateForm
-              projectId={project.id}
-              clientId={project.clientId}
-              existingTasks={tasks}
-              assigneeOptions={assigneeOptions}
-            />
+        {stats.total > 0 && (
+          <div className="mt-6 border-t border-[#f0f0f0] pt-5">
+            <p className="text-xs text-[#86868b]">전체 진행률</p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f5f5f7]">
+                <div className="h-full rounded-full bg-[#1d1d1f]" style={{ width: `${stats.progress}%` }} />
+              </div>
+              <span className="text-sm font-semibold text-[#1d1d1f]">{stats.progress}%</span>
+            </div>
           </div>
         )}
       </div>
 
+      {decisionTasks.length > 0 && (
+        <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">
+          <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-violet-700">
+            <AlertCircle size={15} />
+            확인/승인이 필요한 업무 {decisionTasks.length}건
+          </p>
+          <div className="space-y-2">
+            {decisionTasks.map((t) => {
+              const openNote = [...(t.decisionHistory ?? [])].reverse().find((h) => !h.decidedAt)?.note;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedTask(t)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-violet-100 bg-white px-4 py-3 text-left text-sm shadow-[0_1px_4px_rgba(124,58,237,0.06)] transition hover:border-violet-300 hover:shadow-[0_4px_12px_rgba(124,58,237,0.12)]"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                    <AlertCircle size={15} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-[#1d1d1f]">{t.name}</p>
+                    {openNote && <p className="truncate text-xs text-[#86868b]">{openNote}</p>}
+                  </div>
+                  <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-600">{t.dueDate}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {stats.total > 0 && (
+        <div className="rounded-3xl bg-white p-6 sm:p-8">
+          <AiDiagnosisPanel project={project} tasks={tasks} />
+        </div>
+      )}
+
       {/* 탭 */}
-      <div className="flex items-center justify-between border-b border-[#e5e5e5]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <DndContext sensors={tabSensors} collisionDetection={closestCenter} onDragEnd={handleTabReorder}>
           <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
-            <div className="flex gap-0.5 overflow-x-auto">
+            <div className="flex gap-1 overflow-x-auto rounded-full bg-[#eeeef0] p-1">
               {tabOrder.map((id) => (
                 <SortableTabButton
                   key={id}
@@ -287,20 +419,76 @@ export default function ProjectWorkspacePage() {
             </div>
           </SortableContext>
         </DndContext>
-        <button
-          onClick={handleExportExcel}
-          disabled={tasks.length === 0}
-          className="mb-1 ml-2 flex shrink-0 items-center gap-1.5 rounded-full border border-[#e5e5e5] px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] disabled:opacity-40"
-        >
-          <Download size={13} />
-          <span className="hidden sm:inline">엑셀 다운로드</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {isAdmin && (
+            <div className="sm:hidden">
+              <TaskCreateForm
+                projectId={project.id}
+                clientId={project.clientId}
+                existingTasks={tasks}
+                assigneeOptions={assigneeOptions}
+                compact
+              />
+            </div>
+          )}
+          <button
+            onClick={handleOpenCalendarLink}
+            disabled={tasks.length === 0 || calendarLoading}
+            title="캘린더 구독 링크 — 구글/애플 캘린더에 URL로 추가하면 일정이 자동으로 갱신됩니다"
+            className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] disabled:opacity-40"
+          >
+            <CalendarDays size={13} />
+            <span className="hidden sm:inline">{calendarLoading ? "준비 중..." : "캘린더 구독"}</span>
+          </button>
+          <button
+            onClick={handleExportExcel}
+            disabled={tasks.length === 0}
+            className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] disabled:opacity-40"
+          >
+            <Download size={13} />
+            <span className="hidden sm:inline">엑셀 다운로드</span>
+          </button>
+        </div>
       </div>
+      {calendarError && <p className="text-xs text-red-500">{calendarError}</p>}
+
+      {calendarUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setCalendarUrl(null)}>
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h2 className="text-lg font-semibold text-[#1d1d1f]">캘린더 구독</h2>
+              <p className="mt-1 text-sm text-[#86868b]">아래 버튼을 누르면 캘린더 앱이 바로 열리면서 구독이 시작됩니다. 안 열리면 링크를 복사해서 캘린더 앱에 직접 추가해주세요.</p>
+            </div>
+            <a
+              href={calendarUrl.replace(/^https:/, "webcal:")}
+              className="block w-full rounded-full bg-[#1d1d1f] py-3 text-center text-sm font-semibold text-white transition hover:bg-black"
+            >
+              캘린더 앱에 바로 추가
+            </a>
+            <input
+              readOnly
+              value={calendarUrl}
+              onFocus={(e) => e.target.select()}
+              className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setCalendarUrl(null)} className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">닫기</button>
+              <button
+                onClick={handleCopyCalendarUrl}
+                className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm font-medium text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+              >
+                {calendarCopied ? "복사됨!" : "링크 복사"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tab === "gantt" && <GanttChart tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "list" && <TaskList tasks={tasks} onSelectTask={setSelectedTask} />}
-      {tab === "dashboard" && <ProjectDashboard tasks={tasks} onSelectTask={setSelectedTask} />}
+      {tab === "dashboard" && <ProjectDashboard project={project} tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "files" && <ProjectFilesTab tasks={tasks} />}
+      {tab === "comments" && <ProjectCommentsTab tasks={tasks} onSelectTask={setSelectedTask} />}
 
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -318,11 +506,11 @@ export default function ProjectWorkspacePage() {
               <div className="flex gap-3">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-[#86868b] mb-1.5">시작일</label>
-                  <input type="date" className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] outline-none" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} />
+                  <input type="date" className="w-full appearance-none rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none" value={editForm.startDate} onChange={e => setEditForm(f => ({ ...f, startDate: e.target.value }))} />
                 </div>
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-[#86868b] mb-1.5">종료일</label>
-                  <input type="date" className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] outline-none" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} />
+                  <input type="date" className="w-full appearance-none rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none" value={editForm.endDate} onChange={e => setEditForm(f => ({ ...f, endDate: e.target.value }))} />
                 </div>
               </div>
               <div>
@@ -352,7 +540,12 @@ export default function ProjectWorkspacePage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#86868b] mb-1.5">상태</label>
-                <select className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] outline-none" value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}>
+                <select
+                  className="w-full appearance-none rounded-xl border border-[#e5e5e5] bg-white bg-[length:14px] bg-[right_0.75rem_center] bg-no-repeat px-3 py-2 pr-8 text-sm text-[#1d1d1f] outline-none"
+                  style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2386868b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")" }}
+                  value={editForm.status}
+                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+                >
                   <option value="active">진행 중</option>
                   <option value="completed">완료</option>
                   <option value="on_hold">보류</option>
@@ -408,8 +601,8 @@ function SortableTabButton({
       {...attributes}
       {...listeners}
       onClick={onClick}
-      className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition whitespace-nowrap ${
-        active ? "border-[#1d1d1f] text-[#1d1d1f]" : "border-transparent text-[#86868b] hover:text-[#1d1d1f]"
+      className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition whitespace-nowrap ${
+        active ? "bg-white text-[#1d1d1f] shadow-[0_1px_4px_rgba(0,0,0,0.08)]" : "text-[#86868b] hover:text-[#1d1d1f]"
       }`}
     >
       {icon}

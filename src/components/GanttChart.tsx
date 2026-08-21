@@ -48,6 +48,40 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
 
   const sorted = useMemo(() => [...tasks].sort((a, b) => a.order - b.order), [tasks]);
 
+  // 같은 group 태그를 가진 업무는 기본적으로 한 줄(구간별 색 막대)로 묶어 보여주고,
+  // 클릭하면 펼쳐서 개별 업무 줄로 볼 수 있다.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  function toggleGroup(name: string) {
+    setOpenGroups((s) => ({ ...s, [name]: !s[name] }));
+  }
+
+  type GanttRow =
+    | { kind: "task"; task: Task; indent?: boolean }
+    | { kind: "group"; name: string; tasks: Task[]; startDate: string; dueDate: string; open: boolean };
+
+  const rows = useMemo<GanttRow[]>(() => {
+    const result: GanttRow[] = [];
+    const seenGroups = new Set<string>();
+    for (const t of sorted) {
+      const g = t.group?.trim();
+      if (!g) {
+        result.push({ kind: "task", task: t });
+        continue;
+      }
+      if (seenGroups.has(g)) continue;
+      seenGroups.add(g);
+      const members = sorted.filter((x) => (x.group?.trim() || "") === g);
+      const startDate = members.reduce((min, m) => (m.startDate < min ? m.startDate : min), members[0].startDate);
+      const dueDate = members.reduce((max, m) => (m.dueDate > max ? m.dueDate : max), members[0].dueDate);
+      const open = !!openGroups[g];
+      result.push({ kind: "group", name: g, tasks: members, startDate, dueDate, open });
+      if (open) {
+        members.forEach((m) => result.push({ kind: "task", task: m, indent: true }));
+      }
+    }
+    return result;
+  }, [sorted, openGroups]);
+
   const { minDate, totalDays } = useMemo(() => {
     if (sorted.length === 0) {
       const today = new Date();
@@ -88,7 +122,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
   const offsetOf = (dateStr: string) => differenceInCalendarDays(parseISO(dateStr), minDate);
 
   const totalWidth = totalDays * dayWidth;
-  const bodyHeight = sorted.length * ROW_HEIGHT;
+  const bodyHeight = rows.length * ROW_HEIGHT;
 
   const weekTicks = useMemo(() => {
     const ticks: { x: number; label: string }[] = [];
@@ -111,25 +145,36 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
 
   const rowIndexById = useMemo(() => {
     const map = new Map<string, number>();
-    sorted.forEach((t, i) => map.set(t.id, i));
+    rows.forEach((row, i) => {
+      if (row.kind === "task") map.set(row.task.id, i);
+      else if (!row.open) row.tasks.forEach((t) => map.set(t.id, i));
+      // 펼쳐진 그룹의 구성원은 뒤이어 나오는 개별 "task" 행에서 각자 매핑된다.
+    });
     return map;
-  }, [sorted]);
+  }, [rows]);
 
-  function barRect(task: Task, rowIndex: number) {
-    const x = offsetOf(task.startDate) * dayWidth;
-    const widthDays = Math.max(differenceInCalendarDays(parseISO(task.dueDate), parseISO(task.startDate)), 1);
-    const width = widthDays * dayWidth;
+  function rectFor(startDate: string, dueDate: string, rowIndex: number, minBarWidth = 48) {
+    const x = offsetOf(startDate) * dayWidth;
+    const widthDays = Math.max(differenceInCalendarDays(parseISO(dueDate), parseISO(startDate)), 1);
+    const width = Math.max(widthDays * dayWidth, minBarWidth);
     const y = HEADER_HEIGHT + rowIndex * ROW_HEIGHT + (ROW_HEIGHT - BAR_HEIGHT) / 2;
     return { x, width, y };
   }
 
+  function barRect(task: Task, rowIndex: number) {
+    return rectFor(task.startDate, task.dueDate, rowIndex);
+  }
+
   const dependencyPaths = useMemo(() => {
     const paths: { d: string; key: string }[] = [];
-    sorted.forEach((task, rowIndex) => {
+    sorted.forEach((task) => {
+      const rowIndex = rowIndexById.get(task.id);
+      if (rowIndex === undefined) return;
       task.dependsOn.forEach((depId) => {
         const depRowIndex = rowIndexById.get(depId);
         const depTask = sorted.find((t) => t.id === depId);
         if (depRowIndex === undefined || !depTask) return;
+        if (depRowIndex === rowIndex) return; // 같은 그룹 줄 안의 의존관계는 화살표를 그리지 않는다
         const from = barRect(depTask, depRowIndex);
         const to = barRect(task, rowIndex);
         const startX = from.x + from.width;
@@ -193,22 +238,31 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
           >
             업무명
           </div>
-          {sorted.map((task) => (
+          {rows.map((row) => (
             <div
-              key={task.id}
-              className="flex items-center border-b border-[#f0f0f0] pl-6 pr-3 text-sm text-[#1d1d1f] sm:pl-8"
+              key={row.kind === "task" ? `${row.task.id}${row.indent ? "-nested" : ""}` : `group:${row.name}`}
+              className={`flex items-center border-b border-[#f0f0f0] pr-3 text-sm text-[#1d1d1f] ${row.kind === "task" && row.indent ? "pl-9 sm:pl-11" : "pl-6 sm:pl-8"}`}
               style={{ height: ROW_HEIGHT }}
-              title={task.name}
+              title={row.kind === "task" ? row.task.name : `${row.name} (${row.tasks.length}건)`}
             >
-              <button onClick={() => onSelectTask?.(task)} className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
-                {task.name}
-              </button>
+              {row.kind === "task" ? (
+                <button onClick={() => onSelectTask?.(row.task)} className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
+                  {row.task.name}
+                </button>
+              ) : (
+                <button
+                  onClick={() => toggleGroup(row.name)}
+                  className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline"
+                >
+                  {row.name} <span className="text-xs font-normal text-[#86868b]">({row.tasks.length}건)</span>
+                </button>
+              )}
             </div>
           ))}
         </div>
 
         {/* 타임라인 — 이 영역만 가로 스크롤 */}
-        <div ref={scrollRef} className="flex-1 overflow-x-auto">
+        <div ref={scrollRef} className="flex-1 overflow-x-auto overscroll-x-contain">
           <div className="relative" style={{ width: totalWidth, minWidth: "100%", height: HEADER_HEIGHT + bodyHeight }}>
             {/* 헤더: 날짜 눈금 */}
             <div
@@ -247,25 +301,72 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
             </svg>
 
             {/* 행 (막대) */}
-            {sorted.map((task, i) => {
-              const rect = barRect(task, i);
-              const overdue = isOverdue(task);
+            {rows.map((row, i) => {
+              const rowDivider = (
+                <div
+                  className="absolute border-b border-[#f5f5f7]"
+                  style={{ left: 0, top: HEADER_HEIGHT + i * ROW_HEIGHT, width: totalWidth, height: ROW_HEIGHT }}
+                />
+              );
+
+              if (row.kind === "task") {
+                const task = row.task;
+                const rect = barRect(task, i);
+                const overdue = isOverdue(task);
+                return (
+                  <div key={task.id}>
+                    {rowDivider}
+                    <button
+                      onClick={() => onSelectTask?.(task)}
+                      className={`absolute flex items-center rounded-full px-2 text-xs font-medium text-white shadow-sm transition hover:opacity-90 ${BAR_COLOR[task.status]} ${
+                        overdue ? "ring-2 ring-red-400" : ""
+                      }`}
+                      style={{ left: rect.x, top: rect.y, width: rect.width, height: BAR_HEIGHT }}
+                      title={`${task.name} (${task.startDate} ~ ${task.dueDate})`}
+                    >
+                      {dayWidth >= 16 && <span className="truncate">{task.progress}%</span>}
+                    </button>
+                  </div>
+                );
+              }
+
+              // 그룹 행이 펼쳐진 상태면 헤더 줄엔 막대를 그리지 않는다(구성원이 바로 아래
+              // 개별 행으로 각자의 막대를 그린다).
+              if (row.open) {
+                return <div key={`group:${row.name}`}>{rowDivider}</div>;
+              }
+
+              // 그룹 행(접힘) — 전체 기간을 아우르는 한 줄 안에, 각 업무를 작은 색 알약으로 나눠 표시
+              const groupRect = rectFor(row.startDate, row.dueDate, i, 24);
+              const GAP = 3;
               return (
-                <div key={task.id}>
+                <div key={`group:${row.name}`}>
+                  {rowDivider}
                   <div
-                    className="absolute border-b border-[#f5f5f7]"
-                    style={{ left: 0, top: HEADER_HEIGHT + i * ROW_HEIGHT, width: totalWidth, height: ROW_HEIGHT }}
-                  />
-                  <button
-                    onClick={() => onSelectTask?.(task)}
-                    className={`absolute flex items-center rounded-full px-2 text-xs font-medium text-white shadow-sm transition hover:opacity-90 ${BAR_COLOR[task.status]} ${
-                      overdue ? "ring-2 ring-red-400" : ""
-                    }`}
-                    style={{ left: rect.x, top: rect.y, width: Math.max(rect.width, 8), height: BAR_HEIGHT }}
-                    title={`${task.name} (${task.startDate} ~ ${task.dueDate})`}
+                    className="absolute"
+                    style={{ left: groupRect.x, top: groupRect.y, width: groupRect.width, height: BAR_HEIGHT }}
+                    title={`${row.name} (${row.startDate} ~ ${row.dueDate})`}
                   >
-                    {dayWidth >= 16 && <span className="truncate">{task.progress}%</span>}
-                  </button>
+                    {row.tasks.map((m) => {
+                      const segX = offsetOf(m.startDate) * dayWidth - groupRect.x;
+                      const segWidthDays = Math.max(differenceInCalendarDays(parseISO(m.dueDate), parseISO(m.startDate)), 1);
+                      const rawWidth = Math.max(segWidthDays * dayWidth, 10);
+                      const overdue = isOverdue(m);
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => onSelectTask?.(m)}
+                          className={`absolute top-0 flex h-full items-center overflow-hidden rounded-full px-2 text-xs font-medium text-white shadow-sm transition hover:opacity-90 ${BAR_COLOR[m.status]} ${
+                            overdue ? "ring-2 ring-inset ring-red-400" : ""
+                          }`}
+                          style={{ left: segX + GAP / 2, width: Math.max(rawWidth - GAP, 6) }}
+                          title={`${m.name} (${m.startDate} ~ ${m.dueDate})`}
+                        >
+                          {dayWidth >= 16 && <span className="truncate">{m.progress}%</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })}

@@ -3,11 +3,14 @@
 import { useState, useRef, useEffect, CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { X, Upload, ChevronRight, AlertCircle } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 interface ManufactureMethod {
   method: string;
   confidence: number;
   reason: string;
+  initialCostLevel?: number;
+  unitCostLevel?: number;
 }
 
 interface SinglePartResult {
@@ -29,6 +32,8 @@ interface AssemblyPart {
   confidence: number;
   reason: string;
   surfaceTreatment: string;
+  initialCostLevel?: number;
+  unitCostLevel?: number;
 }
 
 interface AssemblyResult {
@@ -84,6 +89,24 @@ const COMPLEXITY_COLOR: Record<string, string> = {
   "복잡": "bg-red-100 text-red-700",
 };
 
+const COST_LABEL: Record<number, string> = { 1: "낮음", 2: "보통", 3: "높음" };
+
+function CostBadges({ initial, unit, dark = false }: { initial?: number; unit?: number; dark?: boolean }) {
+  if (!initial && !unit) return null;
+  const textClass = dark ? "text-white/50" : "text-[#86868b]";
+  const strongClass = dark ? "text-white/80" : "text-[#1d1d1f]";
+  return (
+    <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] ${textClass}`}>
+      {!!initial && COST_LABEL[initial] && (
+        <span>초기 설비투자 <span className={`font-semibold ${strongClass}`}>{COST_LABEL[initial]}</span></span>
+      )}
+      {!!unit && COST_LABEL[unit] && (
+        <span>개당 단가 <span className={`font-semibold ${strongClass}`}>{COST_LABEL[unit]}</span></span>
+      )}
+    </div>
+  );
+}
+
 function buildQuotePrefill(result: AnalysisResult, quantity: string, purpose: string): string {
   const lines: string[] = ["[AI 분석 결과]"];
   if (result.isAssembly) {
@@ -121,6 +144,7 @@ export function CadAnalysisModal({
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<string>("미정");
+  const [assemblyMaterial, setAssemblyMaterial] = useState<string>("미정");
   const [quantity, setQuantity] = useState<string>("");
   const [purpose, setPurpose] = useState<string>("");
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -149,6 +173,7 @@ export function CadAnalysisModal({
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
+    trackEvent("form_start", { form: "cad_analysis", page: window.location.pathname });
     return () => { document.body.style.overflow = ""; };
   }, []);
 
@@ -175,8 +200,8 @@ export function CadAnalysisModal({
 
   function handleFile(f: File) {
     const ext = f.name.split(".").pop()?.toLowerCase();
-    if (!["stp", "step", "dxf", "dwg"].includes(ext ?? "")) {
-      setError("STP, STEP, DXF 또는 DWG 파일만 업로드할 수 있습니다.");
+    if (!["stp", "step", "dxf", "dwg", "ipt", "iam", "sldprt", "sldasm"].includes(ext ?? "")) {
+      setError("STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, SLDASM 파일만 업로드할 수 있습니다.");
       return;
     }
     setFile(f);
@@ -188,12 +213,14 @@ export function CadAnalysisModal({
     if (selectedCategory === cat) {
       setSelectedCategory(null);
       setSelectedMaterial("미정");
+      setAssemblyMaterial("미정");
       setPopoverOpen(false);
       return;
     }
     setSelectedCategory(cat);
     setSelectedMaterial(cat === "조립품" ? "조립품" : "미정");
-    if (cat !== "조립품" && categoryRowRef.current) {
+    if (cat !== "조립품") setAssemblyMaterial("미정");
+    if (categoryRowRef.current) {
       const rect = categoryRowRef.current.getBoundingClientRect();
       setPopoverStyle({
         position: "fixed",
@@ -203,20 +230,23 @@ export function CadAnalysisModal({
         zIndex: 200,
       });
       setPopoverOpen(true);
-    } else {
-      setPopoverOpen(false);
     }
   }
 
   async function handleAnalyze() {
-    if (!file) return;
+    if (!file && !purpose.trim()) return;
     setLoading(true);
     setError(null);
     setAutoDetectedAssembly(false);
     try {
+      const materialToSend =
+        selectedCategory === "조립품" && assemblyMaterial !== "미정"
+          ? `조립품 (주요 재질: ${assemblyMaterial})`
+          : selectedMaterial;
+
       const fd = new FormData();
-      fd.append("file", file);
-      fd.append("material", selectedMaterial);
+      if (file) fd.append("file", file);
+      fd.append("material", materialToSend);
       if (quantity) fd.append("quantity", quantity);
       if (purpose.trim()) fd.append("purpose", purpose.trim());
       const res = await fetch("/api/analyze-cad", { method: "POST", body: fd });
@@ -224,7 +254,7 @@ export function CadAnalysisModal({
       if (!res.ok) throw new Error(data.error ?? "분석 실패");
 
       // 조립품 파일인데 조립품을 선택 안 했으면 조립품으로 자동 재분석
-      if (data.isAssembly && selectedCategory !== "조립품") {
+      if (file && data.isAssembly && selectedCategory !== "조립품") {
         const fd2 = new FormData();
         fd2.append("file", file);
         fd2.append("material", "조립품");
@@ -237,8 +267,10 @@ export function CadAnalysisModal({
         setSelectedCategory("조립품");
         setSelectedMaterial("조립품");
         setResult(data2);
+        trackEvent("cad_analysis_complete", { has_file: !!file });
       } else {
         setResult(data);
+        trackEvent("cad_analysis_complete", { has_file: !!file });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "분석 중 오류가 발생했습니다.");
@@ -254,7 +286,7 @@ export function CadAnalysisModal({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-0 pb-0 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-4">
       <div
         ref={modalRef}
-        className={`relative w-full max-w-xl rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl ${(loading || !!result) ? "flex flex-col overflow-hidden" : "max-h-[92vh] overflow-y-auto"}`}
+        className="relative flex max-h-[100dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[90vh] sm:rounded-3xl"
         style={(loading || !!result) && formHeight ? { height: formHeight } : {}}
       >
         {/* 헤더 */}
@@ -268,8 +300,7 @@ export function CadAnalysisModal({
 
         <div
           ref={contentRef}
-          className={loading ? "flex-1 flex flex-col items-center justify-center px-6 py-6" : !!result ? "flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden px-6 pt-6 pb-0" : "p-6"}
-          style={!!result ? { scrollbarWidth: "none" } as CSSProperties : {}}
+          className={loading ? "flex-1 flex flex-col items-center justify-center px-6 py-6" : !!result ? "no-scrollbar flex-1 overflow-y-auto px-6 pt-6 pb-0" : "no-scrollbar flex-1 overflow-y-auto p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"}
         >
           {!result ? (
             loading ? (
@@ -292,7 +323,7 @@ export function CadAnalysisModal({
             ) : (
             <>
               <p className="mb-5 text-sm leading-relaxed text-[#86868b]">
-                CAD 파일을 업로드하면 AI가 형상을 분석해 최적 제조방법을 추천합니다. 재질·수량·용도를 입력할수록 분석 정확도가 높아집니다. 조립품 도면은 재질에서 <span className="font-medium text-[#1d1d1f]">조립품</span>을 선택해주세요.
+                CAD 파일을 업로드하면 AI가 형상을 분석해 최적 제조방법을 추천합니다. 도면이 없다면 제품 용도만 입력해도 대략적인 분석이 가능합니다. 재질·수량·용도를 입력할수록 분석 정확도가 높아집니다. 조립품 도면은 재질에서 <span className="font-medium text-[#1d1d1f]">조립품</span>을 선택해주세요.
               </p>
 
               {/* 파일 업로드 */}
@@ -305,7 +336,7 @@ export function CadAnalysisModal({
                   dragging ? "border-black bg-black/5" : file ? "border-black bg-black/[0.02]" : "border-[#d1d1d6] hover:border-[#86868b]"
                 }`}
               >
-                <input ref={inputRef} type="file" accept=".stp,.step,.dxf,.dwg" className="hidden"
+                <input ref={inputRef} type="file" accept=".stp,.step,.dxf,.dwg,.ipt,.iam,.sldprt,.sldasm" className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
                 {file ? (
                   <>
@@ -324,7 +355,8 @@ export function CadAnalysisModal({
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium text-[#1d1d1f]">CAD 파일을 드래그하거나 클릭하여 업로드</p>
-                      <p className="mt-1 text-xs text-[#86868b]">.stp · .step · .dxf · .dwg 지원 · 최대 50MB</p>
+                      <p className="mt-1 text-xs text-[#86868b]">.stp · .step · .dxf · .dwg · .ipt · .iam · .sldprt · .sldasm 지원 · 최대 50MB</p>
+                      <p className="mt-1 text-xs text-[#c7c7cc]">도면이 없다면 아래 용도만 입력해도 분석할 수 있습니다</p>
                     </div>
                   </>
                 )}
@@ -365,7 +397,17 @@ export function CadAnalysisModal({
                 {/* 선택 상태 인디케이터 — 항상 고정 높이 유지 */}
                 <div className="mt-3 flex h-6 items-center">
                   {selectedCategory === "조립품" ? (
-                    <p className="text-xs text-[#86868b]">AI가 각 파트의 재질과 제조방법을 자동으로 분석합니다</p>
+                    assemblyMaterial !== "미정" ? (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-[#86868b]">조립품 · 주요 재질 ›</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                          {assemblyMaterial}
+                          <button type="button" onClick={() => setAssemblyMaterial("미정")} className="leading-none text-white/50 hover:text-white">×</button>
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[#86868b]">AI가 각 파트의 재질과 제조방법을 자동으로 분석합니다 (주요 재질 선택 가능)</p>
+                    )
                   ) : selectedMaterial !== "미정" ? (
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-[#86868b]">{selectedCategory} ›</span>
@@ -415,10 +457,10 @@ export function CadAnalysisModal({
               </div>
 
               <p className="mt-4 text-xs text-[#86868b]">
-                * DWG 파일은 파일명 및 메타데이터 기반으로 분석됩니다. 더 정확한 분석을 원하시면 STP/STEP 파일을 사용하세요.
+                * DWG · IPT · IAM · SLDPRT · SLDASM 파일과 도면 없이 진행하는 분석은 파일명·메타데이터·텍스트 설명 기반으로 추정되어 정확도가 낮을 수 있습니다. 더 정확한 분석을 원하시면 STP/STEP 파일을 사용하세요.
               </p>
 
-              <button onClick={handleAnalyze} disabled={!file || loading}
+              <button onClick={handleAnalyze} disabled={(!file && !purpose.trim()) || loading}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-black py-3 text-sm font-semibold text-white transition hover:bg-[#1d1d1f] disabled:opacity-40">
                 분석 시작
               </button>
@@ -455,6 +497,7 @@ export function CadAnalysisModal({
                       <span className="text-xs font-semibold text-[#1d1d1f]">{part.method}</span>
                       <span className="text-right text-xs text-[#86868b]">{part.reason}</span>
                     </div>
+                    <CostBadges initial={part.initialCostLevel} unit={part.unitCostLevel} />
                     {part.surfaceTreatment && part.surfaceTreatment !== "없음" && (
                       <p className="mt-1.5 text-xs text-[#86868b]">표면처리: <span className="font-medium text-[#1d1d1f]">{part.surfaceTreatment}</span></p>
                     )}
@@ -490,11 +533,11 @@ export function CadAnalysisModal({
               </div>
               <p className="text-xs font-semibold uppercase tracking-widest text-[#86868b]">추천 제조방법</p>
               <div className="space-y-2">
-                {(result.recommendedMethods ?? []).slice(0, 3).map((m, i) => (
+                {(result.recommendedMethods ?? []).slice(0, 2).map((m, i) => (
                   <div key={m.method} className={`rounded-2xl border p-4 ${i === 0 ? "border-black bg-black" : "border-[#e5e5e5] bg-white"}`}>
                     <div className="mb-1.5 flex items-center justify-between">
                       <span className={`text-sm font-bold ${i === 0 ? "text-white" : "text-[#1d1d1f]"}`}>
-                        {i === 0 && <span className="mr-1.5 text-xs font-normal opacity-50">1순위</span>}
+                        <span className="mr-1.5 text-xs font-normal opacity-50">{i === 0 ? "1순위" : "2순위"}</span>
                         {m.method}
                       </span>
                       <span className={`text-xs font-semibold ${i === 0 ? "text-white/60" : "text-[#86868b]"}`}>{m.confidence}%</span>
@@ -503,6 +546,7 @@ export function CadAnalysisModal({
                       <div className={`h-0.5 rounded-full ${i === 0 ? "bg-white" : "bg-black"}`} style={{ width: `${m.confidence}%` }} />
                     </div>
                     <p className={`text-xs ${i === 0 ? "text-white/60" : "text-[#86868b]"}`}>{m.reason}</p>
+                    <CostBadges initial={m.initialCostLevel} unit={m.unitCostLevel} dark={i === 0} />
                   </div>
                 ))}
               </div>
@@ -536,13 +580,42 @@ export function CadAnalysisModal({
     </div>
 
     {/* 소분류 팝오버 — position:fixed 로 모달 레이아웃에 영향 없음 */}
+    {mounted && popoverOpen && selectedCategory === "조립품" && createPortal(
+      <div
+        ref={popoverRef}
+        style={popoverStyle}
+        className="rounded-2xl border border-[#e5e5e5] bg-white p-3 shadow-2xl"
+      >
+        <p className="mb-2 px-1 text-[11px] text-[#86868b]">주요 재질 (선택) — 지정하면 분석 정확도가 높아집니다</p>
+        <div className="grid grid-cols-2 gap-2">
+          {["금속", "플라스틱", "기타", "미정"].map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setAssemblyMaterial(m);
+                setPopoverOpen(false);
+              }}
+              className={`rounded-xl border px-3 py-1.5 text-xs font-semibold transition ${
+                assemblyMaterial === m
+                  ? "border-black bg-black text-white"
+                  : "border-[#e5e5e5] bg-[#f5f5f7] text-[#1d1d1f] hover:border-[#86868b]"
+              }`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>,
+      document.body
+    )}
     {mounted && popoverOpen && selectedCategory && selectedCategory !== "조립품" && createPortal(
       <div
         ref={popoverRef}
         style={popoverStyle}
         className="rounded-2xl border border-[#e5e5e5] bg-white p-3 shadow-2xl"
       >
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {MATERIAL_CATEGORIES.find((c) => c.label === selectedCategory)?.items.map((mat) => (
             <button
               key={mat.label}
@@ -557,8 +630,8 @@ export function CadAnalysisModal({
                   : "border-[#e5e5e5] bg-[#f5f5f7] text-[#1d1d1f] hover:border-[#86868b]"
               }`}
             >
-              <span className="text-xs font-semibold">{mat.label}</span>
-              <span className={`ml-1.5 text-[10px] ${selectedMaterial === mat.label ? "text-white/60" : "text-[#86868b]"}`}>
+              <span className="block whitespace-nowrap text-xs font-semibold">{mat.label}</span>
+              <span className={`block whitespace-nowrap text-[10px] ${selectedMaterial === mat.label ? "text-white/60" : "text-[#86868b]"}`}>
                 {mat.sub}
               </span>
             </button>

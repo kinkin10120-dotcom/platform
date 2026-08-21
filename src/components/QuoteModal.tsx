@@ -2,19 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
-const STAGES = ["기획", "설계", "금형", "양산"] as const;
+const STAGES = ["올인원", "디자인", "기구설계", "시제품", "금형", "양산", "상세페이지 제작", "크라우드펀딩 컨설팅"] as const;
 
-export function QuoteModal({ onClose, prefillDescription }: { onClose: () => void; prefillDescription?: string }) {
+export function QuoteModal({ onClose, prefillDescription, initialStage }: { onClose: () => void; prefillDescription?: string; initialStage?: string }) {
   const [form, setForm] = useState({
-    name: "", company: "", email: "", phone: "", description: prefillDescription ?? "", stage: "",
+    name: "", company: "", email: "", phone: "", description: prefillDescription ?? "", stage: initialStage ?? "",
   });
   const [files, setFiles] = useState<File[]>([]);
+  const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
+    trackEvent("form_start", { form: "quote", page: window.location.pathname });
     return () => { document.body.style.overflow = ""; };
   }, []);
 
@@ -30,6 +33,7 @@ export function QuoteModal({ onClose, prefillDescription }: { onClose: () => voi
       files.forEach((f) => fd.append("files", f));
       const res = await fetch("/api/quote", { method: "POST", body: fd });
       if (!res.ok) throw new Error("전송 실패");
+      trackEvent("generate_lead", { form: "quote", stage: form.stage || undefined });
       setDone(true);
     } finally {
       setSubmitting(false);
@@ -38,7 +42,7 @@ export function QuoteModal({ onClose, prefillDescription }: { onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-0 pb-0 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-4">
-      <div className="relative w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl sm:p-8 max-h-[90vh] overflow-y-auto">
+      <div className="no-scrollbar relative w-full max-w-lg rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl sm:p-8 max-h-[90vh] overflow-y-auto">
         <button onClick={onClose} className="absolute right-5 top-5 rounded-full p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]">
           <X size={18} />
         </button>
@@ -146,7 +150,16 @@ export function QuoteModal({ onClose, prefillDescription }: { onClose: () => voi
                 )}
               </div>
 
-              <button type="submit" disabled={submitting}
+              <label className="flex items-start gap-2 text-xs text-[#86868b]">
+                <input type="checkbox" required checked={agree} onChange={(e) => setAgree(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-black" />
+                <span>
+                  개인정보 수집·이용에 동의합니다 (필수) — 수집 항목: 이름, 이메일, 연락처, 회사명 / 목적: 견적 상담 및 회신 / 보유기간: 처리 목적 달성 후 1년.{" "}
+                  <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-[#1d1d1f]">자세히 보기</a>
+                </span>
+              </label>
+
+              <button type="submit" disabled={submitting || !agree}
                 className="w-full rounded-full bg-black py-3 text-sm font-semibold text-white transition hover:bg-[#1d1d1f] disabled:opacity-50">
                 {submitting ? "전송 중..." : "견적 요청 보내기"}
               </button>

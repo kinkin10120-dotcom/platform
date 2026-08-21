@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async redirects() {
-    return [{ source: "/handypm", destination: "/handyworks", permanent: true }];
+    return [
+      { source: "/handypm", destination: "/handyworks", permanent: true },
+      { source: "/contact", destination: "/", permanent: true },
+    ];
   },
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },

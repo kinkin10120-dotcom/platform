@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, orderBy, query, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export type QuoteStatus = "pending" | "reviewed" | "contacted";
@@ -14,6 +14,7 @@ export interface QuoteRequest {
   status: QuoteStatus;
   createdAt: number;
   memo: string;
+  hasAttachment?: boolean;
 }
 
 function fromDoc(d: any): QuoteRequest {
@@ -29,7 +30,31 @@ function fromDoc(d: any): QuoteRequest {
     status: data.status ?? "pending",
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : Date.now(),
     memo: data.memo ?? "",
+    hasAttachment: !!data.hasAttachment,
   };
+}
+
+export async function createQuoteRequest(input: {
+  name: string;
+  company?: string;
+  email: string;
+  phone?: string;
+  stage?: string;
+  description: string;
+  hasAttachment?: boolean;
+}) {
+  return addDoc(collection(db, "quoteRequests"), {
+    name: input.name,
+    company: input.company || "",
+    email: input.email,
+    phone: input.phone || "",
+    stage: input.stage || "",
+    description: input.description,
+    hasAttachment: !!input.hasAttachment,
+    status: "pending",
+    memo: "",
+    createdAt: serverTimestamp(),
+  });
 }
 
 export function listenQuoteRequests(cb: (quotes: QuoteRequest[]) => void) {
@@ -39,4 +64,8 @@ export function listenQuoteRequests(cb: (quotes: QuoteRequest[]) => void) {
 
 export async function updateQuote(id: string, patch: { status?: QuoteStatus; memo?: string }) {
   return updateDoc(doc(db, "quoteRequests", id), { ...patch, updatedAt: serverTimestamp() });
+}
+
+export async function deleteQuote(id: string) {
+  return deleteDoc(doc(db, "quoteRequests", id));
 }

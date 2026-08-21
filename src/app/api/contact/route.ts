@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { createPublicInquiry } from "@/lib/firestore/inquiries";
 
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const body = await req.json();
   const { name, email, phone, type, message } = body;
 
@@ -48,6 +48,12 @@ export async function POST(req: NextRequest) {
   if (error) {
     console.error("Resend error:", JSON.stringify(error));
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  try {
+    await createPublicInquiry({ name, email, phone, type, message });
+  } catch (e) {
+    console.error("문의 내역 저장 실패:", e);
   }
 
   return NextResponse.json({ ok: true });

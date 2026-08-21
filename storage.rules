@@ -4,12 +4,39 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // 업무별 첨부 파일: projects/{projectId}/tasks/{taskId}/{fileName}
-    match /projects/{projectId}/tasks/{taskId}/{fileName} {
+    // 프로젝트 삭제 시 하위 파일을 한꺼번에 조회/삭제할 수 있도록 프로젝트 전체 경로에 대해 list 권한도 허용
+    match /projects/{projectId}/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
 
     // 클라이언트 브랜드 로고
     match /clients/{clientId}/logo {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // 발주 제품 카탈로그 이미지
+    match /clientProducts/{productId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // 발주 요청 시 클라이언트 서명 이미지
+    match /purchaseOrders/{orderId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // 계약 전자서명 이미지 — 실제 업로드는 Cloud Functions(Admin SDK)가 수행해 이 write
+    // 규칙은 우회되지만, 다른 경로들과의 일관성을 위해 동일하게 유지한다.
+    match /contracts/{contractId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // 계약서 등에 쓰이는 공용 브랜드 자산(을 직인 이미지 등) — 로그인 없는 상대방도 서명
+    // 페이지·이메일에서 봐야 하므로 읽기는 항상 허용한다.
+    match /assets/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null;
     }

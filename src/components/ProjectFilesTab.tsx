@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { Paperclip, Download, Eye, EyeOff, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Paperclip, Download, Eye, EyeOff, Trash2, ChevronDown, ChevronRight, ChevronUp, History, Sparkles, Loader2 } from "lucide-react";
 import { listenFiles, deleteTaskFile } from "@/lib/firestore/files";
 import { Task, TaskFile } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
@@ -21,57 +21,186 @@ function isStep(name: string) {
   return l.endsWith(".stp") || l.endsWith(".step");
 }
 
+function groupByName(files: TaskFile[]) {
+  const groups = new Map<string, TaskFile[]>();
+  for (const f of files) {
+    const list = groups.get(f.name) ?? [];
+    list.push(f);
+    groups.set(f.name, list);
+  }
+  return Array.from(groups.values()).map((versions) => {
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    return { latest: sorted[0], older: sorted.slice(1) };
+  });
+}
+
+const COST_LABEL: Record<number, string> = { 1: "낮음", 2: "보통", 3: "높음" };
+
+function CostBadges({ initial, unit }: { initial: number; unit: number }) {
+  return (
+    <span className="flex shrink-0 flex-wrap gap-1">
+      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">초기투자 {COST_LABEL[initial] ?? "-"}</span>
+      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">개당단가 {COST_LABEL[unit] ?? "-"}</span>
+    </span>
+  );
+}
+
+function AiAnalysisPanel({ f }: { f: TaskFile }) {
+  const ai = f.aiAnalysis;
+  if (!ai) return null;
+
+  if (ai.status === "pending") {
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 rounded-2xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
+        <Loader2 size={12} className="animate-spin" /> AI 형상 분석 중...
+      </div>
+    );
+  }
+  if (ai.status === "error") {
+    return <div className="mt-1.5 rounded-2xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">AI 분석에 실패했습니다.</div>;
+  }
+  return (
+    <div className="mt-1.5 space-y-2 rounded-2xl bg-[#f5f5f7] p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-semibold text-[#1d1d1f]">{ai.partName || "추정 부품"}</span>
+        {ai.complexity && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">복잡도 {ai.complexity}</span>}
+        {ai.material && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">{ai.material}</span>}
+      </div>
+      {ai.recommendedMethods && ai.recommendedMethods.length > 0 && (
+        <div className="space-y-1.5">
+          {ai.recommendedMethods.map((m, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-xl bg-white px-2.5 py-1.5">
+              <span className="text-[#86868b]">{i === 0 ? "1순위" : "2순위"}</span>
+              <span className="font-medium text-[#1d1d1f]">{m.method}</span>
+              <CostBadges initial={m.initialCostLevel} unit={m.unitCostLevel} />
+            </div>
+          ))}
+        </div>
+      )}
+      {ai.summary && <p className="text-[#86868b]">{ai.summary}</p>}
+      <p className="text-[10px] text-[#d1d1d6]">* AI 추정 결과로 참고용입니다.</p>
+    </div>
+  );
+}
+
 function FileRow({
   f,
   canDelete,
+  badge,
 }: {
   f: TaskFile;
   canDelete: boolean;
+  badge?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [showAi, setShowAi] = useState(false);
   const isImage = f.contentType.startsWith("image/");
   const isPdf = f.contentType === "application/pdf";
   const isStp = isStep(f.name);
   const hasPreview = isImage || isPdf || isStp;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-100 bg-white">
+    <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white">
       {open && isImage && (
         <a href={f.url} target="_blank" rel="noreferrer">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={f.url} alt={f.name} className="max-h-64 w-full bg-gray-50 object-contain" />
+          <img src={f.url} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
         </a>
       )}
       {open && isPdf && (
-        <iframe src={f.url} className="h-96 w-full bg-gray-50" title={f.name} />
+        <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />
       )}
       {open && isStp && <StepViewer url={f.url} />}
 
       <div className="flex items-center justify-between px-3 py-2 text-sm">
         <div className="flex min-w-0 items-center gap-2">
-          <Paperclip size={13} className="shrink-0 text-gray-400" />
-          <span className="truncate text-gray-700">{f.name}</span>
-          <span className="shrink-0 text-xs text-gray-400">{formatSize(f.size)}</span>
+          <Paperclip size={13} className="shrink-0 text-[#86868b]" />
+          <span className="truncate text-[#1d1d1f]">{f.name}</span>
+          <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
+          {badge}
+          {f.aiAnalysis && (
+            <button
+              onClick={() => setShowAi((v) => !v)}
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f] hover:bg-[#e5e5e5]"
+            >
+              {f.aiAnalysis.status === "pending" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+              AI 분석
+            </button>
+          )}
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-2">
           {hasPreview && (
-            <button onClick={() => setOpen((v) => !v)} className="text-gray-400 hover:text-brand-600">
+            <button onClick={() => setOpen((v) => !v)} className="text-[#86868b] hover:text-[#1d1d1f]">
               {open ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           )}
-          <a href={f.url} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-brand-600">
+          <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
             <Download size={14} />
           </a>
           {canDelete && (
             <button
               onClick={() => deleteTaskFile(f.taskId, f.id, f.storagePath)}
-              className="text-gray-400 hover:text-red-500"
+              className="text-[#86868b] hover:text-red-500"
             >
               <Trash2 size={14} />
             </button>
           )}
         </div>
       </div>
+      {showAi && (
+        <div className="px-3 pb-3">
+          <AiAnalysisPanel f={f} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FileGroupRow({
+  latest,
+  older,
+  canDelete,
+}: {
+  latest: TaskFile;
+  older: TaskFile[];
+  canDelete: (f: TaskFile) => boolean;
+}) {
+  const [showOlder, setShowOlder] = useState(false);
+
+  return (
+    <div className="space-y-1.5">
+      <FileRow
+        f={latest}
+        canDelete={canDelete(latest)}
+        badge={
+          older.length > 0 ? (
+            <button
+              onClick={() => setShowOlder((v) => !v)}
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b] hover:bg-[#e5e5e5]"
+            >
+              <History size={11} />
+              v{latest.version}
+              {showOlder ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+          ) : undefined
+        }
+      />
+      {showOlder && older.length > 0 && (
+        <div className="ml-4 space-y-1.5 border-l border-[#e5e5e5] pl-3">
+          {older.map((f) => (
+            <FileRow
+              key={f.id}
+              f={f}
+              canDelete={canDelete(f)}
+              badge={
+                <span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">
+                  v{f.version}
+                </span>
+              }
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -85,30 +214,31 @@ function TaskFileSection({ task, appUser }: { task: Task; appUser: { uid: string
   if (files.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+    <div className="rounded-3xl bg-[#ececef] overflow-hidden">
       {/* 업무 헤더 */}
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-gray-100 transition"
+        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-[#e2e2e5] transition"
       >
         {collapsed ? (
-          <ChevronRight size={15} className="shrink-0 text-gray-400" />
+          <ChevronRight size={15} className="shrink-0 text-[#86868b]" />
         ) : (
-          <ChevronDown size={15} className="shrink-0 text-gray-400" />
+          <ChevronDown size={15} className="shrink-0 text-[#86868b]" />
         )}
-        <span className="font-medium text-gray-800 text-sm">{task.name}</span>
+        <span className="font-medium text-[#1d1d1f] text-sm">{task.name}</span>
         <StatusBadge status={task.status} />
-        <span className="ml-auto text-xs text-gray-400">{files.length}개</span>
+        <span className="ml-auto text-xs text-[#86868b]">{files.length}개</span>
       </button>
 
       {/* 파일 목록 */}
       {!collapsed && (
-        <div className="space-y-1.5 border-t border-gray-200 bg-white p-3">
-          {files.map((f) => (
-            <FileRow
-              key={f.id}
-              f={f}
-              canDelete={appUser?.role === "admin" || appUser?.uid === f.uploadedBy}
+        <div className="space-y-1.5 border-t border-[#e5e5e5] bg-white p-3">
+          {groupByName(files).map(({ latest, older }) => (
+            <FileGroupRow
+              key={latest.id}
+              latest={latest}
+              older={older}
+              canDelete={(f) => appUser?.role === "admin" || appUser?.uid === f.uploadedBy}
             />
           ))}
         </div>
@@ -129,7 +259,7 @@ export default function ProjectFilesTab({ tasks }: { tasks: Task[] }) {
         <TaskFileSection key={task.id} task={task} appUser={appUser} />
       ))}
       {orderedTasks.length === 0 && (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white p-10 text-center text-sm text-gray-400">
+        <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
           등록된 업무가 없습니다.
         </div>
       )}

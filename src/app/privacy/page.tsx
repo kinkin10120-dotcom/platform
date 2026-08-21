@@ -1,7 +1,12 @@
+import Link from "next/link";
+
 export default function PrivacyPage() {
   return (
     <div className="min-h-screen bg-white px-6 py-16">
       <div className="mx-auto max-w-3xl">
+        <Link href="/" className="mb-6 inline-flex items-center gap-1 text-sm text-[#86868b] transition hover:text-[#1d1d1f]">
+          ← HANDYHAND 홈으로
+        </Link>
         <h1 className="mb-2 text-2xl font-bold text-[#1d1d1f]">개인정보처리방침</h1>
         <p className="mb-10 text-sm text-[#86868b]">최종 수정일: 2025년 1월 1일</p>
 
@@ -27,7 +32,11 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="mb-3 text-base font-semibold">제3조 (개인정보의 처리 및 보유 기간)</h2>
-            <p className="text-[#86868b]">회사는 법령에 따른 개인정보 보유·이용기간 또는 정보주체로부터 개인정보를 수집 시에 동의받은 개인정보 보유·이용기간 내에서 개인정보를 처리·보유합니다. 서비스 탈퇴 또는 계약 종료 후 5년간 보유 후 파기합니다.</p>
+            <p className="text-[#86868b]">회사는 법령에 따른 개인정보 보유·이용기간 또는 정보주체로부터 개인정보를 수집 시에 동의받은 개인정보 보유·이용기간 내에서 개인정보를 처리·보유하며, 목적이 달성된 개인정보는 지체 없이 파기합니다.</p>
+            <ul className="mt-2 list-disc pl-5 text-[#86868b]">
+              <li>견적 요청 및 문의 상담: 처리 목적 달성 후 1년간 보유 후 파기</li>
+              <li>HandyWorks 서비스 이용 계약: 계약 종료 후 5년간 보유 후 파기(상거래 관련 채권·채무 관계 확인 목적)</li>
+            </ul>
           </section>
 
           <section>

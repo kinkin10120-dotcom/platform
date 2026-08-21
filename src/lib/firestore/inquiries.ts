@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -11,6 +12,8 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Inquiry } from "@/lib/types";
+import { createNotification } from "@/lib/firestore/notifications";
+import { getAdmins } from "@/lib/firestore/users";
 
 const colRef = collection(db, "inquiries");
 
@@ -28,6 +31,9 @@ function fromDoc(d: any): Inquiry {
     answeredAt: data.answeredAt?.toMillis ? data.answeredAt.toMillis() : data.answeredAt,
     answeredBy: data.answeredBy,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+    email: data.email,
+    phone: data.phone,
+    type: data.type,
   };
 }
 
@@ -38,8 +44,45 @@ export async function createInquiry(input: {
   title: string;
   content: string;
 }) {
-  return addDoc(colRef, {
+  const ref = await addDoc(colRef, {
     ...input,
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+
+  try {
+    const admins = await getAdmins();
+    await Promise.all(
+      admins.map((u) =>
+        createNotification({
+          userId: u.uid,
+          type: "inquiry",
+          message: `${input.userName}님이 문의를 남겼습니다: "${input.title}"`,
+        })
+      )
+    );
+  } catch (e) {
+    console.error("문의 알림 발송 실패:", e);
+  }
+
+  return ref;
+}
+
+export async function createPublicInquiry(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  type?: string;
+  message: string;
+}) {
+  return addDoc(colRef, {
+    userId: "website",
+    userName: input.name,
+    email: input.email,
+    phone: input.phone || "",
+    type: input.type || "",
+    title: input.type ? `[${input.type}] ${input.name}` : `${input.name}님의 문의`,
+    content: input.message,
     status: "pending",
     createdAt: serverTimestamp(),
   });
@@ -55,6 +98,10 @@ export function listenMyInquiries(userId: string, cb: (inquiries: Inquiry[]) => 
   return onSnapshot(q, (snap) => cb(snap.docs.map(fromDoc)));
 }
 
+export async function updateMyInquiry(id: string, title: string, content: string) {
+  return updateDoc(doc(db, "inquiries", id), { title, content });
+}
+
 export async function answerInquiry(id: string, answer: string, answeredBy: string) {
   return updateDoc(doc(db, "inquiries", id), {
     answer,
@@ -62,4 +109,8 @@ export async function answerInquiry(id: string, answer: string, answeredBy: stri
     status: "answered",
     answeredAt: serverTimestamp(),
   });
+}
+
+export async function deleteInquiry(id: string) {
+  return deleteDoc(doc(db, "inquiries", id));
 }

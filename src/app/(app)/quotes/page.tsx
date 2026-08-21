@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Trash2, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenQuoteRequests, updateQuote, QuoteRequest, QuoteStatus } from "@/lib/firestore/quotes";
+import { listenQuoteRequests, updateQuote, deleteQuote, QuoteRequest, QuoteStatus } from "@/lib/firestore/quotes";
 
 const STATUS_LABEL: Record<QuoteStatus, string> = {
   pending: "검토중",
@@ -22,6 +23,7 @@ export default function QuotesPage() {
   const [selected, setSelected] = useState<QuoteRequest | null>(null);
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showDone, setShowDone] = useState(false);
 
   useEffect(() => {
     return listenQuoteRequests(setQuotes);
@@ -32,10 +34,22 @@ export default function QuotesPage() {
     setSaving(true);
     try {
       await updateQuote(selected.id, { status, memo });
-      setSelected((prev) => prev ? { ...prev, status, memo } : null);
+      if (status === "contacted") {
+        setSelected(null);
+        setMemo("");
+      } else {
+        setSelected((prev) => prev ? { ...prev, status, memo } : null);
+      }
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    if (!confirm("이 견적 요청을 삭제하시겠습니까?")) return;
+    await deleteQuote(selected.id);
+    setSelected(null);
   }
 
   if (appUser?.role !== "admin") {
@@ -47,9 +61,15 @@ export default function QuotesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-[#1d1d1f]">견적 요청 관리</h1>
-        <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
+            <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
+            견적 요청 관리
+          </h1>
+          <p className="mt-1 pl-4 text-sm text-[#86868b]">홈페이지에서 접수된 견적 요청을 확인하고 처리 상태를 관리합니다.</p>
+        </div>
+        <span className="inline-flex h-9 items-center rounded-full bg-amber-50 px-3 text-xs font-medium text-amber-600">
           미처리 {pending.length}건
         </span>
       </div>
@@ -66,9 +86,14 @@ export default function QuotesPage() {
           ))}
 
           {others.length > 0 && (
-            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-[#86868b]">처리완료 ({others.length})</p>
+            <button
+              onClick={() => setShowDone((v) => !v)}
+              className="mt-4 block text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]"
+            >
+              {showDone ? "처리완료 숨기기" : `처리완료 ${others.length}건 숨겨짐 · 보기`}
+            </button>
           )}
-          {others.map((q) => (
+          {showDone && others.map((q) => (
             <QuoteCard key={q.id} quote={q} selected={selected?.id === q.id}
               onClick={() => { setSelected(q); setMemo(q.memo); }} />
           ))}
@@ -92,9 +117,25 @@ export default function QuotesPage() {
                   {new Date(selected.createdAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
                 </p>
               </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[selected.status]}`}>
-                {STATUS_LABEL[selected.status]}
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[selected.status]}`}>
+                  {STATUS_LABEL[selected.status]}
+                </span>
+                <button
+                  onClick={handleDelete}
+                  className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+                  title="삭제"
+                >
+                  <Trash2 size={15} />
+                </button>
+                <button
+                  onClick={() => { setSelected(null); setMemo(""); }}
+                  className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                  title="닫기"
+                >
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 rounded-2xl bg-[#f5f5f7] p-4 text-sm">
@@ -110,6 +151,12 @@ export default function QuotesPage() {
                 <p className="text-xs text-[#86868b]">개발 단계</p>
                 <p className="mt-0.5 font-medium text-[#1d1d1f]">{selected.stage || "—"}</p>
               </div>
+              {selected.hasAttachment && (
+                <div>
+                  <p className="text-xs text-[#86868b]">첨부파일</p>
+                  <p className="mt-0.5 font-medium text-[#1d1d1f]">이메일로 전달됨 📎</p>
+                </div>
+              )}
             </div>
 
             <div>
@@ -158,7 +205,7 @@ function QuoteCard({ quote, selected, onClick }: { quote: QuoteRequest; selected
     <button
       onClick={onClick}
       className={`w-full rounded-2xl border p-4 text-left transition ${
-        selected ? "border-[#1d1d1f] bg-[#f5f5f7]" : "border-[#e5e5e5] bg-white hover:border-[#86868b]"
+        selected ? "border-[#1d1d1f] bg-[#e5e5e5]" : "border-[#e5e5e5] bg-white hover:border-[#86868b]"
       }`}
     >
       <div className="flex items-center justify-between gap-2">

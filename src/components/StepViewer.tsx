@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Layers, Eye, EyeOff } from "lucide-react";
 
 // eslint-disable-next-line
 type OcctInstance = any;
@@ -72,6 +73,9 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [step, setStep] = useState<keyof typeof STEP_LABELS>("wasm");
   const [errorMsg, setErrorMsg] = useState("");
+  const [parts, setParts] = useState<{ name: string; visible: boolean }[]>([]);
+  const [showPartsPanel, setShowPartsPanel] = useState(false);
+  const partGroupsRef = useRef<import("three").Group[]>([]);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -146,7 +150,8 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
         dir2.position.set(-2, -1, -3); scene.add(dir2);
 
         const group = new THREE.Group();
-        for (const mesh of result.meshes) {
+        const partGroups: import("three").Group[] = [];
+        result.meshes.forEach((mesh: any, i: number) => {
           const geo = new THREE.BufferGeometry();
           geo.setAttribute("position", new THREE.Float32BufferAttribute(mesh.attributes.position.array, 3));
           if (mesh.attributes.normal) {
@@ -155,16 +160,24 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
             geo.computeVertexNormals();
           }
           geo.setIndex(mesh.index.array);
-          group.add(new THREE.Mesh(
+          const partGroup = new THREE.Group();
+          partGroup.name = mesh.name || `part-${i + 1}`;
+          partGroup.add(new THREE.Mesh(
             geo,
             new THREE.MeshPhongMaterial({ color: 0x6ab0d8, side: THREE.DoubleSide, shininess: 60, specular: 0x445566 })
           ));
-          group.add(new THREE.LineSegments(
+          partGroup.add(new THREE.LineSegments(
             new THREE.EdgesGeometry(geo, 40),
             new THREE.LineBasicMaterial({ color: 0x1a2a3a, transparent: true, opacity: 0.7 })
           ));
-        }
+          group.add(partGroup);
+          partGroups.push(partGroup);
+        });
         scene.add(group);
+        partGroupsRef.current = partGroups;
+        if (partGroups.length > 1) {
+          setParts(partGroups.map((g) => ({ name: g.name, visible: true })));
+        }
 
         const box = new THREE.Box3().setFromObject(group);
         const center = box.getCenter(new THREE.Vector3());
@@ -187,12 +200,16 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
         const fs = maxDim * 1.6;
         orthoCam = new THREE.OrthographicCamera(-fs * aspect / 2, fs * aspect / 2, fs / 2, -fs / 2, -maxDim * 500, maxDim * 500);
 
-        // ── Snap to face (ortho) ──────────────────────────────────
-        function snapToFace(fi: number) {
-          const face = FACE_INFO[fi];
+        // ── Snap to an arbitrary face direction (ortho) ───────────
+        function snapToDirection(normal: import("three").Vector3) {
           const dist = maxDim * 5;
-          orthoCam!.position.set(face.camPos[0] * dist, face.camPos[1] * dist, face.camPos[2] * dist);
-          orthoCam!.up.set(face.camUp[0], face.camUp[1], face.camUp[2]);
+          // 노멀과 가장 덜 평행한 월드축을 up 기준으로 선택 (짐벌락 방지)
+          const worldUp = Math.abs(normal.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+          const right = new THREE.Vector3().crossVectors(worldUp, normal).normalize();
+          const up = new THREE.Vector3().crossVectors(normal, right).normalize();
+
+          orthoCam!.position.copy(normal).multiplyScalar(dist);
+          orthoCam!.up.copy(up);
           orthoCam!.lookAt(0, 0, 0);
           orthoCam!.updateProjectionMatrix();
           controls.dispose();
@@ -200,8 +217,48 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
           controls.target.set(0, 0, 0);
           controls.update();
           activeCam = orthoCam!;
+        }
+
+        function snapToFace(fi: number) {
+          const face = FACE_INFO[fi];
+          snapToDirection(new THREE.Vector3(face.camPos[0], face.camPos[1], face.camPos[2]));
           activeFaceIdx = fi;
         }
+
+        // ── 모델 면 클릭 → 그 면 정면으로 시점 전환 ─────────────────
+        const modelRaycaster = new THREE.Raycaster();
+        let downX = 0, downY = 0;
+
+        function getModelMeshes() {
+          const meshes: import("three").Mesh[] = [];
+          group.traverse((c) => {
+            if ((c as import("three").Mesh).isMesh) meshes.push(c as import("three").Mesh);
+          });
+          return meshes;
+        }
+
+        r.domElement.addEventListener("pointerdown", (e) => {
+          downX = e.clientX; downY = e.clientY;
+        });
+
+        r.domElement.addEventListener("pointerup", (e) => {
+          const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+          if (moved > 5) return; // 드래그(회전)로 판단 — 스냅 무시
+
+          const rect = r!.domElement.getBoundingClientRect();
+          const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          modelRaycaster.setFromCamera(new THREE.Vector2(x, y), activeCam);
+          const hits = modelRaycaster.intersectObjects(getModelMeshes());
+          if (!hits.length || !hits[0].face) return;
+
+          const worldNormal = hits[0].face.normal
+            .clone()
+            .transformDirection(hits[0].object.matrixWorld)
+            .normalize();
+          activeFaceIdx = -1;
+          snapToDirection(worldNormal);
+        });
 
         // ── SVG dimension overlay ─────────────────────────────────
         const SVG_NS = "http://www.w3.org/2000/svg";
@@ -377,31 +434,69 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
     };
   }, [url, height]);
 
+  function togglePart(index: number) {
+    const g = partGroupsRef.current[index];
+    if (!g) return;
+    g.visible = !g.visible;
+    setParts((prev) => prev.map((p, i) => (i === index ? { ...p, visible: g.visible } : p)));
+  }
+
   return (
     /* outer div: no overflow-hidden so SVG dim labels aren't clipped */
-    <div className="relative rounded-lg bg-white" style={{ height }}>
+    <div className="relative rounded-2xl bg-white" style={{ height }}>
       {status === "loading" && (
-        <div className="absolute inset-0 flex items-center justify-center rounded-lg">
+        <div className="absolute inset-0 flex items-center justify-center rounded-2xl">
           <div className="space-y-2 text-center">
-            <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-            <p className="text-xs text-gray-400">{STEP_LABELS[step]}</p>
+            <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-[#1d1d1f] border-t-transparent" />
+            <p className="text-xs text-[#86868b]">{STEP_LABELS[step]}</p>
           </div>
         </div>
       )}
       {status === "error" && (
-        <div className="absolute inset-0 flex items-center justify-center px-6 text-center rounded-lg">
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center rounded-2xl">
           <p className="text-xs text-red-400">{errorMsg}</p>
         </div>
       )}
 
       {/* Three.js canvas — clipped inside rounded corners */}
-      <div ref={mountRef} className="h-full w-full overflow-hidden rounded-lg" />
+      <div ref={mountRef} className="h-full w-full overflow-hidden rounded-2xl" />
 
       {/* SVG dimension overlay — sits on top, not clipped */}
       <svg ref={svgRef} className="absolute inset-0 pointer-events-none" style={{ overflow: "visible" }} />
 
       {/* Orientation gizmo — bottom-left */}
       <div ref={gizmoRef} className="absolute bottom-2 left-2" style={{ width: 90, height: 90 }} />
+
+      {/* 조립품 부품 목록 토글 — 상단 우측 */}
+      {parts.length > 1 && status === "ready" && (
+        <div className="absolute right-2 top-2">
+          <button
+            onClick={() => setShowPartsPanel((v) => !v)}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+              showPartsPanel ? "border-[#1d1d1f] bg-[#1d1d1f] text-white" : "border-[#e5e5e5] bg-white/90 text-[#86868b] hover:text-[#1d1d1f]"
+            }`}
+            title="부품 목록"
+          >
+            <Layers size={15} />
+          </button>
+          {showPartsPanel && (
+            <div className="no-scrollbar absolute right-0 top-9 max-h-52 w-48 overflow-y-auto rounded-xl border border-[#e5e5e5] bg-white p-1.5 shadow-lg">
+              {parts.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => togglePart(i)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-[#f5f5f7] ${
+                    p.visible ? "text-[#1d1d1f]" : "text-[#c7c7cc]"
+                  }`}
+                >
+                  {p.visible ? <Eye size={12} className="shrink-0" /> : <EyeOff size={12} className="shrink-0" />}
+                  <span className="truncate">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

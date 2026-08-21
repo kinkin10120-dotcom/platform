@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "firebase/auth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { X } from "lucide-react";
@@ -9,7 +9,17 @@ import Image from "next/image";
 import { auth, db } from "@/lib/firebase";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -41,7 +51,8 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
       if (saveEmail) { localStorage.setItem("savedEmail", email); } else { localStorage.removeItem("savedEmail"); }
       localStorage.setItem("autoLogin", String(autoLogin));
-      router.replace("/home");
+      const safeRedirect = redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/home";
+      router.replace(safeRedirect);
     } catch (err: any) {
       setError("이메일 또는 비밀번호가 올바르지 않습니다.");
     } finally {
@@ -82,24 +93,36 @@ export default function LoginPage() {
     "w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] transition";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f7] px-4 py-12">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f5f5f7] px-4 py-12">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: "radial-gradient(circle, rgba(0,0,0,0.1) 1.5px, transparent 1.5px)",
+          backgroundSize: "26px 26px",
+          maskImage: "radial-gradient(ellipse 70% 60% at 50% 20%, black 20%, transparent 80%)",
+          WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 20%, black 20%, transparent 80%)",
+        }}
+      />
       <button
         onClick={() => router.back()}
-        className="fixed left-4 top-4 flex items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-xs font-medium text-[#1d1d1f] shadow-sm transition hover:bg-[#f5f5f7]"
+        className="fixed left-4 top-4 z-10 flex items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white/90 px-3.5 py-2 text-xs font-medium text-[#1d1d1f] backdrop-blur-xl transition hover:bg-white"
       >
         ← 뒤로
       </button>
-      <div className="w-full max-w-sm">
+      <div className="relative w-full max-w-sm">
         {/* 로고 */}
-        <div className="mb-6 text-center">
+        <div className="mb-8 text-center">
           <Image src="/handyworks-logo.png" alt="HandyWorks" width={148} height={44} className="mx-auto" style={{ objectFit: "contain", filter: "brightness(0)" }} />
-          <p className="mt-2 text-xs text-[#86868b]">제품개발·생산 프로젝트 관리</p>
+          <p className="mb-3 mt-2 text-xs text-[#86868b]">제품개발·생산 프로젝트 관리</p>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">
+            HANDYHAND × HANDYWORKS
+          </p>
         </div>
 
         {/* 카드 */}
-        <div className="rounded-2xl bg-white p-7 shadow-sm">
-          <h1 className="mb-1 text-base font-semibold text-[#1d1d1f]">로그인</h1>
-          <p className="mb-5 text-xs text-[#86868b]">프로젝트 일정·업무·자료를 한 곳에서 관리하세요.</p>
+        <div className="rounded-3xl border border-black/5 bg-white p-7 shadow-[0_2px_16px_rgba(0,0,0,0.04),0_24px_48px_rgba(0,0,0,0.06)] sm:p-8">
+          <h1 className="mb-1 text-lg font-bold text-[#1d1d1f]">로그인</h1>
+          <p className="mb-6 text-xs text-[#86868b]">프로젝트 일정·업무·자료를 한 곳에서 관리하세요.</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -162,7 +185,7 @@ export default function LoginPage() {
       {/* 계정 문의 모달 */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-0 pb-0 backdrop-blur-sm sm:items-center sm:px-4 sm:pb-4">
-          <div className="relative w-full max-w-sm rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl max-h-[90vh] overflow-y-auto">
+          <div className="no-scrollbar relative w-full max-w-sm rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-3xl max-h-[90vh] overflow-y-auto">
             <button
               onClick={closeModal}
               className="absolute right-5 top-5 rounded-full p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"

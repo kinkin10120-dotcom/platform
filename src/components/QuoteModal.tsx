@@ -3,16 +3,25 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
+import { formatPhoneInput } from "@/lib/formatInput";
 
 const STAGES = ["올인원", "디자인", "기구설계", "시제품", "금형", "양산", "상세페이지 제작", "크라우드펀딩 컨설팅"] as const;
+
+// Vercel 서버리스 함수는 요청 본문 크기가 4.5MB를 넘으면 무조건 실패한다(플랜과 무관한
+// 플랫폼 제약이라 서버 코드로는 못 늘림) — multipart 오버헤드와 다른 폼 필드까지 감안해
+// 여유 있게 4MB로 클라이언트에서 미리 막는다. 안 그러면 제출이 조용히 실패하고 사용자는
+// 왜 안 되는지 전혀 알 수 없다.
+const MAX_TOTAL_FILE_BYTES = 4 * 1024 * 1024;
 
 export function QuoteModal({ onClose, prefillDescription, initialStage }: { onClose: () => void; prefillDescription?: string; initialStage?: string }) {
   const [form, setForm] = useState({
     name: "", company: "", email: "", phone: "", description: prefillDescription ?? "", stage: initialStage ?? "",
   });
   const [files, setFiles] = useState<File[]>([]);
+  const [fileTooBig, setFileTooBig] = useState(false);
   const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -24,9 +33,25 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const selectedStages = form.stage ? form.stage.split(", ") : [];
+  // "올인원"은 다른 단계와 동시에 선택할 수 없는 단독 선택지라, 고르면 나머지를 모두 비우고
+  // 반대로 다른 단계를 고르면 "올인원"을 자동으로 해제한다 — 그 외 단계끼리는 자유롭게 다중 선택.
+  function toggleStage(s: string) {
+    setForm((f) => {
+      const current = f.stage ? f.stage.split(", ") : [];
+      if (s === "올인원") {
+        return { ...f, stage: current.includes("올인원") ? "" : "올인원" };
+      }
+      const rest = current.filter((x) => x !== "올인원");
+      const next = rest.includes(s) ? rest.filter((x) => x !== s) : [...rest, s];
+      return { ...f, stage: next.join(", ") };
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+    setSubmitError("");
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => fd.append(k, v));
@@ -35,6 +60,8 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
       if (!res.ok) throw new Error("전송 실패");
       trackEvent("generate_lead", { form: "quote", stage: form.stage || undefined });
       setDone(true);
+    } catch (e) {
+      setSubmitError("전송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -70,8 +97,8 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
                     className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#86868b]">회사 / 브랜드명</label>
-                  <input value={form.company} onChange={set("company")} placeholder="(주)회사이름"
+                  <label className="mb-1.5 block text-xs font-medium text-[#86868b]">회사 / 브랜드명 *</label>
+                  <input required value={form.company} onChange={set("company")} placeholder="(주)회사이름"
                     className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]" />
                 </div>
               </div>
@@ -83,19 +110,23 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
                     className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]" />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[#86868b]">연락처</label>
-                  <input value={form.phone} onChange={set("phone")} placeholder="010-0000-0000"
+                  <label className="mb-1.5 block text-xs font-medium text-[#86868b]">연락처 *</label>
+                  <input
+                    required
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                    placeholder="010-0000-0000"
                     className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]" />
                 </div>
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#86868b]">개발 단계</label>
+                <label className="mb-1.5 block text-xs font-medium text-[#86868b]">개발 단계 (다중 선택 가능)</label>
                 <div className="flex gap-2 flex-wrap">
                   {STAGES.map((s) => (
-                    <button key={s} type="button" onClick={() => setForm((f) => ({ ...f, stage: s }))}
+                    <button key={s} type="button" onClick={() => toggleStage(s)}
                       className={`rounded-full border px-4 py-1.5 text-sm transition ${
-                        form.stage === s
+                        selectedStages.includes(s)
                           ? "border-black bg-black text-white"
                           : "border-[#d1d1d6] text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"
                       }`}>
@@ -113,7 +144,7 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
               </div>
 
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-[#86868b]">자료 첨부 <span className="font-normal text-[#d1d1d6]">(선택 · PDF, 이미지, PPT 등 · 여러 파일 가능)</span></label>
+                <label className="mb-1.5 block text-xs font-medium text-[#86868b]">자료 첨부 <span className="font-normal text-[#d1d1d6]">(선택 · PDF, 이미지, PPT 등 · 전체 4MB 이하)</span></label>
                 <label className={`flex cursor-pointer items-center gap-3 rounded-xl border border-dashed px-4 py-3 transition ${files.length > 0 ? "border-[#1d1d1f] bg-[#f5f5f7]" : "border-[#d1d1d6] hover:border-[#86868b]"}`}>
                   <input
                     type="file"
@@ -122,9 +153,16 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
                     accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.zip,.stp,.step,.dxf,.dwg"
                     onChange={(e) => {
                       const newFiles = Array.from(e.target.files ?? []);
+                      setFileTooBig(false);
                       setFiles((prev) => {
                         const names = new Set(prev.map((f) => f.name));
-                        return [...prev, ...newFiles.filter((f) => !names.has(f.name))];
+                        const merged = [...prev, ...newFiles.filter((f) => !names.has(f.name))];
+                        const totalBytes = merged.reduce((sum, f) => sum + f.size, 0);
+                        if (totalBytes > MAX_TOTAL_FILE_BYTES) {
+                          setFileTooBig(true);
+                          return prev;
+                        }
+                        return merged;
                       });
                       e.target.value = "";
                     }}
@@ -148,6 +186,16 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
                     ))}
                   </ul>
                 )}
+                <p className="mt-1.5 text-xs text-[#86868b]">
+                  4MB가 넘는 자료는{" "}
+                  <a href="mailto:handyhand91@naver.com" className="underline hover:text-[#1d1d1f]">handyhand91@naver.com</a>
+                  으로 바로 보내주세요.
+                </p>
+                {fileTooBig && (
+                  <p className="mt-1 text-xs text-red-500">
+                    첨부 파일은 전체 4MB 이하만 가능합니다. 위 이메일 주소로 별도 전달해주세요.
+                  </p>
+                )}
               </div>
 
               <label className="flex items-start gap-2 text-xs text-[#86868b]">
@@ -158,6 +206,8 @@ export function QuoteModal({ onClose, prefillDescription, initialStage }: { onCl
                   <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-[#1d1d1f]">자세히 보기</a>
                 </span>
               </label>
+
+              {submitError && <p className="text-xs text-red-500">{submitError}</p>}
 
               <button type="submit" disabled={submitting || !agree}
                 className="w-full rounded-full bg-black py-3 text-sm font-semibold text-white transition hover:bg-[#1d1d1f] disabled:opacity-50">

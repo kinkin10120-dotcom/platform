@@ -40,5 +40,18 @@ service firebase.storage {
       allow read: if true;
       allow write: if request.auth != null;
     }
+
+    // 견적 수락 시 고객이 첨부하는 사업자등록증 — 계약서 쪽(/contracts/{contractId})과
+    // 동일하게 관리자가 링크를 눌러 바로 열어볼 수 있어야 하므로 읽기는 공개로 둔다.
+    // (파일명이 bizRegCert.*인 것만 해당 — 아래 상담 자료 파일은 계속 인증이 필요하다.)
+    match /quoteRequests/{quoteId}/{fileName} {
+      allow read: if fileName.matches('bizRegCert[.].*');
+    }
+
+    // 견적 요청 상담 중(대면/화상 미팅) 이메일 등으로 추가로 받는 자료 아카이브 — 견적 요청
+    // 자체가 관리자 전용 데이터라 이 경로도 관리자만 쓴다.
+    match /quoteRequests/{quoteId}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

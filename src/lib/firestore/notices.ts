@@ -38,6 +38,7 @@ export async function createNotice(title: string, content: string, createdBy: st
           noticeId: ref.id,
           type: "notice",
           message: `새 공지사항: ${title}`,
+          details: [content],
         })
       )
   );

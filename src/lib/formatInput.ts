@@ -18,6 +18,16 @@ export function formatPhoneInput(raw: string): string {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 11)}`;
 }
 
+// 금액 입력창에 타이핑하는 동안에도 천단위 콤마를 보여준다 — 실제로 저장되는 값(state)은
+// 콤마 없는 순수 숫자 문자열 그대로라, onChange에서 숫자/소수점 외 문자를 걸러낼 때 이
+// 함수가 표시용으로 붙인 콤마도 같이 걸러진다(그래서 저장 로직은 손댈 필요가 없다).
+export function formatAmountInput(raw: string): string {
+  if (!raw) return "";
+  const [intPart, ...rest] = raw.split(".");
+  const formattedInt = intPart === "" ? "" : Number(intPart).toLocaleString("en-US");
+  return rest.length > 0 ? `${formattedInt}.${rest.join(".")}` : formattedInt;
+}
+
 // 사업자등록번호는 항상 10자리, 3-2-5 자리로 고정 구성된다(예: 128-87-00105).
 export function formatBizRegNumberInput(raw: string): string {
   const digits = raw.replace(/[^0-9]/g, "").slice(0, 10);

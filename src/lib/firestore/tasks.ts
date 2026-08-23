@@ -487,7 +487,8 @@ export async function requestTaskDecision(task: Task, note: string, actorId: str
             projectId: task.projectId,
             taskId: task.id,
             type: "decision_needed",
-            message: `${actorName}님이 "${task.name}" 업무에 확인/승인을 요청했습니다: ${note}`,
+            message: `${actorName}님이 "${task.name}" 업무에 대한 확인/승인을 요청했습니다.`,
+            details: [`요청 내용: ${note}`],
           })
         )
     );
@@ -528,6 +529,12 @@ export async function resolveTaskDecision(
 
   if (resolution === "cancelled") return;
 
+  const resolvedEntry = lastOpenIndex !== -1 ? history[history.length - 1 - lastOpenIndex] : undefined;
+  const details = [
+    ...(resolvedEntry?.note ? [`요청 내용: ${resolvedEntry.note}`] : []),
+    ...(responseNote ? [`응답 내용: ${responseNote}`] : []),
+  ];
+
   // 알림 발송은 부가 기능 — 실패하더라도 이미 위에서 완료된 상태 변경(취소/확인 처리) 자체는
   // 성공으로 취급해야 하므로, 여기서 에러를 삼켜 호출자에게 전파되지 않게 한다.
   try {
@@ -542,6 +549,7 @@ export async function resolveTaskDecision(
             taskId: task.id,
             type: "decision_needed",
             message: `${actorName}님이 "${task.name}" 업무의 확인/승인 요청을 처리했습니다.`,
+            ...(details.length > 0 ? { details } : {}),
           })
         )
     );

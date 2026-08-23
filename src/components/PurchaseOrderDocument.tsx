@@ -122,23 +122,23 @@ export default function PurchaseOrderDocument({ data }: { data: PurchaseOrderDoc
         </div>
       )}
 
-      <div className="mt-8 flex justify-end">
-        <div className="w-56 text-center">
-          <p className="mb-1.5 text-xs font-semibold text-[#86868b]">발주처 서명 / 직인</p>
-          <div className="flex h-20 items-center justify-center">
-            {data.signatureUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={data.signatureUrl} alt="서명" className="h-full object-contain" />
-            ) : (
-              <span className="text-xs text-[#d1d1d6]">서명 없음</span>
-            )}
-          </div>
-          <p className="mt-1.5 text-xs text-[#86868b]">{data.signedByName ?? data.orderedByName}</p>
-        </div>
-      </div>
-
       <div className="mt-auto text-xs text-[#86868b]">
-        <p className="mb-1.5 text-[10px] text-[#d1d1d6]">
+        <div className="flex justify-end">
+          <div className="w-56 text-center">
+            <p className="mb-1.5 text-xs font-semibold text-[#86868b]">발주처 서명 / 직인</p>
+            <div className="flex h-20 items-center justify-center">
+              {data.signatureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={data.signatureUrl} alt="서명" className="h-full object-contain" />
+              ) : (
+                <span className="text-xs text-[#d1d1d6]">서명 없음</span>
+              )}
+            </div>
+            <p className="mt-1.5 text-xs text-[#86868b]">{data.signedByName ?? data.orderedByName}</p>
+          </div>
+        </div>
+
+        <p className="mb-1.5 mt-3 text-[10px] text-[#d1d1d6]">
           등록 {new Date(data.createdAt).toLocaleDateString("ko-KR")}
           {data.confirmedAt && ` · 확인 ${new Date(data.confirmedAt).toLocaleDateString("ko-KR")}`}
         </p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2, X, Copy, Check, FileSignature, ChevronDown, Maximize2, Plus, Printer, BookmarkPlus, Download, Pencil, Mail } from "lucide-react";
 import ContractBodyEditor from "@/components/ContractBodyEditor";
 import { useAuth } from "@/lib/auth-context";
@@ -10,7 +10,7 @@ import { formatMoney } from "@/lib/orderCalc";
 import { DEFAULT_CONTRACT_BODY_TEMPLATE, resolveContractTokens, plainTextToHtml } from "@/lib/contractTemplate";
 import { HANDYHAND_SEAL_URL } from "@/lib/tiptapSignatureBlock";
 import { sanitizeContractHtml } from "@/lib/contractSanitize";
-import { formatPhoneInput, formatBizRegNumberInput } from "@/lib/formatInput";
+import { formatPhoneInput, formatBizRegNumberInput, formatAmountInput } from "@/lib/formatInput";
 import {
   listenAllContracts,
   createContract,
@@ -34,25 +34,38 @@ const STATUS_STYLE: Record<ContractStatus, string> = {
 
 const DELETE_KEYWORD = "바로삭제";
 
-// 금액 입력창에 타이핑하는 동안에도 천단위 콤마를 보여준다 — 실제로 저장되는 값(state)은
-// 콤마 없는 순수 숫자 문자열 그대로라, onChange에서 숫자/소수점 외 문자를 걸러낼 때 이
-// 함수가 표시용으로 붙인 콤마도 같이 걸러진다(그래서 저장 로직은 손댈 필요가 없다).
-function formatAmountInput(raw: string): string {
-  if (!raw) return "";
-  const [intPart, ...rest] = raw.split(".");
-  const formattedInt = intPart === "" ? "" : Number(intPart).toLocaleString("en-US");
-  return rest.length > 0 ? `${formattedInt}.${rest.join(".")}` : formattedInt;
-}
-
 export default function ContractsPage() {
   const { appUser } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selected, setSelected] = useState<Contract | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [prefill, setPrefill] = useState<{ companyName?: string; contactName?: string; contactEmail?: string; bizRegCertUrl?: string } | null>(null);
 
   useEffect(() => listenAllContracts(setContracts), []);
+
+  // 견적 관리("계약서 작성하기")에서 회사명·담당자·이메일(그리고 이미 첨부된 사업자등록증이
+  // 있으면 그것도)을 채운 채로 넘어올 때 처리한다 — 처리 후에는 새로고침/뒤로가기 시 모달이
+  // 다시 열리지 않도록 쿼리스트링을 지운다.
+  useEffect(() => {
+    const companyName = searchParams.get("prefillCompany");
+    const contactName = searchParams.get("prefillContact");
+    const contactEmail = searchParams.get("prefillEmail");
+    const bizRegCertUrl = searchParams.get("prefillBizRegCertUrl");
+    if (!companyName && !contactName && !contactEmail && !bizRegCertUrl) return;
+    setPrefill({
+      companyName: companyName ?? undefined,
+      contactName: contactName ?? undefined,
+      contactEmail: contactEmail ?? undefined,
+      bizRegCertUrl: bizRegCertUrl ?? undefined,
+    });
+    setCreateOpen(true);
+    router.replace("/contracts");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!selected) return;
@@ -200,8 +213,12 @@ export default function ContractsPage() {
 
       {createOpen && (
         <CreateContractModal
-          onClose={() => setCreateOpen(false)}
-          onCreated={(c) => { setSelected(c); setCreateOpen(false); }}
+          initialCompanyName={prefill?.companyName}
+          initialContactName={prefill?.contactName}
+          initialContactEmail={prefill?.contactEmail}
+          initialBizRegCertUrl={prefill?.bizRegCertUrl}
+          onClose={() => { setCreateOpen(false); setPrefill(null); }}
+          onCreated={(c) => { setSelected(c); setCreateOpen(false); setPrefill(null); }}
         />
       )}
     </div>
@@ -282,7 +299,6 @@ function ContractEditForm({ contract }: { contract: Contract }) {
   });
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [actionError, setActionError] = useState("");
   const [openingBigEdit, setOpeningBigEdit] = useState(false);
   const [openingPreview, setOpeningPreview] = useState(false);
@@ -450,13 +466,6 @@ function ContractEditForm({ contract }: { contract: Contract }) {
     } finally {
       setSending(false);
     }
-  }
-
-  function handleCopyLink() {
-    const url = `${window.location.origin}/contracts/sign/${contract.id}`;
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   const inputClass = "w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]";
@@ -745,15 +754,6 @@ function ContractEditForm({ contract }: { contract: Contract }) {
         </button>
       </div>
 
-      {contract.status !== "draft" && (
-        <button
-          onClick={handleCopyLink}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-[#1d1d1f] py-2.5 text-xs font-medium text-[#1d1d1f] transition hover:bg-[#1d1d1f] hover:text-white"
-        >
-          {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "복사됨" : "서명 링크 복사"}
-        </button>
-      )}
-
       <ContractHistoryList history={contract.history} />
     </div>
   );
@@ -923,12 +923,18 @@ function ContractReadOnlyView({ contract }: { contract: Contract }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={contract.signatureUrl} alt="서명" className="h-16 rounded-lg border border-blue-100 bg-white object-contain" />
           )}
-          {contract.bizRegCertUrl && (
-            <a href={contract.bizRegCertUrl} target="_blank" rel="noreferrer" className="block font-medium underline underline-offset-2">
-              사업자등록증 보기
-            </a>
-          )}
         </div>
+      )}
+
+      {contract.bizRegCertUrl && (
+        <a
+          href={contract.bizRegCertUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="block rounded-xl bg-green-50 px-3 py-2 text-xs font-medium text-green-600 underline underline-offset-2"
+        >
+          고객이 첨부한 사업자등록증 보기
+        </a>
       )}
 
       <div>
@@ -1018,12 +1024,26 @@ function CreateAccountSection({ contract }: { contract: Contract }) {
   );
 }
 
-function CreateContractModal({ onClose, onCreated }: { onClose: () => void; onCreated: (contract: Contract) => void }) {
+function CreateContractModal({
+  onClose,
+  onCreated,
+  initialCompanyName,
+  initialContactName,
+  initialContactEmail,
+  initialBizRegCertUrl,
+}: {
+  onClose: () => void;
+  onCreated: (contract: Contract) => void;
+  initialCompanyName?: string;
+  initialContactName?: string;
+  initialContactEmail?: string;
+  initialBizRegCertUrl?: string;
+}) {
   const { appUser } = useAuth();
   const [title, setTitle] = useState("제품개발 용역 계약서");
-  const [companyName, setCompanyName] = useState("");
-  const [contactName, setContactName] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
+  const [companyName, setCompanyName] = useState(initialCompanyName ?? "");
+  const [contactName, setContactName] = useState(initialContactName ?? "");
+  const [contactEmail, setContactEmail] = useState(initialContactEmail ?? "");
   const [bodyText, setBodyText] = useState(DEFAULT_CONTRACT_BODY_TEMPLATE);
   const [handyhandIsGap, setHandyhandIsGap] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -1080,6 +1100,7 @@ function CreateContractModal({ onClose, onCreated }: { onClose: () => void; onCr
         vatApplicable: false,
         handyhandIsGap,
         linkedClientId: linkedClientId || undefined,
+        bizRegCertUrl: initialBizRegCertUrl,
         bodyText,
         createdBy: appUser.uid,
       });
@@ -1094,6 +1115,7 @@ function CreateContractModal({ onClose, onCreated }: { onClose: () => void; onCr
         vatApplicable: false,
         handyhandIsGap,
         ...(linkedClientId ? { linkedClientId } : {}),
+        ...(initialBizRegCertUrl ? { bizRegCertUrl: initialBizRegCertUrl } : {}),
         bodyText,
         attachments: [],
         version: 1,

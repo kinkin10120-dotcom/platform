@@ -103,7 +103,8 @@ export default function GlobalSearch() {
         .then((snap) => setFiles(snap.docs.map((d) => ({ ...d.data(), id: d.id, taskId: d.ref.parent.parent?.id }) as TaskFile)))
         .catch((e) => { console.error("첨부파일 검색 데이터 로드 실패:", e); setLoadError(`첨부파일 검색 불러오기 실패: ${e?.code ?? e?.message ?? e}`); });
     } else if (appUser.clientId) {
-      unsubs.push(listenProjectsByClient(appUser.clientId, setProjects));
+      // 홈 화면과 동일하게, 관리자가 아직 공개하지 않은 프로젝트는 검색 결과에서도 숨긴다.
+      unsubs.push(listenProjectsByClient(appUser.clientId, (raw) => setProjects(raw.filter((p) => p.clientVisible !== false))));
     }
     return () => unsubs.forEach((u) => u());
   }, [open, appUser, isAdmin]);

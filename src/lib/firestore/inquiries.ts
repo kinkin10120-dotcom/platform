@@ -58,6 +58,7 @@ export async function createInquiry(input: {
           userId: u.uid,
           type: "inquiry",
           message: `${input.userName}님이 문의를 남겼습니다: "${input.title}"`,
+          details: [`문의 내용: ${input.content}`],
         })
       )
     );

@@ -30,7 +30,9 @@ import {
   deletePurchaseOrder,
   setPurchaseOrderInstallments,
   markInstallmentPaid,
+  unmarkInstallmentPaid,
   issueInstallmentInvoice,
+  unissueInstallmentInvoice,
   setPurchaseOrderLinkedTask,
   dismissCancelRequest,
 } from "@/lib/firestore/purchaseOrders";
@@ -636,6 +638,13 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
 
   async function handleSave() {
     if (rows.length === 0 || rows.some((r) => !r.label.trim() || !r.amount)) return;
+    // 회차를 저장하면 배열을 통째로 새로 만들어서, 이미 있던 입금확인·발행 기록이 전부
+    // 초기화된다 — 라벨 하나만 고치려다 다른 회차의 입금확인까지 날리는 실수를 막기 위해
+    // 지울 기록이 실제로 있을 때만 확인을 받는다.
+    const hasExistingRecords = (order.payment?.installments ?? []).some((it) => it.paid || it.issuedAt);
+    if (hasExistingRecords && !confirm("결제 정보를 저장하면 지금까지의 입금확인·발행 기록이 모두 초기화됩니다. 계속하시겠습니까?")) {
+      return;
+    }
     setSaving(true);
     try {
       await setPurchaseOrderInstallments(order, {
@@ -658,11 +667,31 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
     }
   }
 
+  async function handleUnmarkPaid(index: number) {
+    if (!confirm("입금 확인을 취소하시겠습니까? (잘못 누른 경우 되돌리는 용도입니다)")) return;
+    setSaving(true);
+    try {
+      await unmarkInstallmentPaid(order, index);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleIssue(index: number) {
     if (!confirm("이 회차 청구서를 발행하시겠습니까? 발행 후 PDF 다운로드가 가능합니다.")) return;
     setSaving(true);
     try {
       await issueInstallmentInvoice(order, index);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUnissue(index: number) {
+    if (!confirm("발행을 취소하시겠습니까? 고객에게 취소 알림이 발송되고, 더 이상 문서를 열람할 수 없게 됩니다.")) return;
+    setSaving(true);
+    try {
+      await unissueInstallmentInvoice(order, index);
     } finally {
       setSaving(false);
     }
@@ -797,7 +826,14 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
               {vat > 0 && <span className="ml-1 text-xs text-[#86868b]">(VAT 별도 {vat.toLocaleString()}원, 합계 {(it.amount + vat).toLocaleString()}원)</span>}
             </span>
             {it.paid ? (
-              <span className="shrink-0 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600">입금확인</span>
+              <button
+                onClick={() => handleUnmarkPaid(i)}
+                disabled={saving}
+                title="잘못 눌렀다면 다시 눌러 취소"
+                className="shrink-0 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+              >
+                입금확인
+              </button>
             ) : (
               <button
                 onClick={() => handleMarkPaid(i)}
@@ -808,18 +844,27 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
               </button>
             )}
           </div>
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-2">
             {it.issuedAt ? (
-              <Link href={`/orders/${order.id}/invoice/${i}`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
-                청구서 PDF
-              </Link>
+              <>
+                <Link href={`/orders/${order.id}/invoice/${i}`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
+                  {it.paid ? "영수증 PDF" : "청구서 PDF"}
+                </Link>
+                <button
+                  onClick={() => handleUnissue(i)}
+                  disabled={saving}
+                  className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-red-500 disabled:opacity-50"
+                >
+                  발행취소
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => handleIssue(i)}
                 disabled={saving}
                 className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f] disabled:opacity-50"
               >
-                청구서 발행하기
+                {it.paid ? "영수증 발행하기" : "청구서 발행하기"}
               </button>
             )}
           </div>

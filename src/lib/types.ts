@@ -178,6 +178,22 @@ export interface TaskFile {
   aiAnalysis?: TaskFileAiAnalysis;
 }
 
+// 3D(STEP) 모델 위의 특정 지점에 꽂는 리뷰 핀 — position은 모델 로컬 좌표(StepViewer가
+// 렌더링 시 그룹을 바운딩박스 중심으로 옮기는 것과 동일한 기준)라 카메라 각도와 무관하게
+// 항상 같은 모델 표면 지점을 가리킨다.
+export interface ModelAnnotation {
+  id: string;
+  taskId: string;
+  fileId: string;
+  position: { x: number; y: number; z: number };
+  number: number;
+  createdBy: string;
+  createdByName: string;
+  createdByRole: CommentAuthorRole;
+  createdAt: number;
+  resolved: boolean;
+}
+
 export type NotificationType =
   | "assigned"
   | "status_change"
@@ -185,10 +201,13 @@ export type NotificationType =
   | "unblocked"
   | "due_soon"
   | "rescheduled"
+  | "weekly_summary"
   | "notice"
   | "decision_needed"
   | "inquiry"
+  | "inquiry_answered"
   | "quote_request"
+  | "quote_response"
   | "purchase_order"
   | "order_status_change"
   | "order_cancel_request"
@@ -202,10 +221,13 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   unblocked: "업무 시작 가능",
   due_soon: "마감일 임박",
   rescheduled: "일정 자동 조정",
+  weekly_summary: "주간 업무 요약",
   notice: "공지사항",
   decision_needed: "확인/승인 요청",
   inquiry: "새 문의",
+  inquiry_answered: "문의 답변 등록",
   quote_request: "새 견적 요청",
+  quote_response: "견적서 응답",
   purchase_order: "새 발주",
   order_status_change: "발주 상태 변경",
   order_cancel_request: "발주 취소 요청",

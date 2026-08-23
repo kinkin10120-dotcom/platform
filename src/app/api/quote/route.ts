@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   const description = formData.get("description") as string;
   const file = formData.get("file") as File | null;
 
-  if (!name || !email || !description) {
+  if (!name || !company || !email || !phone || !description) {
     return NextResponse.json({ error: "필수 항목 누락" }, { status: 400 });
   }
 

@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Layers, Eye, EyeOff } from "lucide-react";
+import { Layers, Eye, EyeOff, MapPin, X } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { createAnnotation, listenAnnotations } from "@/lib/firestore/annotations";
+import { ModelAnnotation } from "@/lib/types";
+import AnnotationThread from "@/components/AnnotationThread";
 
 // eslint-disable-next-line
 type OcctInstance = any;
@@ -66,7 +70,20 @@ function makeAxisSprite(THREE: any, text: string, color: string) {
   return sprite;
 }
 
-export default function StepViewer({ url, height = 300 }: { url: string; height?: number }) {
+export default function StepViewer({
+  url,
+  height = 300,
+  taskId,
+  fileId,
+}: {
+  url: string;
+  height?: number;
+  // 리뷰 핀 기능은 taskId/fileId가 있을 때만 켜진다 — 견적 상담 단계에서 받는 도면처럼
+  // 아직 프로젝트/업무가 없는 파일은 이 둘 없이 보기 전용으로 쓸 수 있다.
+  taskId?: string;
+  fileId?: string;
+}) {
+  const { appUser } = useAuth();
   const mountRef = useRef<HTMLDivElement>(null);
   const gizmoRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -76,6 +93,30 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
   const [parts, setParts] = useState<{ name: string; visible: boolean }[]>([]);
   const [showPartsPanel, setShowPartsPanel] = useState(false);
   const partGroupsRef = useRef<import("three").Group[]>([]);
+
+  // ── 3D 모델 위 리뷰 핀 ─────────────────────────────────────────
+  const [annotations, setAnnotations] = useState<ModelAnnotation[]>([]);
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
+  const [pendingPin, setPendingPin] = useState<{ localPos: { x: number; y: number; z: number }; screenX: number; screenY: number } | null>(null);
+  const [pinText, setPinText] = useState("");
+  const [pinSubmitting, setPinSubmitting] = useState(false);
+  // three.js의 animate() 루프/이벤트 리스너는 init() 안에서 딱 한 번 만들어지는 클로저라
+  // React state를 직접 참조하면 그 시점 값에 갇힌다 — 매 프레임 최신 값을 읽도록 ref로 미러링.
+  const annotationsRef = useRef<ModelAnnotation[]>([]);
+  const annotateModeRef = useRef(false);
+  const pinElsRef = useRef<Map<string, { group: SVGGElement; circle: SVGCircleElement; text: SVGTextElement }>>(new Map());
+
+  const annotationsEnabled = !!taskId && !!fileId;
+
+  useEffect(() => {
+    if (!taskId || !fileId) return;
+    return listenAnnotations(taskId, fileId, setAnnotations);
+  }, [taskId, fileId]);
+  useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
+  useEffect(() => { annotateModeRef.current = annotateMode; }, [annotateMode]);
+
+  const selectedAnnotation = annotations.find((a) => a.id === selectedAnnotationId) ?? null;
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -252,6 +293,18 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
           const hits = modelRaycaster.intersectObjects(getModelMeshes());
           if (!hits.length || !hits[0].face) return;
 
+          // 핀 찍기 모드면 카메라 스냅 대신, 맞은 지점을 모델 로컬 좌표(group.position 기준)로
+          // 저장해두고 첫 코멘트를 입력받을 팝오버를 그 화면 좌표에 띄운다.
+          if (annotateModeRef.current) {
+            const local = hits[0].point.clone().sub(group.position);
+            setPendingPin({
+              localPos: { x: local.x, y: local.y, z: local.z },
+              screenX: e.clientX - rect.left,
+              screenY: e.clientY - rect.top,
+            });
+            return;
+          }
+
           const worldNormal = hits[0].face.normal
             .clone()
             .transformDirection(hits[0].object.matrixWorld)
@@ -326,6 +379,59 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
             new THREE.Vector3(bb.max.x, bb.min.y, bb.max.z),
             `${size.z.toFixed(2)} mm`
           );
+        }
+
+        // ── 3D 모델 위 리뷰 핀 오버레이 ──────────────────────────────
+        // 치수 라벨과 같은 방식으로, 핀의 모델 로컬 좌표를 매 프레임 현재 카메라 기준
+        // 화면 좌표로 재투영한다 — 카메라를 돌려도 핀이 모델 표면에 붙어있게 보인다.
+        function updateAnnotationOverlay() {
+          if (!svgRef.current) return;
+          const svg = svgRef.current;
+          const currentIds = new Set(annotationsRef.current.map((a) => a.id));
+
+          for (const [id, els] of pinElsRef.current) {
+            if (!currentIds.has(id)) {
+              svg.removeChild(els.group);
+              pinElsRef.current.delete(id);
+            }
+          }
+
+          for (const ann of annotationsRef.current) {
+            let els = pinElsRef.current.get(ann.id);
+            if (!els) {
+              const g = document.createElementNS(SVG_NS, "g") as SVGGElement;
+              g.style.cursor = "pointer";
+              g.style.pointerEvents = "auto";
+              const circle = document.createElementNS(SVG_NS, "circle") as SVGCircleElement;
+              circle.setAttribute("r", "10");
+              circle.setAttribute("stroke", "#fff");
+              circle.setAttribute("stroke-width", "2");
+              const text = document.createElementNS(SVG_NS, "text") as SVGTextElement;
+              text.setAttribute("text-anchor", "middle");
+              text.setAttribute("dominant-baseline", "central");
+              text.setAttribute("fill", "#fff");
+              text.setAttribute("font-size", "11");
+              text.setAttribute("font-weight", "700");
+              text.style.pointerEvents = "none";
+              g.appendChild(circle);
+              g.appendChild(text);
+              g.addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                setSelectedAnnotationId(ann.id);
+              });
+              svg.appendChild(g);
+              els = { group: g, circle, text };
+              pinElsRef.current.set(ann.id, els);
+            }
+            els.circle.setAttribute("fill", ann.resolved ? "#86868b" : "#ff3b30");
+            els.text.textContent = String(ann.number);
+            const worldPos = new THREE.Vector3(ann.position.x, ann.position.y, ann.position.z).add(group.position);
+            const p = projectPt(worldPos);
+            els.circle.setAttribute("cx", String(p.x));
+            els.circle.setAttribute("cy", String(p.y));
+            els.text.setAttribute("x", String(p.x));
+            els.text.setAttribute("y", String(p.y));
+          }
         }
 
         // ── Gizmo cube ───────────────────────────────────────────
@@ -406,6 +512,7 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
           controls.update();
           r!.render(scene, activeCam);
           updateDimOverlay();
+          updateAnnotationOverlay();
 
           if (gizmoR) {
             gizmoCamera.position.copy((activeCam as import("three").PerspectiveCamera).position).normalize().multiplyScalar(3);
@@ -441,6 +548,19 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
     setParts((prev) => prev.map((p, i) => (i === index ? { ...p, visible: g.visible } : p)));
   }
 
+  async function handleSubmitPin() {
+    if (!appUser || !taskId || !fileId || !pendingPin || !pinText.trim()) return;
+    setPinSubmitting(true);
+    try {
+      await createAnnotation(taskId, fileId, pendingPin.localPos, appUser.uid, appUser.name, appUser.role, pinText.trim());
+      setPendingPin(null);
+      setPinText("");
+      setAnnotateMode(false);
+    } finally {
+      setPinSubmitting(false);
+    }
+  }
+
   return (
     /* outer div: no overflow-hidden so SVG dim labels aren't clipped */
     <div className="relative rounded-2xl bg-white" style={{ height }}>
@@ -466,6 +586,61 @@ export default function StepViewer({ url, height = 300 }: { url: string; height?
 
       {/* Orientation gizmo — bottom-left */}
       <div ref={gizmoRef} className="absolute bottom-2 left-2" style={{ width: 90, height: 90 }} />
+
+      {/* 리뷰 핀 추가 토글 — 상단 좌측 (taskId/fileId 없으면 핀 기능 자체를 숨긴다) */}
+      {status === "ready" && annotationsEnabled && (
+        <div className="absolute left-2 top-2">
+          <button
+            onClick={() => { setAnnotateMode((v) => !v); setPendingPin(null); }}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+              annotateMode ? "border-[#ff3b30] bg-[#ff3b30] text-white" : "border-[#e5e5e5] bg-white/90 text-[#86868b] hover:text-[#1d1d1f]"
+            }`}
+            title={annotateMode ? "핀 찍기 모드 (모델을 클릭하세요)" : "리뷰 핀 추가"}
+          >
+            <MapPin size={15} />
+          </button>
+        </div>
+      )}
+
+      {/* 핀 찍은 직후 — 첫 코멘트 입력 팝오버 */}
+      {pendingPin && (
+        <div
+          className="absolute z-10 w-64 space-y-2 rounded-2xl border border-[#e5e5e5] bg-white p-3 shadow-[0_4px_20px_rgba(0,0,0,0.14)]"
+          style={{ left: Math.min(pendingPin.screenX, 460), top: Math.min(pendingPin.screenY, height - 120) }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#1d1d1f]">새 리뷰 핀</span>
+            <button onClick={() => { setPendingPin(null); setPinText(""); }} className="text-[#86868b] hover:text-[#1d1d1f]"><X size={13} /></button>
+          </div>
+          <textarea
+            autoFocus
+            value={pinText}
+            onChange={(e) => setPinText(e.target.value)}
+            placeholder="이 위치에 대한 코멘트를 입력하세요"
+            rows={2}
+            className="w-full resize-none rounded-xl border border-[#d1d1d6] px-2.5 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+          />
+          <button
+            onClick={handleSubmitPin}
+            disabled={pinSubmitting || !pinText.trim()}
+            className="w-full rounded-full bg-[#1d1d1f] py-1.5 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+          >
+            핀 등록
+          </button>
+        </div>
+      )}
+
+      {/* 선택된 핀 코멘트 스레드 — 우측 하단 도킹 */}
+      {selectedAnnotation && taskId && fileId && (
+        <div className="absolute bottom-2 right-2 z-10">
+          <AnnotationThread
+            taskId={taskId}
+            fileId={fileId}
+            annotation={selectedAnnotation}
+            onClose={() => setSelectedAnnotationId(null)}
+          />
+        </div>
+      )}
 
       {/* 조립품 부품 목록 토글 — 상단 우측 */}
       {parts.length > 1 && status === "ready" && (

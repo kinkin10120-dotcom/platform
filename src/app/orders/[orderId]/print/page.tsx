@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { listenPurchaseOrder } from "@/lib/firestore/purchaseOrders";
 import { listenClient } from "@/lib/firestore/clients";
 import { Client, PurchaseOrder } from "@/lib/types";
-import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
+import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import PurchaseOrderDocument from "@/components/PurchaseOrderDocument";
 
@@ -21,7 +21,7 @@ export default function PurchaseOrderPrintPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setStandalone(isIosDevice() && isStandaloneMode());
+    setStandalone(isInAppBrowser() || (isIosDevice() && isStandaloneMode()));
   }, []);
 
   function handleCopyLink() {
@@ -110,7 +110,7 @@ export default function PurchaseOrderPrintPage() {
         </div>
         {standalone && (
           <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-            홈 화면에 추가한 앱에서는 iOS 제한으로 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
+            이 화면(홈 화면 추가 앱 또는 카카오톡·네이버 등 인앱 브라우저)에서는 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
           </p>
         )}
       </div>

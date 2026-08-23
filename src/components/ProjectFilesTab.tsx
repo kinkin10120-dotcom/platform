@@ -110,7 +110,7 @@ function FileRow({
       {open && isPdf && (
         <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />
       )}
-      {open && isStp && <StepViewer url={f.url} />}
+      {open && isStp && <StepViewer url={f.url} taskId={f.taskId} fileId={f.id} />}
 
       <div className="flex items-center justify-between px-3 py-2 text-sm">
         <div className="flex min-w-0 items-center gap-2">

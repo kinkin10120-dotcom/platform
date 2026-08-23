@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name, email, phone, type, message } = body;
 
-  if (!name || !email || !message) {
+  if (!name || !email || !phone || !message) {
     return NextResponse.json({ error: "필수 항목 누락" }, { status: 400 });
   }
 

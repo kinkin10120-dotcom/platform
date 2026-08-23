@@ -55,14 +55,14 @@ service cloud.firestore {
         belongsToClient(resource.data.clientId) &&
         resource.data.get('clientVisible', true) != false
       );
-      // list 규칙은 문서별로 재평가되지만, get 규칙이 자동으로 재사용되는 게 아니라
-      // list 규칙 자체에 조건을 직접 걸어야 한다 — 그래서 위 get 규칙과 동일한 조건을
-      // 그대로 반복한다. (isSignedIn()만으로는 앱의 where절과 무관하게 아무 클라이언트나
-      // 전체 projects를 쿼리해 다른 회사 데이터를 가져갈 수 있었다.)
-      allow list: if isAdmin() || (
-        belongsToClient(resource.data.clientId) &&
-        resource.data.get('clientVisible', true) != false
-      );
+      // list 규칙은 문서별로 재평가되지만, 쿼리 결과 중 단 하나라도 규칙을 통과 못 하면
+      // Firestore는 (그 문서만 거르는 게 아니라) 쿼리 전체를 permission-denied로 실패시킨다.
+      // clientVisible 조건까지 여기 걸면, 고객이 비공개 프로젝트를 하나라도 갖는 순간 그
+      // 고객의 프로젝트 목록 쿼리 자체가 통째로 실패한다 — 그래서 list는 클라이언트 소유
+      // 여부(다른 회사 데이터 유출 방지)까지만 검사하고, clientVisible에 따라 개별 프로젝트를
+      // 숨기는 건 앱 쪽에서(listenProjectsByClient) 걸러낸다. get은 그대로 clientVisible도
+      // 함께 검사해 직접 URL로 들어오는 것까지 막는다.
+      allow list: if isAdmin() || belongsToClient(resource.data.clientId);
       allow create, delete: if isAdmin();
       // 캘린더 구독 링크는 클라이언트도 최초 생성할 수 있어야 하므로 그 필드만 예외적으로 허용
       allow update: if isAdmin() || (
@@ -79,6 +79,12 @@ service cloud.firestore {
         belongsToClient(resource.data.clientId) &&
         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
       );
+      // projects의 list와 달리, 클라이언트가 실제로 쓰는 tasks list 쿼리(listenTasksByProject)는
+      // 항상 프로젝트 하나(where projectId==)로만 범위를 좁혀서 나가므로, 그 결과에 포함된
+      // 업무들은 전부 같은 clientVisible 값을 공유한다 — "쿼리 결과가 섞여서 하나 때문에
+      // 전체가 실패"하는 문제가 애초에 생기지 않는다. 그래서 get 규칙과 동일하게 그대로
+      // clientVisible까지 검사해도 안전하고, 안 걸어두면 비공개 프로젝트 URL을 직접 아는
+      // 고객이 프로젝트 문서는 못 봐도 그 안의 업무 목록은 그대로 읽어갈 수 있다.
       allow list: if isAdmin() || (
         belongsToClient(resource.data.clientId) &&
         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
@@ -114,6 +120,23 @@ service cloud.firestore {
         allow update: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiAnalysis']);
         allow delete: if isAdmin() || resource.data.uploadedBy == request.auth.uid;
+
+        // 3D 모델 위 리뷰 핀 — 같은 파일의 핀들은 전부 같은 소속 업무(clientId)를 공유하므로,
+        // list 쿼리가 "결과가 섞여서 하나 때문에 전체 실패"하는 문제 없이 그대로 조건을 걸 수 있다.
+        match /annotations/{annotationId} {
+          allow list, get: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+          allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+            && request.resource.data.createdBy == request.auth.uid;
+          allow update: if isAdmin() || resource.data.createdBy == request.auth.uid;
+          allow delete: if isAdmin() || resource.data.createdBy == request.auth.uid;
+
+          match /comments/{commentId} {
+            allow list, get: if isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
+            allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+              && request.resource.data.authorId == request.auth.uid;
+            allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+          }
+        }
       }
     }
 
@@ -166,6 +189,11 @@ service cloud.firestore {
     match /quoteRequests/{quoteId} {
       allow list, get, update, delete: if isAdmin();
       allow create: if true;
+
+      // 상담(대면/화상 미팅) 중 이메일 등으로 추가로 받는 자료 아카이브
+      match /files/{fileId} {
+        allow list, get, create, update, delete: if isAdmin();
+      }
     }
 
     // ---- client products (고객별 발주 제품 카탈로그) ----

@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Copy, Check, Printer, X } from "lucide-react";
-import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
+import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import ContractPreviewDocument, { ContractPreviewData } from "@/components/ContractPreviewDocument";
 
@@ -36,7 +36,7 @@ export default function ContractPreviewModal({
   const [headerHeight, setHeaderHeight] = useState(0);
 
   useEffect(() => {
-    setStandalone(isIosDevice() && isStandaloneMode());
+    setStandalone(isInAppBrowser() || (isIosDevice() && isStandaloneMode()));
   }, []);
 
   // position:sticky는 (app) 레이아웃의 <main>이 위쪽에 자체 여백을 갖고 있어서 스크롤 중에
@@ -133,7 +133,7 @@ export default function ContractPreviewModal({
         </div>
         {standalone && (
           <p className="mx-auto mt-2 w-full max-w-[210mm] rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-            홈 화면에 추가한 앱에서는 iOS 제한으로 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
+            이 화면(홈 화면 추가 앱 또는 카카오톡·네이버 등 인앱 브라우저)에서는 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
           </p>
         )}
       </div>

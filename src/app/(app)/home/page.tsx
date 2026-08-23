@@ -10,9 +10,12 @@ import { listenAllProjects, listenProjectsByClient, updateProject, deleteProject
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenNotices, markNoticeRead } from "@/lib/firestore/notices";
+import { listenAllContracts } from "@/lib/firestore/contracts";
+import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import { isOverdue, isDueSoon } from "@/lib/bottleneck";
-import { Project, Client, ProjectStatus, Task, Notice, DateChangeEntry, PROJECT_TYPE_LABEL } from "@/lib/types";
+import { Project, Client, ProjectStatus, Task, Notice, DateChangeEntry, PROJECT_TYPE_LABEL, Contract, PurchaseOrder } from "@/lib/types";
 import { groupDateHistory } from "@/lib/groupDateHistory";
+import MonthlyOrderChart from "@/components/dashboard/MonthlyOrderChart";
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
   active: "진행 중",
@@ -73,6 +76,9 @@ export default function HomePage() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [latestNotice, setLatestNotice] = useState<Notice | null>(null);
   const [expandedChangeGroup, setExpandedChangeGroup] = useState<number | null>(null);
+  const [hiddenProjectCount, setHiddenProjectCount] = useState(0);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
 
   const isAdmin = appUser?.role === "admin";
 
@@ -96,14 +102,23 @@ export default function HomePage() {
       });
       const unsub2 = listenClients(setClients);
       const unsub3 = listenAllTasks(setAllTasks);
+      const unsub4 = listenAllContracts(setContracts);
+      const unsub5 = listenAllPurchaseOrders(setOrders);
       return () => {
         unsub1();
         unsub2();
         unsub3();
+        unsub4();
+        unsub5();
       };
     } else if (appUser.clientId) {
-      const unsub = listenProjectsByClient(appUser.clientId, (p) => {
+      const unsub = listenProjectsByClient(appUser.clientId, (raw) => {
+        // 관리자가 아직 "고객에게 공개"를 켜지 않은 프로젝트는 목록에서 숨긴다 — Firestore
+        // list 규칙은 "쿼리 결과 중 하나라도 막히면 쿼리 전체가 실패"하는 방식이라 비공개
+        // 프로젝트를 규칙에서 걸러낼 수 없어서, 쿼리는 전체를 받아온 뒤 여기서 걸러낸다.
+        const p = raw.filter((proj) => proj.clientVisible !== false);
         setProjects(p);
+        setHiddenProjectCount(raw.length - p.length);
         setLoaded(true);
         if (p.length === 1) router.replace(`/projects/${p[0].id}`);
       }, () => setLoaded(true));
@@ -132,6 +147,16 @@ export default function HomePage() {
   const activeProjectCount = sortedProjects.filter((p) => p.status === "active").length;
   const overdueTaskCount = allTasks.filter(isOverdue).length;
   const dueSoonTaskCount = allTasks.filter((t) => isDueSoon(t) && !isOverdue(t)).length;
+  // "서명 대기" = 발송했지만 아직 서명 안 됨(수정요청 포함, 클라이언트 액션을 기다리는 상태) —
+  // draft(관리자가 작성만 하고 아직 안 보낸 것)는 대기가 아니라 그냥 미발송이라 제외한다.
+  const pendingSignatureCount = contracts.filter((c) => c.status === "sent" || c.status === "revision_requested").length;
+  const now = new Date();
+  const monthlyOrderTotal = orders
+    .filter((o) => {
+      const d = new Date(o.createdAt);
+      return o.status !== "cancelled" && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    })
+    .reduce((sum, o) => sum + o.totalAmount, 0);
 
   const upcomingTasks = allTasks
     .filter((t) => isOverdue(t) || isDueSoon(t))
@@ -210,7 +235,7 @@ export default function HomePage() {
       </div>
 
       {isAdmin && projects.length > 0 && (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div className="rounded-3xl bg-white p-4">
             <p className="text-xs text-[#86868b]">진행 중</p>
             <p className="mt-1 text-2xl font-semibold text-[#1d1d1f]">{activeProjectCount}건</p>
@@ -223,8 +248,18 @@ export default function HomePage() {
             <p className="text-xs text-[#86868b]">마감 임박</p>
             <p className={`mt-1 text-2xl font-semibold ${dueSoonTaskCount > 0 ? "text-amber-500" : "text-[#1d1d1f]"}`}>{dueSoonTaskCount}건</p>
           </div>
+          <div className="rounded-3xl bg-white p-4">
+            <p className="text-xs text-[#86868b]">서명 대기 계약</p>
+            <p className={`mt-1 text-2xl font-semibold ${pendingSignatureCount > 0 ? "text-amber-500" : "text-[#1d1d1f]"}`}>{pendingSignatureCount}건</p>
+          </div>
+          <div className="rounded-3xl bg-white p-4">
+            <p className="text-xs text-[#86868b]">이번 달 발주 금액</p>
+            <p className="mt-1 text-2xl font-semibold text-[#1d1d1f]">{monthlyOrderTotal.toLocaleString()}원</p>
+          </div>
         </div>
       )}
+
+      {isAdmin && orders.length > 0 && <MonthlyOrderChart orders={orders} />}
 
       {decisionTasks.length > 0 && (
         <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">
@@ -424,6 +459,11 @@ export default function HomePage() {
           </div>
           );
         })}
+        {!isAdmin && hiddenProjectCount > 0 && !search.trim() && statusFilter === "all" && (
+          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[#d1d1d6] p-6 text-center">
+            <p className="text-sm font-medium text-[#86868b]">새 프로젝트를 준비하고 있습니다</p>
+          </div>
+        )}
       </div>
 
       {deleteConfirm && typeof document !== "undefined" && createPortal(

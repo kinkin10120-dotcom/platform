@@ -106,7 +106,7 @@ function ExpandModal({ f, onClose }: { f: TaskFile; onClose: () => void }) {
         )}
         {isStp && (
           <div className="h-full w-full rounded-xl overflow-hidden">
-            <StepViewer url={f.url} height={window.innerHeight - 100} />
+            <StepViewer url={f.url} height={window.innerHeight - 100} taskId={f.taskId} fileId={f.id} />
           </div>
         )}
       </div>
@@ -137,7 +137,7 @@ function FileRow({ f, canDelete, onDelete, badge }: { f: TaskFile; canDelete: bo
           <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />
         )}
         {preview && isStp && (
-          <StepViewer url={f.url} />
+          <StepViewer url={f.url} taskId={f.taskId} fileId={f.id} />
         )}
         <div className="flex items-center justify-between px-3 py-2 text-sm">
           <div className="flex items-center gap-2 truncate">

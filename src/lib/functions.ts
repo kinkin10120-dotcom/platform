@@ -1,5 +1,6 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import app from "@/lib/firebase";
+import { Currency } from "@/lib/types";
 
 const functions = getFunctions(app, "asia-northeast3"); // 함수 배포 리전과 동일하게 맞춰주세요
 
@@ -22,12 +23,12 @@ export async function createClientAccount(input: CreateClientAccountInput) {
   return res.data;
 }
 
-export async function sendPasswordResetEmail(email: string, name?: string) {
-  const fn = httpsCallable<{ email: string; name?: string }, { ok: boolean }>(
+export async function sendPasswordResetEmail(email: string, name?: string, company?: string) {
+  const fn = httpsCallable<{ email: string; name?: string; company?: string }, { ok: boolean }>(
     functions,
     "sendPasswordResetLink"
   );
-  const res = await fn({ email, name });
+  const res = await fn({ email, name, company });
   return res.data;
 }
 
@@ -147,5 +148,59 @@ export async function uploadContractBizRegCert(contractId: string, email: string
     "uploadContractBizRegCert"
   );
   const res = await fn({ contractId, email, fileDataUrl });
+  return res.data;
+}
+
+export interface IssueQuoteItemInput {
+  name: string;
+  unitPrice: number;
+  currency: Currency;
+  quantity: number;
+  unit?: string;
+  vatApplicable?: boolean;
+}
+
+export async function issueQuote(quoteId: string, items: IssueQuoteItemInput[], memo: string) {
+  const fn = httpsCallable<{ quoteId: string; items: IssueQuoteItemInput[]; memo: string }, { ok: boolean }>(
+    functions,
+    "issueQuote"
+  );
+  const res = await fn({ quoteId, items, memo });
+  return res.data;
+}
+
+export interface QuoteViewingResult {
+  quoteId: string;
+  name: string;
+  company?: string;
+  items: IssueQuoteItemInput[];
+  quoteMemo: string;
+  quoteStatus: "sent" | "accepted" | "declined" | "expired";
+  quoteIssuedAt: number;
+  quoteIssuedBy?: string;
+  bizRegCertUploaded: boolean;
+}
+
+export async function getQuoteForViewing(quoteId: string, email: string) {
+  const fn = httpsCallable<{ quoteId: string; email: string }, QuoteViewingResult>(functions, "getQuoteForViewing");
+  const res = await fn({ quoteId, email });
+  return res.data;
+}
+
+export async function respondToQuote(quoteId: string, email: string, accept: boolean, reason?: string) {
+  const fn = httpsCallable<{ quoteId: string; email: string; accept: boolean; reason?: string }, { ok: boolean }>(
+    functions,
+    "respondToQuote"
+  );
+  const res = await fn({ quoteId, email, accept, reason });
+  return res.data;
+}
+
+export async function uploadQuoteBizRegCert(quoteId: string, email: string, fileDataUrl: string) {
+  const fn = httpsCallable<{ quoteId: string; email: string; fileDataUrl: string }, { ok: boolean; bizRegCertUrl: string }>(
+    functions,
+    "uploadQuoteBizRegCert"
+  );
+  const res = await fn({ quoteId, email, fileDataUrl });
   return res.data;
 }

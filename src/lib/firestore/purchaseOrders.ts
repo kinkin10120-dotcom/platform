@@ -12,7 +12,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
-import { PaymentInstallment, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus } from "@/lib/types";
+import { PaymentInstallment, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, PURCHASE_ORDER_STATUS_LABEL } from "@/lib/types";
 import { calcOrderTotals, formatMoney } from "@/lib/orderCalc";
 import { createNotification } from "@/lib/firestore/notifications";
 import { getAdmins } from "@/lib/firestore/users";
@@ -141,11 +141,11 @@ export async function createPurchaseOrder(input: {
   if (!input.createdByAdmin) {
     try {
       const totals = calcOrderTotals(items);
-      const itemSummary = items.map((it) => it.productName).join(", ");
       const totalSummary = [
         totals.hasKrw ? formatMoney(totals.krwTotal, "KRW") : null,
         totals.hasUsd ? formatMoney(totals.usdTotal, "USD") : null,
       ].filter(Boolean).join(" + ");
+      const details = items.map((it) => `${it.productName} × ${it.quantity}${it.unit || "개"} — ${formatMoney(it.unitPrice * it.quantity, it.currency)}`);
       const admins = await getAdmins();
       await Promise.all(
         admins.map((u) =>
@@ -153,7 +153,8 @@ export async function createPurchaseOrder(input: {
             userId: u.uid,
             type: "purchase_order",
             orderId: ref.id,
-            message: `${input.clientName}에서 새 발주(${poNumber})를 넣었습니다. 품목: ${itemSummary} · 합계 ${totalSummary}`,
+            message: `${input.clientName}에서 새 발주(${poNumber})를 넣었습니다. 합계 ${totalSummary}`,
+            details,
           })
         )
       );
@@ -177,7 +178,8 @@ export async function updatePurchaseOrderStatus(order: PurchaseOrder, status: Pu
       userId: order.orderedBy,
       type: "order_status_change",
       orderId: order.id,
-      message: `발주(${order.poNumber}) 상태가 변경되었습니다.`,
+      message: `발주(${order.poNumber}) 상태가 "${PURCHASE_ORDER_STATUS_LABEL[status]}"(으)로 변경되었습니다.`,
+      details: order.items.map((it) => `${it.productName} × ${it.quantity}${it.unit || "개"}`),
     });
   } catch (e) {
     console.error("발주 상태 변경 알림 발송 실패:", e);
@@ -201,6 +203,7 @@ export async function requestOrderCancel(order: PurchaseOrder, reason?: string) 
           type: "order_cancel_request",
           orderId: order.id,
           message: `${order.clientName}에서 발주(${order.poNumber}) 취소를 요청했습니다.${reason ? ` (사유: ${reason})` : ""}`,
+          details: order.items.map((it) => `${it.productName} × ${it.quantity}${it.unit || "개"}`),
         })
       )
     );
@@ -221,6 +224,7 @@ export async function dismissCancelRequest(order: PurchaseOrder) {
       type: "order_status_change",
       orderId: order.id,
       message: `발주(${order.poNumber}) 취소 요청이 반려되었습니다.`,
+      details: order.items.map((it) => `${it.productName} × ${it.quantity}${it.unit || "개"}`),
     });
   } catch (e) {
     console.error("취소 반려 알림 발송 실패:", e);
@@ -339,6 +343,18 @@ export async function markInstallmentPaid(order: PurchaseOrder, index: number, a
   }
 }
 
+// "입금 확인"을 잘못 눌렀을 때 되돌리는 용도 — 알림 발송이나 연결 업무 착수 같은
+// markInstallmentPaid의 부수효과는 일부러 되돌리지 않는다(관리자가 실수를 바로잡는 것이지,
+// 그 사이 이미 진행된 업무 착수·발송된 알림까지 자동으로 취소하는 건 오히려 위험하다).
+export async function unmarkInstallmentPaid(order: PurchaseOrder, index: number) {
+  if (!order.payment) return;
+  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, paid: false, paidAt: undefined } : it));
+  await updateDoc(doc(db, "purchaseOrders", order.id), {
+    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function issueInstallmentInvoice(order: PurchaseOrder, index: number) {
   if (!order.payment) return;
   const now = Date.now();
@@ -366,6 +382,32 @@ export async function issueInstallmentInvoice(order: PurchaseOrder, index: numbe
     });
   } catch (e) {
     console.error("청구서 발행 알림 발송 실패:", e);
+  }
+}
+
+// "청구서/영수증 발행"을 잘못 눌렀거나 내용을 고쳐서 다시 발행해야 할 때 되돌리는 용도.
+// 입금확인 취소와 달리 이건 고객에게 알림을 보낸다 — 발행 시점에 이미 "확인해달라"는
+// 링크를 보냈으므로, 취소됐다는 것도 알려야 옛 문서를 계속 참고하는 걸 막을 수 있다.
+// (취소 즉시 invoice 페이지 자체가 issuedAt 없음을 이유로 접근을 막으므로 별도 처리는 불필요.)
+export async function unissueInstallmentInvoice(order: PurchaseOrder, index: number) {
+  if (!order.payment) return;
+  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: undefined } : it));
+  const installment = order.payment.installments[index];
+
+  await updateDoc(doc(db, "purchaseOrders", order.id), {
+    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
+    updatedAt: serverTimestamp(),
+  });
+
+  try {
+    await createNotification({
+      userId: order.orderedBy,
+      type: "order_status_change",
+      orderId: order.id,
+      message: `발주(${order.poNumber}) ${installment.label} ${installment.paid ? "영수증" : "청구서"} 발행이 취소되었습니다.`,
+    });
+  } catch (e) {
+    console.error("발행취소 알림 발송 실패:", e);
   }
 }
 

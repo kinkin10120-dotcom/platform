@@ -48,7 +48,7 @@ export default function NotificationBell() {
     } else if (n.type === "inquiry") {
       setOpen(false);
       router.push("/inquiries");
-    } else if (n.type === "quote_request") {
+    } else if (n.type === "quote_request" || n.type === "quote_response") {
       setOpen(false);
       router.push("/quotes");
     } else if (n.type === "purchase_order" || n.type === "order_cancel_request") {

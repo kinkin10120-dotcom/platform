@@ -106,6 +106,9 @@ export interface CreateContractInput {
   // 로그인 계정에서 "계약" 메뉴(getMyContracts)로 곧바로 보이게 된다. 계정이 없는 신규
   // 거래처는 지금까지처럼 서명 완료 후 CreateAccountSection에서 나중에 연결한다.
   linkedClientId?: string;
+  // 견적서 수락 시 고객이 이미 사업자등록증을 첨부했다면 그대로 이어받는다 — 계약 서명
+  // 페이지의 첨부 박스는 이 값이 이미 있으면 자동으로 숨겨져서, 중복으로 다시 요구하지 않는다.
+  bizRegCertUrl?: string;
 }
 
 export async function createContract(input: CreateContractInput) {
@@ -128,6 +131,7 @@ export async function createContract(input: CreateContractInput) {
     ...(input.paymentTerms ? { paymentTerms: input.paymentTerms } : {}),
     handyhandIsGap: !!input.handyhandIsGap,
     ...(input.linkedClientId ? { linkedClientId: input.linkedClientId } : {}),
+    ...(input.bizRegCertUrl ? { bizRegCertUrl: input.bizRegCertUrl } : {}),
     bodyText: input.bodyText,
     attachments: [],
     version: 1,

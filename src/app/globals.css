@@ -38,6 +38,19 @@ body {
   height: 100%;
 }
 
+/* html/body의 height:100%와, overflow-x만 hidden으로 지정한 채 overflow-y를 안 건드린
+   상태(CSS 스펙상 한쪽 축만 visible이 아니면 다른 축의 visible도 auto로 계산됨 — 즉 body가
+   의도치 않게 세로 스크롤 컨테이너가 됨)가 합쳐지면, 인쇄 시 body의 높이가 종이 한 장
+   높이(297mm)로 고정되고 그보다 긴 내용(견적서/청구서/발주서 등 A4 문서)의 아랫부분이
+   다음 페이지로 자연스럽게 흐르지 못하고 그냥 잘려나간다. 인쇄할 때는 완전히 풀어준다. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+}
+
 /* 모달 배경(fixed inset-0)이 페이지 섹션들을 감싸는 space-y-* 컨테이너의 형제 요소로
    조건부 렌더링되는 곳이 많은데(첫 번째 자식이 아니면), 이 프로젝트의 Tailwind 버전은
    space-y를 `:where()` 없이 `.space-y-6 > :not([hidden]) ~ :not([hidden])`로 생성한다

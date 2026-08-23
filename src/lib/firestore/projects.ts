@@ -56,10 +56,17 @@ export function listenAllProjects(cb: (projects: Project[]) => void) {
 }
 
 export function listenProject(projectId: string, cb: (project: Project | null) => void) {
-  return onSnapshot(doc(db, "projects", projectId), (snap) => {
-    if (!snap.exists()) return cb(null);
-    cb(fromDoc(snap));
-  });
+  // 에러 콜백이 없으면, 비공개 프로젝트를 직접 URL로 열었을 때(permission-denied) 콜백이
+  // 아예 안 불려서 화면이 "불러오는 중..."에 무한정 멈춘다 — snap.exists()===false와 동일하게
+  // null로 처리해 "찾을 수 없음" 화면으로 자연스럽게 빠지게 한다.
+  return onSnapshot(
+    doc(db, "projects", projectId),
+    (snap) => {
+      if (!snap.exists()) return cb(null);
+      cb(fromDoc(snap));
+    },
+    () => cb(null)
+  );
 }
 
 export async function createProject(input: {

@@ -93,6 +93,7 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
             taskId: task.id,
             type: "comment",
             message: `${appUser.name}님이 [${task.name}]에 코멘트를 남겼습니다.`,
+            details: [text.trim()],
           })
         )
       );

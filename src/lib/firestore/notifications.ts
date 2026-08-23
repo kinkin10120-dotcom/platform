@@ -51,6 +51,7 @@ export async function createNotification(input: {
   invoiceIndex?: number;
   type: NotificationType;
   message: string;
+  details?: string[];
 }) {
   if (!input.userId) return;
   return addDoc(colRef, { ...input, read: false, createdAt: serverTimestamp() });

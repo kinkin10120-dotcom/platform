@@ -160,7 +160,7 @@ export default function ClientDetailPage() {
     setResettingUid(u.uid);
     setResetSentUid(null);
     try {
-      await sendPasswordResetEmail(u.email, u.name);
+      await sendPasswordResetEmail(u.email, u.name, client?.name);
       setResetSentUid(u.uid);
       setTimeout(() => setResetSentUid(null), 3000);
     } catch (err: any) {

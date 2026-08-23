@@ -8,7 +8,7 @@ import { listenPurchaseOrder } from "@/lib/firestore/purchaseOrders";
 import { listenClient } from "@/lib/firestore/clients";
 import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO } from "@/lib/orderCalc";
 import { Client, PurchaseOrder } from "@/lib/types";
-import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
+import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
 
 export default function PurchaseOrderInvoicePage() {
@@ -21,7 +21,7 @@ export default function PurchaseOrderInvoicePage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setStandalone(isIosDevice() && isStandaloneMode());
+    setStandalone(isInAppBrowser() || (isIosDevice() && isStandaloneMode()));
   }, []);
 
   function handleCopyLink() {
@@ -46,13 +46,14 @@ export default function PurchaseOrderInvoicePage() {
   }, [order?.clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 모바일 "인쇄/PDF 저장"에서 제안되는 파일명은 document.title을 그대로 따르므로,
-  // 여기서 청구서번호(INV-, 발주번호가 PO-여도 청구서는 항상 INV)-품목명 형태로 지정해둔다.
+  // 여기서 청구서번호(INV-/RCP-)-품목명 형태로 지정해둔다.
   useEffect(() => {
     if (!order?.payment) return;
     const installment = order.payment.installments[Number(index)];
     if (!installment?.issuedAt) return;
     const itemSummary = order.items.map((it) => it.productName).join(",");
-    document.title = `${order.poNumber.replace(/^(PO|INV)-/, "INV-")}-${itemSummary}`;
+    const prefix = installment.paid ? "RCP-" : "INV-";
+    document.title = `${order.poNumber.replace(/^(PO|INV|RCP)-/, prefix)}-${itemSummary}`;
   }, [order, index]);
 
   if (loading || order === undefined) return null;
@@ -75,10 +76,16 @@ export default function PurchaseOrderInvoicePage() {
 
   const totalInstallments = order.payment.installments.length;
   const issuedDate = new Date(installment.issuedAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
-  // 이 화면은 발주서가 아니라 청구서다 — 원 발주가 클라이언트가 보낸 것이든(PO-) 관리자가
-  // 직접 등록한 것이든(INV-) 상관없이, 청구서에 찍히는 번호는 항상 INV로 보여준다.
+  // 문서를 발행하는 시점이 아니라 "지금 이 회차가 입금 확인된 상태인지"를 매번 다시 계산한다 —
+  // 청구서 발행 전에 입금부터 확인된 경우(무통장입금을 먼저 받고 나중에 서류를 챙기는 경우 등)
+  // "청구서"(아직 안 받은 돈을 청구하는 문서)라고 찍히면 앞뒤가 안 맞는다. 반대로 청구서를
+  // 먼저 발행하고 나중에 입금이 확인돼도, 그 시점부터는 같은 문서가 곧 입금 증빙이 되므로
+  // 영수증으로 자동 전환한다.
+  const isReceipt = !!installment.paid;
+  // 이 화면은 발주서가 아니라 청구서/영수증이다 — 원 발주가 클라이언트가 보낸 것이든(PO-) 관리자가
+  // 직접 등록한 것이든(INV-) 상관없이, 찍히는 번호는 항상 INV/RCP로 보여준다.
   // poNumber 필드 자체(발주서 쪽에서 쓰는 진짜 발주번호)는 그대로 두고 화면 표시만 바꾼다.
-  const invoiceNumber = order.poNumber.replace(/^(PO|INV)-/, "INV-");
+  const invoiceNumber = order.poNumber.replace(/^(PO|INV|RCP)-/, isReceipt ? "RCP-" : "INV-");
 
   return (
     <div className="min-h-screen bg-[#e5e5e5] py-10 print:bg-white print:py-0">
@@ -107,7 +114,7 @@ export default function PurchaseOrderInvoicePage() {
             >
               <X size={16} />
             </button>
-            <p className="text-sm text-[#86868b]">청구서 미리보기 — 인쇄 시 배경/여백이 자동 조정됩니다.</p>
+            <p className="text-sm text-[#86868b]">{isReceipt ? "영수증" : "청구서"} 미리보기 — 인쇄 시 배경/여백이 자동 조정됩니다.</p>
           </div>
           {standalone ? (
             <button
@@ -128,7 +135,7 @@ export default function PurchaseOrderInvoicePage() {
         </div>
         {standalone && (
           <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-            홈 화면에 추가한 앱에서는 iOS 제한으로 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
+            이 화면(홈 화면 추가 앱 또는 카카오톡·네이버 등 인앱 브라우저)에서는 인쇄/PDF 저장이 동작하지 않아요. 위 &quot;링크 복사&quot; 버튼으로 링크를 복사해서 사파리 브라우저에 붙여넣어 열어주세요.
           </p>
         )}
       </div>
@@ -137,8 +144,8 @@ export default function PurchaseOrderInvoicePage() {
         <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
         <div className="flex items-start justify-between border-b-2 border-[#1d1d1f] pb-6">
           <div>
-            <p className="text-3xl font-bold tracking-tight">청구서</p>
-            <p className="mt-1 text-xs text-[#86868b]">INVOICE</p>
+            <p className="text-3xl font-bold tracking-tight">{isReceipt ? "영수증" : "청구서"}</p>
+            <p className="mt-1 text-xs text-[#86868b]">{isReceipt ? "RECEIPT" : "INVOICE"}</p>
           </div>
           <div className="text-right text-sm">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -149,7 +156,7 @@ export default function PurchaseOrderInvoicePage() {
 
         <div className="mt-6 grid grid-cols-2 gap-6 text-sm">
           <div className="space-y-1.5">
-            <Row label="청구번호" value={invoiceNumber} />
+            <Row label={isReceipt ? "영수증번호" : "청구번호"} value={invoiceNumber} />
             <Row label="발행일" value={issuedDate} />
             <Row label="청구 회차" value={`${installmentIndex + 1}/${totalInstallments}회차 (${installment.label})`} />
           </div>
@@ -235,30 +242,30 @@ export default function PurchaseOrderInvoicePage() {
           </p>
         </div>
 
-        <div className="mt-8 flex justify-end">
-          <div className="w-40 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
-            <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
-              주식회사 핸디핸드
-              <br />
-              대표 최형준
-            </p>
-          </div>
-        </div>
-
         <div className="mt-auto text-xs text-[#86868b]">
+          <div className="flex justify-end">
+            <div className="w-40 text-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
+              <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
+                주식회사 핸디핸드
+                <br />
+                대표 최형준
+              </p>
+            </div>
+          </div>
+
           {/* 발주/청구서는 계약서처럼 IP·기기 정보까지 남길 필요는 없다(이미 로그인된 계정이
               하는 동작이라 누가 했는지는 인증으로 확인됨) — 핵심 시점만 문서에 그대로 남겨서,
               나중에 "언제 확인·발행·입금됐는지" 분쟁이 생기면 인쇄물 자체가 근거가 되게 한다. */}
-          <p className="mb-1.5 text-[10px] text-[#d1d1d6]">
+          <p className="mb-1.5 mt-3 text-[10px] text-[#d1d1d6]">
             등록 {new Date(order.createdAt).toLocaleDateString("ko-KR")}
             {order.confirmedAt && ` · 확인 ${new Date(order.confirmedAt).toLocaleDateString("ko-KR")}`}
             {` · 발행 ${issuedDate}`}
             {installment.paidAt && ` · 입금확인 ${new Date(installment.paidAt).toLocaleDateString("ko-KR")}`}
           </p>
           <div className="flex items-end justify-between border-t border-[#e5e5e5] pt-3">
-            <p>본 청구서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
+            <p>본 {isReceipt ? "영수증" : "청구서"}는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
             <p>HANDYHAND</p>
           </div>
         </div>

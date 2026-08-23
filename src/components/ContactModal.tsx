@@ -3,16 +3,18 @@
 import { useState, useEffect } from "react";
 import { X, Mail, MapPin } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
+import { formatPhoneInput } from "@/lib/formatInput";
 
 const CONTACT_TYPES = ["제품개발", "디자인", "기구설계", "전자·PCBA", "금형·양산·소싱", "컨설팅", "브랜딩", "지원사업·펀딩", "기타 문의"] as const;
 
 const inputClass =
   "w-full rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] transition";
 
-export function ContactModal({ onClose, initialType }: { onClose: () => void; initialType?: string }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", type: initialType ?? "", message: "" });
+export function ContactModal({ onClose, initialType, initialMessage }: { onClose: () => void; initialType?: string; initialMessage?: string }) {
+  const [form, setForm] = useState({ name: "", email: "", phone: "", type: initialType ?? "", message: initialMessage ?? "" });
   const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export function ContactModal({ onClose, initialType }: { onClose: () => void; in
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
+    setSubmitError("");
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
@@ -36,6 +39,8 @@ export function ContactModal({ onClose, initialType }: { onClose: () => void; in
       if (!res.ok) throw new Error("전송 실패");
       trackEvent("generate_lead", { form: "contact", type: form.type || undefined });
       setDone(true);
+    } catch (e) {
+      setSubmitError("전송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -123,8 +128,14 @@ export function ContactModal({ onClose, initialType }: { onClose: () => void; in
                       <input required value={form.name} onChange={set("name")} placeholder="홍길동" className={inputClass} />
                     </div>
                     <div>
-                      <label className="mb-1.5 block text-xs font-medium text-[#86868b]">연락처</label>
-                      <input value={form.phone} onChange={set("phone")} placeholder="010-0000-0000" className={inputClass} />
+                      <label className="mb-1.5 block text-xs font-medium text-[#86868b]">연락처 *</label>
+                      <input
+                        required
+                        value={form.phone}
+                        onChange={(e) => setForm((f) => ({ ...f, phone: formatPhoneInput(e.target.value) }))}
+                        placeholder="010-0000-0000"
+                        className={inputClass}
+                      />
                     </div>
                   </div>
                   <div>
@@ -169,6 +180,8 @@ export function ContactModal({ onClose, initialType }: { onClose: () => void; in
                       <a href="/privacy" target="_blank" rel="noreferrer" className="underline hover:text-[#1d1d1f]">자세히 보기</a>
                     </span>
                   </label>
+
+                  {submitError && <p className="text-xs text-red-500">{submitError}</p>}
 
                   <button
                     type="submit"

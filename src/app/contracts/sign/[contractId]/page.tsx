@@ -17,6 +17,7 @@ import {
 import SignaturePad from "@/components/SignaturePad";
 import ContractPreviewModal from "@/components/ContractPreviewModal";
 import ContractBodyEditor from "@/components/ContractBodyEditor";
+import { ContactModal } from "@/components/ContactModal";
 import { sanitizeContractHtml } from "@/lib/contractSanitize";
 import { plainTextToHtml } from "@/lib/contractTemplate";
 
@@ -50,6 +51,7 @@ export default function ContractSignPage() {
   const [signatureBlob, setSignatureBlob] = useState<Blob | File | null>(null);
   const [signSubmitting, setSignSubmitting] = useState(false);
   const [signError, setSignError] = useState("");
+  const [contactOpen, setContactOpen] = useState(false);
   const [signingPreviewOpen, setSigningPreviewOpen] = useState(false);
 
   async function handleUnlock() {
@@ -245,6 +247,12 @@ export default function ContractSignPage() {
             <div className="py-6 text-center">
               <p className="text-lg font-bold text-[#1d1d1f]">요청을 전달했습니다</p>
               <p className="mt-2 text-sm text-[#86868b]">담당자 확인 후 수정된 계약서 링크를 다시 안내드리겠습니다.</p>
+              <button
+                onClick={() => setContactOpen(true)}
+                className="mx-auto mt-4 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+              >
+                계약 관련 문의하기
+              </button>
             </div>
           )}
 
@@ -320,10 +328,23 @@ export default function ContractSignPage() {
             <div className="py-6 text-center">
               <p className="text-lg font-bold text-[#1d1d1f]">서명이 완료되었습니다</p>
               <p className="mt-2 text-sm text-[#86868b]">계약이 정상적으로 체결되었습니다. 곧 담당자가 계정 안내 이메일을 보내드릴 예정입니다.</p>
+              <button
+                onClick={() => setContactOpen(true)}
+                className="mx-auto mt-4 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+              >
+                계약 관련 문의하기
+              </button>
             </div>
           )}
         </div>
       </div>
+
+      {contactOpen && (
+        <ContactModal
+          onClose={() => setContactOpen(false)}
+          initialMessage={`[계약 문의${view?.companyName ? ` - ${view.companyName}` : ""}]\n\n`}
+        />
+      )}
     </div>
   );
 }
@@ -385,6 +406,9 @@ function ContractView({
           >
             <Maximize2 size={14} /> 계약서 보기
           </button>
+          <p className="mt-3 text-xs leading-relaxed text-[#86868b]">
+            계약서 원본은 위 버튼으로 언제든 다시 확인하실 수 있습니다. PDF로 저장해 보관하시는 것을 권장드립니다.
+          </p>
         </div>
 
         {(view.signerName || view.contentHash) && (

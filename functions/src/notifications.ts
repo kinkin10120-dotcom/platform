@@ -15,6 +15,7 @@ const NOTIFICATION_TITLE: Record<string, string> = {
   comment: "새 코멘트가 등록되었습니다",
   unblocked: "업무를 시작할 수 있습니다",
   due_soon: "마감일이 임박했습니다",
+  overdue: "마감일이 지났습니다",
   rescheduled: "일정이 조정되었습니다",
   weekly_summary: "이번 주 업무 요약",
   notice: "새 공지사항이 등록되었습니다",

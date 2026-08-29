@@ -105,6 +105,52 @@ export const dueSoonReminder = onSchedule(
 );
 
 /* ------------------------------------------------------------------ */
+/* 4-0-1) 마감일이 지난 업무 재알림 (Asia/Seoul 09:00)                       */
+/*    - dueSoonReminder는 마감 당일~하루 전에 딱 한 번만 알리고 끝나서,        */
+/*      마감일이 실제로 지나버린 뒤로는 담당자가 잊으면 계속 방치될 수 있다.    */
+/*      완료 전까지 3일 간격으로 계속 재알림한다(lastOverdueNotifiedAt 기준). */
+/* ------------------------------------------------------------------ */
+export const overdueTaskReminder = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Seoul" },
+  async () => {
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" }); // YYYY-MM-DD
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const snap = await db.collection("tasks").where("status", "in", ["todo", "in_progress"]).get();
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      const dueDate = data.dueDate as string;
+      if (!dueDate || dueDate >= todayStr) continue; // 마감일이 지나지 않았으면 대상 아님
+      if (!data.assigneeId) continue;
+
+      const lastOverdueMs = data.lastOverdueNotifiedAt?.toMillis
+        ? data.lastOverdueNotifiedAt.toMillis()
+        : data.lastOverdueNotifiedAt;
+      if (lastOverdueMs && now - lastOverdueMs < THREE_DAYS_MS) continue;
+
+      const overdueDays = Math.round(
+        (new Date(`${todayStr}T00:00:00+09:00`).getTime() - new Date(`${dueDate}T00:00:00+09:00`).getTime()) /
+          (24 * 60 * 60 * 1000)
+      );
+
+      await db.collection("notifications").add({
+        userId: data.assigneeId,
+        projectId: data.projectId,
+        taskId: docSnap.id,
+        type: "overdue",
+        message: `"${data.name}" 업무의 마감일이 ${overdueDays}일 지났습니다.`,
+        read: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await docSnap.ref.update({ lastOverdueNotifiedAt: FieldValue.serverTimestamp() });
+    }
+  }
+);
+
+/* ------------------------------------------------------------------ */
 /* 4-1) 주간 요약 리포트 (매주 월요일 Asia/Seoul 09:00)                     */
 /*    - 관리자 전원에게 "이번 주 마감 예정 / 지연 중" 업무 건수를 요약해       */
 /*      notifications 문서로 남긴다. 실제 발송(푸시+이메일)은 기존            */

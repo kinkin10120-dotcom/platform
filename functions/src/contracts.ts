@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { createHash } from "crypto";
 import { normalizeEmail, contractEmailMatches } from "./emailMatch";
 import { db, storage, internalNotifySecret, sendNotifyEmail, formatMoneySimple } from "./shared";
@@ -608,6 +609,70 @@ async function sendContractInviteEmail(
     : `[HANDYWORKS] ${subjectPrefix}가 도착했습니다`;
   await sendNotifyEmail(email, subject, html);
 }
+
+async function sendContractSignatureReminderEmail(
+  email: string,
+  info: { contractId: string; title: string; companyName: string; contactName: string }
+) {
+  const signLink = `https://handyhand.co.kr/contracts/sign/${info.contractId}`;
+  const subjectPrefix = info.title.endsWith("계약서") ? info.title : `${info.title} 계약서`;
+  const html = `
+    <h2 style="color: #1d1d1f; margin: 0 0 16px; font-size: 19px;">계약서 서명이 아직 완료되지 않았습니다</h2>
+    <p style="font-size: 13px; color: #86868b; line-height: 1.6;">
+      안녕하세요. ${info.companyName} ${info.contactName}님<br/><br/>
+      먼저 저희 HANDYHAND와 함께해 주셔서 감사드립니다.<br/><br/>
+      지난번 보내드린 계약서에 대해 아직 서명이 완료되지 않아 다시 한번 안내 말씀드립니다.
+      바쁘신 업무 중 번거로우시겠지만, 아래 버튼을 통해 내용을 확인하신 후 전자서명을 진행해 주시면 감사하겠습니다.<br/><br/>
+      수정이 필요한 부분이 있으시면 서명 페이지에서 바로 수정을 요청하실 수 있고, 궁금하신 점이 있으시면 언제든 편하게 연락 주시기 바랍니다.
+    </p>
+    <div style="background: #ffffff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 16px; font-size: 14px; margin: 20px 0 0;">
+      <p style="margin: 0 0 6px; color: #1d1d1f;">계약명: ${info.title}</p>
+      <p style="margin: 0; color: #1d1d1f;">${info.companyName} · ${info.contactName}님</p>
+    </div>
+    <div style="text-align: center; margin-top: 20px;"><a href="${signLink}" style="display: inline-block; background: #1d1d1f; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 999px; font-size: 14px; font-weight: 600;">계약서 확인하고 서명하기</a></div>
+  `;
+  await sendNotifyEmail(email, `[HANDYWORKS] ${subjectPrefix} 서명 검토 회신을 기다리고 있습니다`, html);
+}
+
+// 발송(sent)되거나 수정요청(revision_requested) 상태로 3일 넘게 서명이 안 된 계약은 완료될
+// 때까지 3일 간격으로 계속 리마인드한다 — 견적서(checkStaleQuotes)와 달리 계약서는 "N일 후
+// 자동 만료" 개념이 없어(법적 문서라 임의로 무효화하면 안 됨) 1회성이 아니라 반복 발송이다.
+export const checkPendingContractSignatures = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Seoul", secrets: [internalNotifySecret] },
+  async () => {
+    const snap = await db
+      .collection("contracts")
+      .where("status", "in", ["sent", "revision_requested"])
+      .get();
+    const now = Date.now();
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (!data.contactEmail) continue;
+
+      const sentAtMs = data.sentAt?.toMillis ? data.sentAt.toMillis() : data.sentAt;
+      if (!sentAtMs) continue;
+      const lastReminderMs = data.lastSignatureReminderAt?.toMillis
+        ? data.lastSignatureReminderAt.toMillis()
+        : data.lastSignatureReminderAt;
+      const reference = lastReminderMs ?? sentAtMs;
+      if (now - reference < THREE_DAYS_MS) continue;
+
+      await docSnap.ref.update({ lastSignatureReminderAt: FieldValue.serverTimestamp() });
+      try {
+        await sendContractSignatureReminderEmail(data.contactEmail, {
+          contractId: docSnap.id,
+          title: data.title,
+          companyName: data.companyName,
+          contactName: data.contactName,
+        });
+      } catch (e) {
+        console.error("계약서 서명 리마인더 메일 발송 실패:", e);
+      }
+    }
+  }
+);
 
 // contracts 문서의 status가 "sent"로 바뀌는 순간(최초 발송 + 수정요청 반영 후 재발송 모두
 // 포함)을 감지해 상대방에게 서명 링크 메일을 보낸다. sendContract()는 순수 클라이언트

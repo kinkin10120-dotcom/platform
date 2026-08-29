@@ -200,6 +200,7 @@ export type NotificationType =
   | "comment"
   | "unblocked"
   | "due_soon"
+  | "overdue"
   | "rescheduled"
   | "weekly_summary"
   | "notice"
@@ -220,6 +221,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   comment: "새 코멘트",
   unblocked: "업무 시작 가능",
   due_soon: "마감일 임박",
+  overdue: "마감일 초과",
   rescheduled: "일정 자동 조정",
   weekly_summary: "주간 업무 요약",
   notice: "공지사항",
@@ -483,6 +485,7 @@ export interface Contract {
   sentIp?: string;
   sentUserAgent?: string;
   sentContentHash?: string; // 발송 시점 본문+별첨 SHA-256 — 이후 signedAt의 contentHash와 대조해 위변조 여부를 검증할 수 있다.
+  lastSignatureReminderAt?: number; // 서명 대기 리마인더 마지막 발송 시각 — 3일 간격 재발송 기준점
   // 서명 완료 후 채워지는, 이후 절대 수정되지 않는 증빙 스냅샷
   signedAt?: number;
   signerName?: string;

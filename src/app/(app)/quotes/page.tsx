@@ -477,7 +477,11 @@ export default function QuotesPage() {
                           />
                           <select
                             value={it.currency}
-                            onChange={(e) => updateItem(i, { currency: e.target.value as Currency })}
+                            onChange={(e) => {
+                              const currency = e.target.value as Currency;
+                              // 달러는 해외결제라 부가세 대상이 아니다 — USD로 바꾸면 VAT 별도 체크도 같이 풀어준다.
+                              updateItem(i, currency === "USD" ? { currency, vatApplicable: false } : { currency });
+                            }}
                             className="rounded-lg border border-[#d1d1d6] px-1 py-1.5 text-xs outline-none focus:border-[#86868b]"
                           >
                             <option value="KRW">KRW</option>
@@ -514,15 +518,17 @@ export default function QuotesPage() {
                             />
                           )}
                         </div>
-                        <label className="flex items-center gap-1.5 px-1 text-[11px] text-[#86868b]">
-                          <input
-                            type="checkbox"
-                            checked={it.vatApplicable ?? false}
-                            onChange={(e) => updateItem(i, { vatApplicable: e.target.checked })}
-                            className="h-3 w-3 accent-[#1d1d1f]"
-                          />
-                          VAT 별도
-                        </label>
+                        {it.currency !== "USD" && (
+                          <label className="flex items-center gap-1.5 px-1 text-[11px] text-[#86868b]">
+                            <input
+                              type="checkbox"
+                              checked={it.vatApplicable ?? false}
+                              onChange={(e) => updateItem(i, { vatApplicable: e.target.checked })}
+                              className="h-3 w-3 accent-[#1d1d1f]"
+                            />
+                            VAT 별도
+                          </label>
+                        )}
                       </div>
                     ))}
                   </div>

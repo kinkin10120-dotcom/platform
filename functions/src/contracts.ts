@@ -367,7 +367,12 @@ export const getMyContracts = onCall({ invoker: "public" }, async (request) => {
 
 export const getContractForSigning = onCall({ invoker: "public" }, async (request) => {
   const { contractId, email } = request.data as { contractId?: string; email?: string };
-  const { data } = await assertContractEmailMatch(contractId ?? "", email);
+  const { snap, data } = await assertContractEmailMatch(contractId ?? "", email);
+
+  // 고객이 링크를 열어봤는지(최초 1회) — 견적서와 같은 이유로 관리자 목록에 배지로 노출한다.
+  if (!data.viewedAt) {
+    await snap.ref.update({ viewedAt: FieldValue.serverTimestamp() });
+  }
 
   const isFinal = data.status === "signed" || data.status === "linked";
   const rawAttachments = (isFinal ? data.signedAttachments : data.attachments) ?? [];

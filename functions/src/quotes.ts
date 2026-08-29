@@ -123,6 +123,12 @@ export const getQuoteForViewing = onCall({ invoker: "public" }, async (request) 
     throw new HttpsError("not-found", "아직 발행되지 않은 견적입니다.");
   }
 
+  // 고객이 링크를 열어봤는지(최초 1회) — 리마인더가 "안 열어본 건지 열어보고 고민 중인
+  // 건지"를 구분할 수 있게, 관리자 목록에 배지로 노출한다.
+  if (!data.quoteViewedAt) {
+    await snap.ref.update({ quoteViewedAt: FieldValue.serverTimestamp() });
+  }
+
   return {
     quoteId,
     name: data.name,

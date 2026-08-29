@@ -133,6 +133,13 @@ export default function ContractsPage() {
                 <p className="mt-0.5 text-xs text-[#86868b]">
                   {selected.title} · {selected.productName || selected.contactName} · {new Date(selected.createdAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
                 </p>
+                {(selected.status === "sent" || selected.status === "revision_requested") && (
+                  <p className="mt-1 text-xs text-[#86868b]">
+                    {selected.viewedAt
+                      ? `열람함 · ${new Date(selected.viewedAt).toLocaleString("ko-KR")}`
+                      : "아직 열람하지 않음"}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[selected.status]}`}>
@@ -251,6 +258,9 @@ function ContractCard({
       <div className="flex items-center justify-between gap-2">
         <p className="truncate font-medium text-[#1d1d1f]">{c.companyName}</p>
         <div className="flex shrink-0 items-center gap-1.5">
+          {(c.status === "sent" || c.status === "revision_requested") && !c.viewedAt && (
+            <span title="아직 열람하지 않음" className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          )}
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[c.status]}`}>
             {CONTRACT_STATUS_LABEL[c.status]}
           </span>

@@ -40,6 +40,7 @@ export interface QuoteRequest {
   quoteDeclineReason?: string;
   bizRegCertUrl?: string;
   quoteReminderSentAt?: number;
+  quoteViewedAt?: number; // 고객이 견적서 링크를 최초로 열어본 시각
 }
 
 function fromDoc(d: any): QuoteRequest {
@@ -65,6 +66,7 @@ function fromDoc(d: any): QuoteRequest {
     quoteDeclineReason: data.quoteDeclineReason,
     bizRegCertUrl: data.bizRegCertUrl,
     quoteReminderSentAt: data.quoteReminderSentAt?.toMillis ? data.quoteReminderSentAt.toMillis() : data.quoteReminderSentAt,
+    quoteViewedAt: data.quoteViewedAt?.toMillis ? data.quoteViewedAt.toMillis() : data.quoteViewedAt,
   };
 }
 

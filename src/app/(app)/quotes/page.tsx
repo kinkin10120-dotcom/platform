@@ -386,6 +386,14 @@ export default function QuotesPage() {
                 )}
               </div>
 
+              {selected.quoteStatus === "sent" && (
+                <p className="mb-3 text-xs text-[#86868b]">
+                  {selected.quoteViewedAt
+                    ? `열람함 · ${new Date(selected.quoteViewedAt).toLocaleString("ko-KR")}`
+                    : "아직 열람하지 않음"}
+                </p>
+              )}
+
               {!editingQuote && !selected.quoteStatus && (
                 <button
                   onClick={() => openIssueEditor(selected)}
@@ -623,8 +631,13 @@ function QuoteCard({ quote, selected, onClick }: { quote: QuoteRequest; selected
           {quote.company && <span className="ml-1.5 text-xs font-normal text-[#86868b]">{quote.company}</span>}
         </p>
         {quote.quoteStatus ? (
-          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${FORMAL_QUOTE_STYLE[quote.quoteStatus]}`}>
-            {FORMAL_QUOTE_LABEL[quote.quoteStatus]}
+          <span className="flex shrink-0 items-center gap-1.5">
+            {quote.quoteStatus === "sent" && !quote.quoteViewedAt && (
+              <span title="아직 열람하지 않음" className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+            )}
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${FORMAL_QUOTE_STYLE[quote.quoteStatus]}`}>
+              {FORMAL_QUOTE_LABEL[quote.quoteStatus]}
+            </span>
           </span>
         ) : (
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[quote.status]}`}>

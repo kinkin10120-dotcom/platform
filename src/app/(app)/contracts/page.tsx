@@ -544,14 +544,25 @@ function ContractEditForm({ contract }: { contract: Contract }) {
               inputMode="decimal"
               className={`${inputClass} min-w-0 flex-1`}
             />
-            <select value={form.currency} onChange={(e) => set("currency", e.target.value as Currency)} className="shrink-0 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm outline-none focus:border-[#86868b]">
+            <select
+              value={form.currency}
+              onChange={(e) => {
+                const currency = e.target.value as Currency;
+                set("currency", currency);
+                // 달러는 해외결제라 부가세 대상이 아니다 — 통화를 USD로 바꾸면 VAT 별도 체크도 같이 풀어준다.
+                if (currency === "USD" && form.vatApplicable) set("vatApplicable", false);
+              }}
+              className="shrink-0 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm outline-none focus:border-[#86868b]"
+            >
               <option value="KRW">KRW</option>
               <option value="USD">USD</option>
             </select>
-            <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f]">
-              <input type="checkbox" checked={form.vatApplicable} onChange={(e) => set("vatApplicable", e.target.checked)} />
-              VAT 별도
-            </label>
+            {form.currency !== "USD" && (
+              <label className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f]">
+                <input type="checkbox" checked={form.vatApplicable} onChange={(e) => set("vatApplicable", e.target.checked)} />
+                VAT 별도
+              </label>
+            )}
           </div>
         </div>
         {/* type="date" 입력은 iOS Safari에서 자기 고유의 넓은 콘텐츠 크기를 그리드/플렉스

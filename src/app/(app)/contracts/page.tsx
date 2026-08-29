@@ -1153,7 +1153,7 @@ function CreateContractModal({
             <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
           </div>
           <label className="flex h-[38px] items-center justify-between gap-2 rounded-xl border border-[#e5e5e5] px-3">
-            <span className="text-xs text-[#1d1d1f]">{handyhandIsGap ? "핸디핸드가 갑" : "핸디핸드가 을"}</span>
+            <span className="text-xs text-[#1d1d1f]">{handyhandIsGap ? "우리 회사가 갑" : "우리 회사가 을"}</span>
             <input
               type="checkbox"
               checked={handyhandIsGap}

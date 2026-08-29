@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -15,7 +15,8 @@ import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import { Project, Client, ProjectStatus, Task, Notice, DateChangeEntry, PROJECT_TYPE_LABEL, Contract, PurchaseOrder } from "@/lib/types";
 import { groupDateHistory } from "@/lib/groupDateHistory";
-import MonthlyOrderChart from "@/components/dashboard/MonthlyOrderChart";
+import { calcOrderTotals } from "@/lib/orderCalc";
+import MonthlyOrderChart, { buildMonthlyOrderData } from "@/components/dashboard/MonthlyOrderChart";
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
   active: "진행 중",
@@ -151,12 +152,13 @@ export default function HomePage() {
   // draft(관리자가 작성만 하고 아직 안 보낸 것)는 대기가 아니라 그냥 미발송이라 제외한다.
   const pendingSignatureCount = contracts.filter((c) => c.status === "sent" || c.status === "revision_requested").length;
   const now = new Date();
-  const monthlyOrderTotal = orders
-    .filter((o) => {
-      const d = new Date(o.createdAt);
-      return o.status !== "cancelled" && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-    })
-    .reduce((sum, o) => sum + o.totalAmount, 0);
+  // 발주별 통화 합계(calcOrderTotals)는 발주 하나당 딱 한 번만 계산해서, 이번 달 요약 카드와
+  // 6개월 차트(KRW/USD 두 개) 양쪽에서 같은 결과를 재사용한다 — orders가 바뀔 때만 다시 계산.
+  const ordersWithTotals = useMemo(() => orders.map((o) => ({ ...o, totals: calcOrderTotals(o.items) })), [orders]);
+  const hasUsdOrders = ordersWithTotals.some((o) => o.totals.hasUsd);
+  const monthlyData = useMemo(() => buildMonthlyOrderData(ordersWithTotals), [ordersWithTotals]);
+  const monthlyOrderTotalKrw = monthlyData.krw[monthlyData.krw.length - 1]?.total ?? 0;
+  const monthlyOrderTotalUsd = monthlyData.usd[monthlyData.usd.length - 1]?.total ?? 0;
 
   const upcomingTasks = allTasks
     .filter((t) => isOverdue(t) || isDueSoon(t))
@@ -254,12 +256,22 @@ export default function HomePage() {
           </div>
           <div className="rounded-3xl bg-white p-4">
             <p className="text-xs text-[#86868b]">이번 달 발주 금액</p>
-            <p className="mt-1 text-2xl font-semibold text-[#1d1d1f]">{monthlyOrderTotal.toLocaleString()}원</p>
+            <p className="mt-1 text-2xl font-semibold text-[#1d1d1f]">{monthlyOrderTotalKrw.toLocaleString()}원</p>
+            {monthlyOrderTotalUsd > 0 && (
+              <p className="mt-0.5 text-sm font-medium text-[#86868b]">
+                +${monthlyOrderTotalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            )}
           </div>
         </div>
       )}
 
-      {isAdmin && orders.length > 0 && <MonthlyOrderChart orders={orders} />}
+      {isAdmin && orders.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <MonthlyOrderChart data={monthlyData.krw} currency="KRW" />
+          {hasUsdOrders && <MonthlyOrderChart data={monthlyData.usd} currency="USD" />}
+        </div>
+      )}
 
       {decisionTasks.length > 0 && (
         <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">

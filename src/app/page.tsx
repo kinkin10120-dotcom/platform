@@ -723,8 +723,8 @@ export default function RootPage() {
               <span className="h-1.5 w-1.5 rounded-full bg-[#F1CE00]" />
               HANDYWORKS · Platform
             </p>
-            <p className="text-3xl font-bold leading-snug text-white sm:text-4xl">모든 진행 상황을<br />플랫폼으로 직접 확인하세요.</p>
-            <p className="mt-3 text-sm leading-relaxed text-white/55 sm:text-base">프로젝트 일정·이슈·파일을 언제 어디서든<br className="sm:hidden" />실시간으로 파악합니다.</p>
+            <p className="text-3xl font-bold leading-snug text-white sm:text-4xl">견적, 서명, 개발, 양산.<br />모든 과정이 하나로 이어집니다.</p>
+            <p className="mt-3 text-sm leading-relaxed text-white/55 sm:text-base">견적서 수락부터 전자서명, 개발·금형 제작, 양산까지<br className="sm:hidden" />— 끊김없이 하나의 플랫폼 안에서.</p>
             <Link
               href="/handyworks"
               className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black transition hover:bg-white/90"

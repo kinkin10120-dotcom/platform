@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Trash2, X, Copy, Check, FileSignature, ChevronDown, Maximize2, Plus, Printer, BookmarkPlus, Download, Pencil, Mail } from "lucide-react";
 import ContractBodyEditor from "@/components/ContractBodyEditor";
+import { ContractHeaderData } from "@/components/ContractPreviewDocument";
 import { useAuth } from "@/lib/auth-context";
 import { formatMoney } from "@/lib/orderCalc";
 import { DEFAULT_CONTRACT_BODY_TEMPLATE, resolveContractTokens, plainTextToHtml } from "@/lib/contractTemplate";
@@ -1275,6 +1276,18 @@ function TemplateEditModal({
     }
   }
 
+  // 템플릿은 특정 계약 건과 무관한 공용 본문이라 실제 회사명·금액이 없다 — 그래도 실제
+  // 계약서에 적용했을 때 헤더 블록이 본문 위 공간을 얼마나 차지하는지(쪽 나눔 위치)를
+  // 템플릿 작성 시점에 미리 볼 수 있도록, 자리표시자 값으로 채운 헤더를 보여준다.
+  const placeholderHeaderData: ContractHeaderData = {
+    title: name || "계약서",
+    companyName: "(회사명)",
+    contactName: "(담당자명)",
+    amount: 0,
+    currency: "KRW",
+    paymentTerms: "(대금지급 방식)",
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-3xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -1300,13 +1313,10 @@ function TemplateEditModal({
         <div className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-6">
           <div>
             <label className="mb-1.5 block text-xs text-[#86868b]">본문 — 실제 계약서와 같은 A4 여백 기준으로 보입니다</label>
-            {/* 템플릿은 특정 계약 건과 무관한 공용 본문이라 headerData(제목·당사자·금액)는
-                안 넣는다 — 그래도 A4 페이지 크기·여백·쪽 나눔은 크게편집과 똑같은 기준
-                (pageStyle)으로 보여줘야, 나중에 실제 계약서에 적용했을 때 미리보기와
-                어긋나지 않는다는 걸 템플릿 작성 시점에 바로 확인할 수 있다. */}
             <ContractBodyEditor
               pageStyle
               contractId={`template-${template.id}`}
+              headerData={placeholderHeaderData}
               value={bodyHtml}
               onChange={setBodyHtml}
             />

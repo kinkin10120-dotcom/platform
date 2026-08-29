@@ -6,7 +6,7 @@ import { X, Copy, Check } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenPurchaseOrder } from "@/lib/firestore/purchaseOrders";
 import { listenClient } from "@/lib/firestore/clients";
-import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO } from "@/lib/orderCalc";
+import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD } from "@/lib/orderCalc";
 import { Client, PurchaseOrder } from "@/lib/types";
 import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
@@ -86,6 +86,9 @@ export default function PurchaseOrderInvoicePage() {
   // 직접 등록한 것이든(INV-) 상관없이, 찍히는 번호는 항상 INV/RCP로 보여준다.
   // poNumber 필드 자체(발주서 쪽에서 쓰는 진짜 발주번호)는 그대로 두고 화면 표시만 바꾼다.
   const invoiceNumber = order.poNumber.replace(/^(PO|INV|RCP)-/, isReceipt ? "RCP-" : "INV-");
+  const totals = calcOrderTotals(order.items);
+  // 달러(USD) 항목만으로 구성된 청구는 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의로 발행한다.
+  const isHk = totals.hasUsd && !totals.hasKrw;
 
   return (
     <div className="min-h-screen bg-[#e5e5e5] py-10 print:bg-white print:py-0">
@@ -148,9 +151,16 @@ export default function PurchaseOrderInvoicePage() {
             <p className="mt-1 text-xs text-[#86868b]">{isReceipt ? "RECEIPT" : "INVOICE"}</p>
           </div>
           <div className="text-right text-sm">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
-            <p className="mt-1.5 text-xs text-[#86868b]">제품기획 · 설계 · 개발 · 금형 · 양산</p>
+            {isHk ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/logo-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY" className="ml-auto h-[30px] object-contain" />
+            ) : (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+                <p className="mt-1.5 text-xs text-[#86868b]">제품기획 · 설계 · 개발 · 금형 · 양산</p>
+              </>
+            )}
           </div>
         </div>
 
@@ -175,9 +185,8 @@ export default function PurchaseOrderInvoicePage() {
         </div>
 
         {(() => {
-          const totals = calcOrderTotals(order.items);
-          const grandTotal = totals.hasUsd && !totals.hasKrw ? totals.usdTotal : totals.krwTotal;
-          const grandCurrency = totals.hasUsd && !totals.hasKrw ? "USD" : "KRW";
+          const grandTotal = isHk ? totals.usdTotal : totals.krwTotal;
+          const grandCurrency = isHk ? "USD" : "KRW";
           const grandHasVat = grandCurrency === "KRW" && totals.krwVat > 0;
 
           const vatRatio = totals.krwSupply > 0 ? totals.krwVat / totals.krwSupply : 0;
@@ -228,7 +237,7 @@ export default function PurchaseOrderInvoicePage() {
                 )}
                 <tr className="border-t-2 border-[#1d1d1f]">
                   <td className="py-3 text-lg font-bold">청구 금액 {installmentVat > 0 ? "(VAT 포함)" : ""}</td>
-                  <td className="py-3 text-right text-lg font-bold">{installmentPayable.toLocaleString()}원</td>
+                  <td className="py-3 text-right text-lg font-bold">{formatMoney(installmentPayable, grandCurrency)}</td>
                 </tr>
               </tbody>
             </table>
@@ -238,20 +247,30 @@ export default function PurchaseOrderInvoicePage() {
         <div className="mt-4">
           <p className="mb-1 text-xs font-semibold text-[#86868b]">입금계좌 안내</p>
           <p className="whitespace-pre-wrap text-xs text-[#86868b]">
-            {order.payment.note || DEFAULT_BANK_INFO}
+            {order.payment.note || (isHk ? DEFAULT_BANK_INFO_USD : DEFAULT_BANK_INFO)}
           </p>
         </div>
 
         <div className="mt-auto text-xs text-[#86868b]">
           <div className="flex justify-end">
             <div className="w-40 text-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
-              <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
-                주식회사 핸디핸드
-                <br />
-                대표 최형준
-              </p>
+              {isHk ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/stamp-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY 직인" className="mx-auto h-[65px] object-contain" />
+                  <p className="mt-1 text-xs leading-relaxed text-[#86868b]">AIM TECHNOLOGY (HK) COMPANY</p>
+                </>
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
+                  <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
+                    주식회사 핸디핸드
+                    <br />
+                    대표 최형준
+                  </p>
+                </>
+              )}
             </div>
           </div>
 
@@ -266,7 +285,7 @@ export default function PurchaseOrderInvoicePage() {
           </p>
           <div className="flex items-end justify-between border-t border-[#e5e5e5] pt-3">
             <p>본 {isReceipt ? "영수증" : "청구서"}는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
-            <p>HANDYHAND</p>
+            <p>{isHk ? "AIM TECHNOLOGY (HK) COMPANY" : "HANDYHAND"}</p>
           </div>
         </div>
         </div>

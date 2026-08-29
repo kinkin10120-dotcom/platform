@@ -68,10 +68,22 @@ const FEATURES = [
     desc: "제품 카탈로그에서 담아 발주를 넣으면 전자서명으로 확정되고, 계약금·잔금은 회차별로 나눠 발주서·청구서가 자동 발행됩니다.",
     isNew: true,
   },
+  {
+    icon: FileEdit,
+    title: "견적서 확인부터 수락까지 한 번에",
+    desc: "품목별 단가가 담긴 정식 견적서를 이메일로 받아보고, 그 자리에서 내용을 확인한 뒤 수락 여부를 알려주시면 바로 다음 단계로 진행됩니다.",
+    isNew: true,
+  },
+  {
+    icon: Mail,
+    title: "매주 받아보는 프로젝트 요약",
+    desc: "매주 월요일, 내 프로젝트의 마감 임박·지연 현황을 AI가 요약해 정리한 리포트를 이메일로 받아보실 수 있습니다.",
+    isNew: true,
+  },
 ];
 
 const STEPS = [
-  { step: "01", title: "견적 요청", desc: "홈페이지에서 제품 개요와 개발 단계를 입력하고 견적을 요청합니다.", icon: FileEdit },
+  { step: "01", title: "견적 요청", desc: "홈페이지에서 제품 개요와 개발 단계를 입력해 견적을 요청하면, 정식 견적서를 받아보고 그 자리에서 확인 후 진행 여부를 결정하실 수 있습니다.", icon: FileEdit },
   { step: "02", title: "첫 미팅", desc: "대면 또는 화상으로 핸디핸드와 제품 방향, 일정, 예산을 구체적으로 논의합니다.", icon: Video },
   { step: "03", title: "계약 체결", desc: "논의된 범위와 일정을 바탕으로 정식 계약을 체결합니다.", icon: FileSignature },
   { step: "04", title: "HANDYWORKS 계정 발급", desc: "계약 후 핸디핸드가 클라이언트 전용 계정을 만들면, 이메일로 비밀번호 설정 링크와 간단한 사용법이 자동으로 발송됩니다.", icon: UserPlus },
@@ -316,7 +328,7 @@ export default function HandyPMPage() {
           </h1>
           <p className="mx-auto mb-10 max-w-xl text-base leading-relaxed text-white/50">
             메신저와 이메일로 흩어지던 소통을 한 곳으로,<br className="sm:hidden" />
-            기획부터 납품까지, 모든 과정을 HANDYWORKS에서 확인해보세요.
+            견적부터 납품까지, 모든 과정을 HANDYWORKS에서 확인해보세요.
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link href={firebaseUser ? "/home" : "/login"} className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition hover:bg-white/90">
@@ -508,23 +520,28 @@ export default function HandyPMPage() {
               How it works
             </p>
             <h2 className="text-3xl font-bold text-[#1d1d1f] sm:text-4xl">다음과 같은 순서로 진행됩니다</h2>
-            <p className="mx-auto mt-3 max-w-lg text-sm text-[#86868b] sm:text-base">견적 요청부터 양산까지, 아래 단계로 진행됩니다.</p>
+            <p className="mx-auto mt-3 max-w-lg text-sm text-[#86868b] sm:text-base">견적 요청부터 양산까지, 끊김없이 하나의 플랫폼 안에서 이어집니다.</p>
           </div>
 
-          <div className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-y-14">
-            {STEPS.map((s, i) => (
-              <div key={s.step} className="relative lg:px-5">
-                {i < STEPS.length - 1 && (i + 1) % 3 !== 0 && (
-                  <div className="absolute right-0 top-6 hidden w-8 border-t border-dashed border-[#d1d1d6] lg:block" />
-                )}
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1d1d1f]">
-                  <s.icon size={18} className="text-white" />
+          <div className="relative">
+            {/* 1행(1~3)과 2행(4~6) 사이를 잇는 연결선 — 전체가 하나의 흐름이라는 걸
+                그리드가 두 줄로 꺾이는 지점에서도 눈으로 이어 보이게 한다. */}
+            <div className="pointer-events-none absolute left-1/2 top-[8.5rem] hidden h-14 w-px -translate-x-1/2 bg-[#d1d1d6] lg:block" />
+            <div className="grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3 lg:gap-y-14">
+              {STEPS.map((s, i) => (
+                <div key={s.step} className="relative lg:px-5">
+                  {i < STEPS.length - 1 && (i + 1) % 3 !== 0 && (
+                    <div className="absolute right-0 top-6 hidden w-8 border-t border-[#d1d1d6] lg:block" />
+                  )}
+                  <div className="relative z-10 mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#1d1d1f]">
+                    <s.icon size={18} className="text-white" />
+                  </div>
+                  <span className="text-xs font-bold uppercase tracking-widest text-[#86868b]">STEP {s.step}</span>
+                  <h3 className="mb-2 mt-1 font-bold text-[#1d1d1f]">{s.title}</h3>
+                  <p className="text-sm leading-relaxed text-[#86868b]">{s.desc}</p>
                 </div>
-                <span className="text-xs font-bold uppercase tracking-widest text-[#86868b]">STEP {s.step}</span>
-                <h3 className="mb-2 mt-1 font-bold text-[#1d1d1f]">{s.title}</h3>
-                <p className="text-sm leading-relaxed text-[#86868b]">{s.desc}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>

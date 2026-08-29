@@ -8,7 +8,7 @@ import { listenClients } from "@/lib/firestore/clients";
 import { listenUsersByClient } from "@/lib/firestore/users";
 import { listenProjectsByClient } from "@/lib/firestore/projects";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
-import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO } from "@/lib/orderCalc";
+import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD } from "@/lib/orderCalc";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
 import {
   listenClientProducts,
@@ -603,14 +603,21 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
   const { appUser } = useAuth();
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<{ label: string; amount: string }[]>(() => defaultInstallmentRows(order));
-  const [note, setNote] = useState(order.payment?.note ?? DEFAULT_BANK_INFO);
+  // 달러(USD) 항목만으로 구성된 발주는 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 해외송금 계좌가
+  // 기본값이어야 한다 — 국내계좌로는 실제 USD 해외송금을 받을 수 없다.
+  const orderIsHk = (() => {
+    const t = calcOrderTotals(order.items);
+    return t.hasUsd && !t.hasKrw;
+  })();
+  const defaultBankInfo = orderIsHk ? DEFAULT_BANK_INFO_USD : DEFAULT_BANK_INFO;
+  const [note, setNote] = useState(order.payment?.note || defaultBankInfo);
   const [saving, setSaving] = useState(false);
 
   const rowsTotal = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   function startEdit() {
     setRows(defaultInstallmentRows(order));
-    setNote(order.payment?.note ?? DEFAULT_BANK_INFO);
+    setNote(order.payment?.note || defaultBankInfo);
     setEditing(true);
   }
 

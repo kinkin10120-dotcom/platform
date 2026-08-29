@@ -2,6 +2,11 @@ import { Currency, PurchaseOrderItem } from "@/lib/types";
 
 export const DEFAULT_BANK_INFO = "하나은행 871-910012-21104 주식회사 핸디핸드";
 
+// 달러(USD)로만 구성된 청구는 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의 해외송금 계좌로 받는다 —
+// 국내계좌로는 실제 USD 해외송금을 받을 수 없어, 원화 청구서와 계좌를 분리해서 관리한다.
+export const DEFAULT_BANK_INFO_USD =
+  "KOREA EXCHANGE BANK HONG KONG BRANCH\nSWIFT Code: KOEXHK HH\nAccount No.: 3401047970\nBeneficiary: AIM TECHNOLOGY (HK) COMPANY\nBeneficiary Add.: 11/F, CNT House, 120 Johnston Rd., Wanchai, Hong Kong";
+
 export function formatMoney(amount: number, currency: Currency): string {
   if (currency === "USD") {
     return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

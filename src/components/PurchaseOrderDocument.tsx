@@ -144,7 +144,7 @@ export default function PurchaseOrderDocument({ data }: { data: PurchaseOrderDoc
         </p>
         <div className="flex items-end justify-between border-t border-[#e5e5e5] pt-3">
           <p>본 발주서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
-          <p>HANDYHAND</p>
+          <p>{data.clientName}</p>
         </div>
       </div>
     </div>

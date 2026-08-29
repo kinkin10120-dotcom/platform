@@ -14,6 +14,9 @@ export interface QuoteDocumentData {
 export default function QuoteDocument({ data }: { data: QuoteDocumentData }) {
   const issuedDate = new Date(data.quoteIssuedAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
   const totals = calcOrderTotals(data.items);
+  // 달러(USD) 항목만으로 구성된 견적은 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의로 발행한다 —
+  // 결제 계좌가 홍콩 법인 앞으로 되어 있어, 원화 청구서(핸디핸드 발행)와 발행 주체를 분리해야 한다.
+  const isHk = totals.hasUsd && !totals.hasKrw;
 
   return (
     <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -23,9 +26,16 @@ export default function QuoteDocument({ data }: { data: QuoteDocumentData }) {
           <p className="mt-1 text-xs text-[#86868b]">QUOTATION</p>
         </div>
         <div className="text-right text-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
-          <p className="mt-1.5 text-xs text-[#86868b]">제품기획 · 설계 · 개발 · 금형 · 양산</p>
+          {isHk ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/logo-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY" className="ml-auto h-[30px] object-contain" />
+          ) : (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+              <p className="mt-1.5 text-xs text-[#86868b]">제품기획 · 설계 · 개발 · 금형 · 양산</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -36,10 +46,19 @@ export default function QuoteDocument({ data }: { data: QuoteDocumentData }) {
         </div>
         <div className="space-y-1.5">
           <Row label="발행일" value={issuedDate} />
-          <Row label="발행" value="주식회사 핸디핸드" />
-          <Row label="대표자" value="최형준" />
-          <Row label="사업자번호" value="128-87-00105" />
-          <Row label="주소" value="경기도 고양시 덕양구 삼원로63 고양아크비즈지식산업센터 F804호" />
+          {isHk ? (
+            <>
+              <Row label="발행" value="AIM TECHNOLOGY (HK) COMPANY" />
+              <Row label="주소" value="11/F, CNT House, 120 Johnston Rd., Wanchai, Hong Kong" />
+            </>
+          ) : (
+            <>
+              <Row label="발행" value="주식회사 핸디핸드" />
+              <Row label="대표자" value="최형준" />
+              <Row label="사업자번호" value="128-87-00105" />
+              <Row label="주소" value="경기도 고양시 덕양구 삼원로63 고양아크비즈지식산업센터 F804호" />
+            </>
+          )}
         </div>
       </div>
 
@@ -93,19 +112,29 @@ export default function QuoteDocument({ data }: { data: QuoteDocumentData }) {
       <div className="mt-auto text-xs text-[#86868b]">
         <div className="flex justify-end">
           <div className="w-40 shrink-0 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
-            <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
-              주식회사 핸디핸드
-              <br />
-              대표 최형준
-            </p>
+            {isHk ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/stamp-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY 직인" className="mx-auto h-[65px] object-contain" />
+                <p className="mt-1.5 text-xs leading-relaxed text-[#86868b]">AIM TECHNOLOGY (HK) COMPANY</p>
+              </>
+            ) : (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
+                <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
+                  주식회사 핸디핸드
+                  <br />
+                  대표 최형준
+                </p>
+              </>
+            )}
           </div>
         </div>
 
         <div className="flex items-end justify-between border-t border-[#e5e5e5] pt-3 mt-3">
           <p>본 견적서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
-          <p>HANDYHAND</p>
+          <p>{isHk ? "AIM TECHNOLOGY (HK) COMPANY" : "HANDYHAND"}</p>
         </div>
       </div>
     </div>

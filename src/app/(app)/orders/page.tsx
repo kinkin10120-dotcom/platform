@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus } from "lucide-react";
+import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenUsersByClient } from "@/lib/firestore/users";
 import { listenProjectsByClient } from "@/lib/firestore/projects";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
 import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD } from "@/lib/orderCalc";
+import { downloadCsv } from "@/lib/csvExport";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
 import {
   listenClientProducts,
@@ -148,6 +149,52 @@ function OrdersTab() {
   const active = orders.filter((o) => o.status !== "shipped" && o.status !== "cancelled");
   const done = orders.filter((o) => o.status === "shipped" || o.status === "cancelled");
 
+  // 세무/회계 처리용 — 화면에 보이는 발주 상태와 무관하게 전체 발주를 회차(installment) 단위로
+  // 한 줄씩 뽑는다. 발주 총액이 아니라 회차별로 나누는 이유는, 실제 입금/미입금은 회차 단위로
+  // 갈리기 때문에(선금 입금됐는데 잔금은 아직인 경우 등) 그래야 회계상 바로 쓸 수 있다.
+  function handleExportCsv() {
+    const rows: (string | number)[][] = [];
+    for (const o of orders) {
+      const totals = calcOrderTotals(o.items);
+      const currency: Currency = totals.hasUsd && !totals.hasKrw ? "USD" : "KRW";
+      const installments = o.payment?.installments ?? [];
+      if (installments.length === 0) {
+        rows.push([
+          o.poNumber,
+          o.clientName,
+          o.orderedByName,
+          o.items.map((it) => it.productName).join(" / "),
+          PURCHASE_ORDER_STATUS_LABEL[o.status],
+          currency,
+          "", "", "", "", "",
+          new Date(o.createdAt).toLocaleDateString("ko-KR"),
+        ]);
+        continue;
+      }
+      for (const it of installments) {
+        rows.push([
+          o.poNumber,
+          o.clientName,
+          o.orderedByName,
+          o.items.map((i) => i.productName).join(" / "),
+          PURCHASE_ORDER_STATUS_LABEL[o.status],
+          currency,
+          it.label,
+          it.amount,
+          it.paid ? "입금완료" : "미입금",
+          it.issuedAt ? new Date(it.issuedAt).toLocaleDateString("ko-KR") : "",
+          it.paidAt ? new Date(it.paidAt).toLocaleDateString("ko-KR") : "",
+          new Date(o.createdAt).toLocaleDateString("ko-KR"),
+        ]);
+      }
+    }
+    downloadCsv(
+      `발주내역_${new Date().toISOString().slice(0, 10)}.csv`,
+      ["발주번호", "클라이언트", "담당자", "품목", "발주상태", "통화", "회차명", "회차금액", "입금상태", "청구발행일", "입금일", "발주등록일"],
+      rows
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-2">
@@ -157,6 +204,14 @@ function OrdersTab() {
         >
           <FilePlus size={14} /> 발주 없이 직접 등록 (청구서 전용)
         </button>
+        {orders.length > 0 && (
+          <button
+            onClick={handleExportCsv}
+            className="mb-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+          >
+            <Download size={12} /> 전체 발주 내역 CSV 다운로드
+          </button>
+        )}
 
         {active.length > 0 && (
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-500">진행중 ({active.length})</p>

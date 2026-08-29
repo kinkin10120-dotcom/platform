@@ -387,6 +387,7 @@ export interface PaymentInstallment {
   paid: boolean;
   paidAt?: number;
   issuedAt?: number; // 이 회차 청구서 발행 시각 — 발행 전에는 PDF 다운로드 불가
+  paymentReminderSentAt?: number; // 미수금 리마인더 발송 시각 — 회차당 한 번만 보낸다
 }
 
 export interface PurchaseOrderPayment {

@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { onDocumentUpdated } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { db, internalNotifySecret, sendNotifyEmail } from "./shared";
 
 async function sendInquiryAnsweredEmail(email: string, info: { title: string; answer: string }) {
@@ -43,6 +44,49 @@ export const onInquiryAnswered = onDocumentUpdated(
 
     if (after.email) {
       await sendInquiryAnsweredEmail(after.email, { title: after.title, answer: after.answer });
+    }
+  }
+);
+
+// 답변 안 된 문의가 방치되는 걸 막는 리마인더 — 다른 리마인더(견적/청구서/계약서/업무)는 전부
+// "우리가 보낸 걸 상대가 방치"하는 쪽이었는데, 이건 반대로 "고객이 보낸 걸 우리가 방치"하는
+// 쪽이라 응대 품질에 직접 영향을 준다. 최초 접수는 이미 즉시 알림(관리자 전원 알림 또는
+// /api/contact의 직접 이메일)이 가므로, 여기서는 그 후 3일 간격으로 미답변 상태만 재알린다.
+export const checkPendingInquiries = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Seoul", secrets: [internalNotifySecret] },
+  async () => {
+    const snap = await db.collection("inquiries").where("status", "==", "pending").get();
+    const now = Date.now();
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+    const adminsSnap = await db.collection("users").where("role", "==", "admin").get();
+    if (adminsSnap.empty) return;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      const createdAtMs = data.createdAt?.toMillis ? data.createdAt.toMillis() : data.createdAt;
+      if (!createdAtMs) continue;
+      const lastReminderMs = data.lastAnswerReminderNotifiedAt?.toMillis
+        ? data.lastAnswerReminderNotifiedAt.toMillis()
+        : data.lastAnswerReminderNotifiedAt;
+      const reference = lastReminderMs ?? createdAtMs;
+      if (now - reference < THREE_DAYS_MS) continue;
+
+      await docSnap.ref.update({ lastAnswerReminderNotifiedAt: FieldValue.serverTimestamp() });
+
+      const daysWaiting = Math.round((now - createdAtMs) / (24 * 60 * 60 * 1000));
+      await Promise.all(
+        adminsSnap.docs.map((a) =>
+          db.collection("notifications").add({
+            userId: a.id,
+            type: "inquiry",
+            message: `${data.userName}님의 문의("${data.title}")가 ${daysWaiting}일째 답변되지 않았습니다.`,
+            details: [`문의 내용: ${data.content}`],
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+          })
+        )
+      );
     }
   }
 );

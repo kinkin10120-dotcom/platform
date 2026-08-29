@@ -311,8 +311,9 @@ export default function ContractBodyEditor({
   // 관리자가 본문을 직접 손으로 써서 "서명: (전자서명 대기 중)" 같은 가짜 서명란 텍스트를
   // 타이핑해 넣는 경우, 실제 직인/서명 이미지가 나오는 signatureBlock 노드로 그 자리에서
   // 바로 바꿔 끼울 수 있게 커서 위치에 삽입한다. 서명 전이라 attrs는 아직 비어있는 상태로
-  // 넣는다(을 직인은 variant만으로 항상 실제 이미지가 나오고, 갑 서명은 실제 서명 시점에
-  // Cloud Function이 signedBodyText를 새로 만들 때 채워진다).
+  // 넣는다(을 직인은 variant·entity만으로 항상 실제 이미지가 나오고, 갑 서명은 실제 서명
+  // 시점에 Cloud Function이 signedBodyText를 새로 만들 때 채워진다). 을 직인은 계약금액
+  // 통화(headerData.currency)로 핸디핸드/AIM 법인을 자동으로 고른다.
   function insertSignatureBlock(variant: "gap" | "eul") {
     if (!editor) return;
     editor
@@ -328,6 +329,7 @@ export default function ContractBodyEditor({
           signedAtLabel: null,
           sentBy: null,
           sentAtLabel: null,
+          entity: variant === "eul" && headerData?.currency === "USD" ? "aim" : "handyhand",
         },
       })
       .run();

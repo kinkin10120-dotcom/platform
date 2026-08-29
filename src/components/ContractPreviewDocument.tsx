@@ -50,6 +50,9 @@ const ATTACHMENT_HEADER_HEIGHT_PX = 60;
 // ContractBodyEditor의 "크게 편집" 화면 상단에도 동일한 헤더를 그대로 재사용한다(편집 중에도
 // 미리보기와 같은 위치에 제목/당사자/금액 정보가 보이도록).
 export function PageHeader({ data }: { data: ContractHeaderData }) {
+  // 계약금액이 달러(USD)면 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의로 나간다 — 국내계좌로는
+  // 실제 USD 해외송금을 받을 수 없어, 견적서·청구서와 마찬가지로 원화 계약과 발행 주체를 분리한다.
+  const ourEntityName = data.currency === "USD" ? "AIM TECHNOLOGY (HK) COMPANY" : "주식회사 핸디핸드";
   return (
     <>
       <div className="border-b border-[#1d1d1f] pb-6">
@@ -60,11 +63,11 @@ export function PageHeader({ data }: { data: ContractHeaderData }) {
         <div className="col-span-2 grid grid-cols-2 gap-x-6">
           <div>
             <p className="text-[#86868b]">갑</p>
-            <p className="mt-0.5 text-[#1d1d1f]">{data.handyhandIsGap ? "주식회사 핸디핸드" : data.companyName}</p>
+            <p className="mt-0.5 text-[#1d1d1f]">{data.handyhandIsGap ? ourEntityName : data.companyName}</p>
           </div>
           <div>
             <p className="text-[#86868b]">을</p>
-            <p className="mt-0.5 text-[#1d1d1f]">{data.handyhandIsGap ? data.companyName : "주식회사 핸디핸드"}</p>
+            <p className="mt-0.5 text-[#1d1d1f]">{data.handyhandIsGap ? data.companyName : ourEntityName}</p>
           </div>
         </div>
         {data.paymentTerms && (

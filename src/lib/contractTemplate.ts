@@ -119,6 +119,8 @@ function buildEulSignatureHtml(f: ContractTokenFields): string {
     signedAtLabel: null,
     sentBy: f.sentBy || null,
     sentAtLabel: f.sentAt ? formatKoreanDateTime(f.sentAt) : null,
+    // 계약금액이 달러(USD)면 을이 홍콩 법인(AIM)이라 직인도 그쪽 걸로 나가야 한다.
+    entity: f.currency === "USD" ? "aim" : "handyhand",
   });
 }
 
@@ -133,6 +135,7 @@ function buildGapSignatureHtml(f: ContractTokenFields): string {
     signedAtLabel: f.signedAt ? formatKoreanDateTime(f.signedAt) : null,
     sentBy: null,
     sentAtLabel: null,
+    entity: null,
   });
 }
 

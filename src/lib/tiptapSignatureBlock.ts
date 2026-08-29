@@ -13,6 +13,9 @@ export interface SignatureBlockAttrs {
   signedAtLabel: string | null;
   sentBy: string | null;
   sentAtLabel: string | null;
+  // 을 쪽 직인이 어느 법인 것인지 — 계약금액이 달러(USD)면 홍콩 법인(AIM) 명의로 나간다.
+  // 기본값(null)은 기존 문서와의 호환을 위해 항상 핸디핸드로 취급한다.
+  entity: "handyhand" | "aim" | null;
 }
 
 type DomChild = readonly [string, Record<string, string>, ...(string | DomChild)[]];
@@ -21,6 +24,10 @@ type DomChild = readonly [string, Record<string, string>, ...(string | DomChild)
 // 매번 다시 올릴 필요 없이 고정 이미지를 재사용한다(직인은 모든 계약서에서 항상 동일).
 export const HANDYHAND_SEAL_URL =
   "https://firebasestorage.googleapis.com/v0/b/handyhand-a175a.firebasestorage.app/o/assets%2Fhandyhand-seal.png?alt=media";
+
+// 을(AIM TECHNOLOGY (HK) COMPANY) 직인 — 달러 계약금액일 때만 쓴다.
+export const AIM_SEAL_URL =
+  "https://firebasestorage.googleapis.com/v0/b/handyhand-a175a.firebasestorage.app/o/assets%2Fhandyhand-aim-seal.png?alt=media";
 
 // resolveContractTokens(문자열 치환 경로, Tiptap을 거치지 않는 미리보기/서명 페이지용)와
 // 이 노드의 renderHTML(에디터 렌더링용) 양쪽이 똑같은 모양을 만들도록, 자식 요소 구성을
@@ -38,8 +45,9 @@ export function buildSignatureBlockChildren(attrs: SignatureBlockAttrs): DomChil
     }
     // 갑 쪽 서명란("서명: 이름 · 직책 · 일시")과 같은 포맷으로 맞춘다 — 발송자는 이미 "발송
     // 정보 (을)" 패널에 따로 나와 있어서 여기 또 넣으면 형식만 갑과 달라지고 중복이었다.
+    const sealUrl = attrs.entity === "aim" ? AIM_SEAL_URL : HANDYHAND_SEAL_URL;
     return [
-      ["img", { src: HANDYHAND_SEAL_URL, alt: "직인", class: "signature-seal-image" }],
+      ["img", { src: sealUrl, alt: "직인", class: "signature-seal-image" }],
       ["p", { class: "signature-line" }, `서명: 최형준 · 대표 · ${attrs.sentAtLabel}`],
     ];
   }
@@ -76,6 +84,7 @@ function attrToDataAttrs(attrs: SignatureBlockAttrs): Record<string, string> {
     ...(attrs.signedAtLabel ? { "data-signed-at-label": attrs.signedAtLabel } : {}),
     ...(attrs.sentBy ? { "data-sent-by": attrs.sentBy } : {}),
     ...(attrs.sentAtLabel ? { "data-sent-at-label": attrs.sentAtLabel } : {}),
+    ...(attrs.entity ? { "data-entity": attrs.entity } : {}),
     class: "signature-block",
     contenteditable: "false",
   };
@@ -128,6 +137,7 @@ export const SignatureBlock = Node.create({
       signedAtLabel: { default: null },
       sentBy: { default: null },
       sentAtLabel: { default: null },
+      entity: { default: null },
     };
   },
 
@@ -145,6 +155,7 @@ export const SignatureBlock = Node.create({
             signedAtLabel: el.getAttribute("data-signed-at-label"),
             sentBy: el.getAttribute("data-sent-by"),
             sentAtLabel: el.getAttribute("data-sent-at-label"),
+            entity: el.getAttribute("data-entity"),
           };
         },
       },

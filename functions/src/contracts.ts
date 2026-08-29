@@ -37,8 +37,9 @@ export const sendContract = onCall({ invoker: "public" }, async (request) => {
   const userAgent = request.rawRequest?.headers?.["user-agent"] ?? "";
   // 발송자는 "이 로그인 계정이 누구였는지"가 아니라 "을(계약 당사자)이 누구인지"를 남기는
   // 것이므로, 직인 옆 서명("최형준 · 대표")과 마찬가지로 항상 같은 값으로 고정한다 — 여러
-  // 관리자 계정이 있어도 발송자 표기는 흔들리지 않는다.
-  const sentBy = "주식회사 핸디핸드 최형준 대표";
+  // 관리자 계정이 있어도 발송자 표기는 흔들리지 않는다. 계약금액이 달러(USD)면 을이 홍콩
+  // 법인(AIM)이므로 발송자 표기(관리자 화면 전용, 고객에게는 안 보임)도 그에 맞춘다.
+  const sentBy = data.currency === "USD" ? "AIM TECHNOLOGY (HK) COMPANY 최형준 대표" : "주식회사 핸디핸드 최형준 대표";
 
   // data는 이번 발송 이전 상태라 sentBy/sentAt이 아직(또는 이전 발송 값 그대로) 남아있다 —
   // {{eulSignature}} 토큰이 이번 발송 기준으로 정확히 치환되도록 방금 확정된 값을 합쳐 넣는다.
@@ -124,13 +125,16 @@ function escapeHtmlAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// src/lib/tiptapSignatureBlock.ts의 HANDYHAND_SEAL_URL과 동일한 이미지(직인, Storage에
-// 업로드해둔 고정 자산).
+// src/lib/tiptapSignatureBlock.ts의 HANDYHAND_SEAL_URL/AIM_SEAL_URL과 동일한 이미지(직인,
+// Storage에 업로드해둔 고정 자산). 계약금액이 달러(USD)면 홍콩 법인(AIM) 직인을 쓴다.
 const HANDYHAND_SEAL_URL =
   "https://firebasestorage.googleapis.com/v0/b/handyhand-a175a.firebasestorage.app/o/assets%2Fhandyhand-seal.png?alt=media";
+const AIM_SEAL_URL =
+  "https://firebasestorage.googleapis.com/v0/b/handyhand-a175a.firebasestorage.app/o/assets%2Fhandyhand-aim-seal.png?alt=media";
 
 function buildEulSignatureHtml(f: FirebaseFirestore.DocumentData): string {
   const sentAtLabel = formatKoreanDateTime(f.sentAt);
+  const entity = f.currency === "USD" ? "aim" : "handyhand";
   // 발송 전(초안·수정 단계)에는 갑과 똑같은 빈 영역으로 보여주다가, 실제로 "발송" 버튼을
   // 눌러 고객에게 서명 요청을 보내는 시점(sentAt이 채워짐)에만 진짜 직인 이미지로 바뀐다.
   // src/lib/tiptapSignatureBlock.ts와 정확히 같은 속성 집합(contenteditable="false" 포함)과
@@ -138,7 +142,7 @@ function buildEulSignatureHtml(f: FirebaseFirestore.DocumentData): string {
   // 에디터(editor.getHTML())가 뱉는 형식과 한 글자라도 다르면, 편집 중 매 타이핑마다 내용이
   // 통째로 다시 그려지면서 한글 입력기 조합이 깨지는 문제로 이어진다.
   if (!sentAtLabel) {
-    return `<div data-signature-block="" data-variant="eul" class="signature-block" contenteditable="false"><div class="signature-placeholder-box">직인</div><p class="signature-line signature-line-empty">서명: (발송 대기 중)</p></div>`;
+    return `<div data-signature-block="" data-variant="eul" data-entity="${entity}" class="signature-block" contenteditable="false"><div class="signature-placeholder-box">직인</div><p class="signature-line signature-line-empty">서명: (발송 대기 중)</p></div>`;
   }
   // 갑 쪽 서명란("서명: 이름 · 직책 · 일시")과 같은 포맷으로 맞춘다 — 발송자는 이미 "발송
   // 정보 (을)" 패널에 따로 나와 있어서 여기 또 넣으면 형식만 갑과 달라지고 중복이었다.
@@ -147,10 +151,12 @@ function buildEulSignatureHtml(f: FirebaseFirestore.DocumentData): string {
     'data-variant="eul"',
     f.sentBy ? `data-sent-by="${escapeHtmlAttr(String(f.sentBy))}"` : "",
     `data-sent-at-label="${escapeHtmlAttr(sentAtLabel)}"`,
+    `data-entity="${entity}"`,
     'class="signature-block"',
     'contenteditable="false"',
   ].filter(Boolean).join(" ");
-  return `<div ${attrs}><img src="${HANDYHAND_SEAL_URL}" alt="직인" class="signature-seal-image"><p class="signature-line">서명: 최형준 · 대표 · ${sentAtLabel}</p></div>`;
+  const sealUrl = entity === "aim" ? AIM_SEAL_URL : HANDYHAND_SEAL_URL;
+  return `<div ${attrs}><img src="${sealUrl}" alt="직인" class="signature-seal-image"><p class="signature-line">서명: 최형준 · 대표 · ${sentAtLabel}</p></div>`;
 }
 
 // 갑(상대방) 서명 — 서명 전에는 빈 서명란만 보이다가, 전자서명이 완료되면 실제 서명 이미지와

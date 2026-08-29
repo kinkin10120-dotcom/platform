@@ -765,8 +765,8 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
         </div>
 
         <p className={`text-xs ${rowsTotal === order.totalAmount ? "text-[#86868b]" : "text-amber-600"}`}>
-          합계 {rowsTotal.toLocaleString()}원 / 발주 총액 {order.totalAmount.toLocaleString()}원
-          {rowsTotal !== order.totalAmount && ` (차이 ${(order.totalAmount - rowsTotal).toLocaleString()}원)`}
+          합계 {formatMoney(rowsTotal, orderIsHk ? "USD" : "KRW")} / 발주 총액 {formatMoney(order.totalAmount, orderIsHk ? "USD" : "KRW")}
+          {rowsTotal !== order.totalAmount && ` (차이 ${formatMoney(order.totalAmount - rowsTotal, orderIsHk ? "USD" : "KRW")})`}
         </p>
 
         <div>
@@ -829,7 +829,7 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
         <div key={i} className="space-y-1.5 rounded-xl bg-[#f5f5f7] p-3">
           <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-sm">
             <span className="text-[#1d1d1f]">
-              {it.label} {it.amount.toLocaleString()}원
+              {it.label} {formatMoney(it.amount, orderIsHk ? "USD" : "KRW")}
               {vat > 0 && <span className="ml-1 text-xs text-[#86868b]">(VAT 별도 {vat.toLocaleString()}원, 합계 {(it.amount + vat).toLocaleString()}원)</span>}
             </span>
             {it.paid ? (

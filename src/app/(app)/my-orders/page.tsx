@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { listenClient } from "@/lib/firestore/clients";
 import { listenClientProducts } from "@/lib/firestore/products";
 import { listenMyPurchaseOrders, createPurchaseOrder, requestOrderCancel } from "@/lib/firestore/purchaseOrders";
-import { formatMoney } from "@/lib/orderCalc";
+import { formatMoney, calcOrderTotals } from "@/lib/orderCalc";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
 import SignaturePad from "@/components/SignaturePad";
 import PdfPageScaler from "@/components/PdfPageScaler";
@@ -361,13 +361,16 @@ function MyOrderCard({ order: o }: { order: PurchaseOrder }) {
         </Link>
       </div>
 
-      {o.payment && (
+      {o.payment && (() => {
+        const orderTotals = calcOrderTotals(o.items);
+        const isUsdOrder = orderTotals.hasUsd && !orderTotals.hasKrw;
+        return (
         <div className="mt-3 space-y-2 rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-xs">
           <p className="font-medium text-[#86868b]">결제 정보</p>
           {o.payment.installments.map((it, i) => (
             <div key={i} className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-[#1d1d1f]">{it.label} {it.amount.toLocaleString()}원</span>
+                <span className="text-[#1d1d1f]">{it.label} {formatMoney(it.amount, isUsdOrder ? "USD" : "KRW")}</span>
                 <span className={it.paid ? "font-medium text-green-600" : "font-medium text-amber-600"}>
                   {it.paid ? "입금완료" : "입금대기"}
                 </span>
@@ -388,7 +391,8 @@ function MyOrderCard({ order: o }: { order: PurchaseOrder }) {
             <p className="whitespace-pre-wrap border-t border-[#e5e5e5] pt-1.5 text-[#86868b]">{o.payment.note}</p>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {canRequestCancel && (
         cancelling ? (

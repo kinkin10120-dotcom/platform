@@ -816,6 +816,7 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [quoteMemo, setQuoteMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
 
@@ -856,6 +857,53 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   }
 
   const inputClass = "w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]";
+
+  if (previewOpen) {
+    return (
+      <div className="fixed inset-0 z-50 min-h-screen overflow-y-auto bg-[#e5e5e5] py-10 print:bg-white print:py-0">
+        <style>{`
+          @page { size: 210mm 297mm; margin: 0; }
+          @media print {
+            .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
+            .pdf-scale-wrapper { width: auto !important; height: auto !important; }
+            .pdf-scale-inner { transform: none !important; width: auto !important; }
+          }
+        `}</style>
+        <div className="mx-auto mb-6 w-full max-w-[210mm] px-4 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+                title="닫기"
+              >
+                <X size={16} />
+              </button>
+              <p className="text-sm text-[#86868b]">발행 전 미리보기 — 실제 발송 화면과 동일합니다.</p>
+            </div>
+            <button
+              onClick={() => window.print()}
+              className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
+            >
+              인쇄 / PDF 저장
+            </button>
+          </div>
+        </div>
+        <PdfPageScaler>
+          <QuoteDocument
+            data={{
+              quoteId: "preview",
+              name: name || "(수신자 미입력)",
+              company: company || undefined,
+              items: validItems,
+              quoteMemo: quoteMemo.trim(),
+              quoteIssuedAt: Date.now(),
+            }}
+          />
+        </PdfPageScaler>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -910,6 +958,13 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
+          <button
+            onClick={() => setPreviewOpen(true)}
+            disabled={validItems.length === 0}
+            className="w-full rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+          >
+            미리보기
+          </button>
           <button
             onClick={handleSubmit}
             disabled={submitting || !name.trim() || !email.trim() || validItems.length === 0}

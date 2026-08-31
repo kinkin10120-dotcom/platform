@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Dispatch, SetStateAction } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Trash2, X, Plus, Paperclip, Download, Upload, ChevronDown, ChevronRight } from "lucide-react";
@@ -71,6 +71,118 @@ const FORMAL_QUOTE_STYLE: Record<FormalQuoteStatus, string> = {
 
 const emptyLineItem = (): QuoteLineItem => ({ name: "", unitPrice: 0, currency: "KRW", quantity: 1, unit: "개", vatApplicable: true });
 
+// 견적 상세 패널의 "견적서 작성"과, 문의 없이 바로 만드는 모달 둘 다에서 쓰는 품목 편집기 —
+// 단가 입력 중(특히 USD 소수점) 커서 처리·통화별 VAT 체크박스 숨김 등 로직이 꽤 있어서
+// 공유 컴포넌트로 뺐다.
+function QuoteItemsEditor({
+  items,
+  onChange,
+  priceDrafts,
+  setPriceDrafts,
+}: {
+  items: QuoteLineItem[];
+  onChange: (items: QuoteLineItem[]) => void;
+  priceDrafts: Record<number, string>;
+  setPriceDrafts: Dispatch<SetStateAction<Record<number, string>>>;
+}) {
+  function updateItem(index: number, patch: Partial<QuoteLineItem>) {
+    onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+  function removeItem(index: number) {
+    onChange(items.filter((_, i) => i !== index));
+    setPriceDrafts({});
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((it, i) => (
+        <div key={i} className="space-y-1 rounded-lg border border-[#f0f0f0] p-1.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              value={it.name}
+              onChange={(e) => updateItem(i, { name: e.target.value })}
+              placeholder="품명"
+              className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
+            />
+            <input
+              type="text"
+              inputMode="decimal"
+              value={priceDrafts[i] ?? (it.unitPrice ? it.unitPrice.toLocaleString("en-US") : "")}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9.]/g, "");
+                setPriceDrafts((prev) => ({ ...prev, [i]: formatAmountInput(raw) }));
+                updateItem(i, { unitPrice: raw === "" || raw === "." ? 0 : Number(raw) });
+              }}
+              onBlur={() => setPriceDrafts((prev) => { const next = { ...prev }; delete next[i]; return next; })}
+              placeholder="단가"
+              className="w-20 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
+            />
+            <select
+              value={it.currency}
+              onChange={(e) => {
+                const currency = e.target.value as Currency;
+                // 달러는 해외결제라 부가세 대상이 아니다 — USD로 바꾸면 VAT 별도 체크도 같이 풀어준다.
+                updateItem(i, currency === "USD" ? { currency, vatApplicable: false } : { currency });
+              }}
+              className="rounded-lg border border-[#d1d1d6] px-1 py-1.5 text-xs outline-none focus:border-[#86868b]"
+            >
+              <option value="KRW">KRW</option>
+              <option value="USD">USD</option>
+            </select>
+            <input
+              type="number"
+              value={it.quantity || ""}
+              onChange={(e) => updateItem(i, { quantity: Number(e.target.value) })}
+              placeholder="수량"
+              className="w-14 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
+            />
+            <button onClick={() => removeItem(i)} className="shrink-0 text-[#d1d1d6] hover:text-red-500">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex items-center gap-1.5 px-1">
+            <select
+              value={UNIT_PRESETS.includes(it.unit ?? "") ? it.unit : "__custom"}
+              onChange={(e) => updateItem(i, { unit: e.target.value === "__custom" ? "" : e.target.value })}
+              className="rounded-lg border border-[#d1d1d6] px-1.5 py-1 text-[11px] outline-none focus:border-[#86868b]"
+            >
+              {UNIT_PRESETS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+              <option value="__custom">직접입력</option>
+            </select>
+            {!UNIT_PRESETS.includes(it.unit ?? "") && (
+              <input
+                value={it.unit ?? ""}
+                onChange={(e) => updateItem(i, { unit: e.target.value })}
+                placeholder="단위 직접입력"
+                className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] px-2 py-1 text-[11px] outline-none focus:border-[#86868b]"
+              />
+            )}
+          </div>
+          {it.currency !== "USD" && (
+            <label className="flex items-center gap-1.5 px-1 text-[11px] text-[#86868b]">
+              <input
+                type="checkbox"
+                checked={it.vatApplicable ?? false}
+                onChange={(e) => updateItem(i, { vatApplicable: e.target.checked })}
+                className="h-3 w-3 accent-[#1d1d1f]"
+              />
+              VAT 별도
+            </label>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={() => onChange([...items, emptyLineItem()])}
+        className="flex items-center gap-1 text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]"
+      >
+        <Plus size={12} /> 품목 추가
+      </button>
+    </div>
+  );
+}
+
 export default function QuotesPage() {
   const { appUser } = useAuth();
   const router = useRouter();
@@ -90,6 +202,7 @@ export default function QuotesPage() {
   const [issuing, setIssuing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [directQuoteOpen, setDirectQuoteOpen] = useState(false);
 
   useEffect(() => {
     return listenQuoteRequests(setQuotes);
@@ -107,15 +220,6 @@ export default function QuotesPage() {
     setQuoteMemo(q.quoteMemo ?? "");
     setPriceDrafts({});
     setEditingQuote(true);
-  }
-
-  function updateItem(index: number, patch: Partial<QuoteLineItem>) {
-    setQuoteItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
-  }
-
-  function removeItem(index: number) {
-    setQuoteItems((prev) => prev.filter((_, i) => i !== index));
-    setPriceDrafts({});
   }
 
   async function handleIssueQuote() {
@@ -263,6 +367,12 @@ export default function QuotesPage() {
           >
             <Plus size={13} /> 견적 요청 직접 등록
           </button>
+          <button
+            onClick={() => setDirectQuoteOpen(true)}
+            className="flex h-9 items-center gap-1 rounded-full border border-dashed border-[#d1d1d6] px-3 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+          >
+            <Plus size={13} /> 견적서 바로 만들기 (문의 없이)
+          </button>
           <span className="inline-flex h-9 items-center rounded-full bg-amber-50 px-3 text-xs font-medium text-amber-600">
             미처리 {pending.length}건
           </span>
@@ -273,6 +383,13 @@ export default function QuotesPage() {
         <AddQuoteRequestModal
           onClose={() => setAddModalOpen(false)}
           onCreated={(q) => { setSelected(q); setAddModalOpen(false); }}
+        />
+      )}
+
+      {directQuoteOpen && (
+        <DirectQuoteModal
+          onClose={() => setDirectQuoteOpen(false)}
+          onCreated={(q) => { setSelected(q); setDirectQuoteOpen(false); }}
         />
       )}
 
@@ -460,92 +577,7 @@ export default function QuotesPage() {
 
               {editingQuote && (
                 <div className="space-y-3">
-                  <div className="space-y-2">
-                    {quoteItems.map((it, i) => (
-                      <div key={i} className="space-y-1 rounded-lg border border-[#f0f0f0] p-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            value={it.name}
-                            onChange={(e) => updateItem(i, { name: e.target.value })}
-                            placeholder="품명"
-                            className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
-                          />
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={priceDrafts[i] ?? (it.unitPrice ? it.unitPrice.toLocaleString("en-US") : "")}
-                            onChange={(e) => {
-                              const raw = e.target.value.replace(/[^0-9.]/g, "");
-                              setPriceDrafts((prev) => ({ ...prev, [i]: formatAmountInput(raw) }));
-                              updateItem(i, { unitPrice: raw === "" || raw === "." ? 0 : Number(raw) });
-                            }}
-                            onBlur={() => setPriceDrafts((prev) => { const next = { ...prev }; delete next[i]; return next; })}
-                            placeholder="단가"
-                            className="w-20 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
-                          />
-                          <select
-                            value={it.currency}
-                            onChange={(e) => {
-                              const currency = e.target.value as Currency;
-                              // 달러는 해외결제라 부가세 대상이 아니다 — USD로 바꾸면 VAT 별도 체크도 같이 풀어준다.
-                              updateItem(i, currency === "USD" ? { currency, vatApplicable: false } : { currency });
-                            }}
-                            className="rounded-lg border border-[#d1d1d6] px-1 py-1.5 text-xs outline-none focus:border-[#86868b]"
-                          >
-                            <option value="KRW">KRW</option>
-                            <option value="USD">USD</option>
-                          </select>
-                          <input
-                            type="number"
-                            value={it.quantity || ""}
-                            onChange={(e) => updateItem(i, { quantity: Number(e.target.value) })}
-                            placeholder="수량"
-                            className="w-14 rounded-lg border border-[#d1d1d6] px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
-                          />
-                          <button onClick={() => removeItem(i)} className="shrink-0 text-[#d1d1d6] hover:text-red-500">
-                            <X size={14} />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-1">
-                          <select
-                            value={UNIT_PRESETS.includes(it.unit ?? "") ? it.unit : "__custom"}
-                            onChange={(e) => updateItem(i, { unit: e.target.value === "__custom" ? "" : e.target.value })}
-                            className="rounded-lg border border-[#d1d1d6] px-1.5 py-1 text-[11px] outline-none focus:border-[#86868b]"
-                          >
-                            {UNIT_PRESETS.map((u) => (
-                              <option key={u} value={u}>{u}</option>
-                            ))}
-                            <option value="__custom">직접입력</option>
-                          </select>
-                          {!UNIT_PRESETS.includes(it.unit ?? "") && (
-                            <input
-                              value={it.unit ?? ""}
-                              onChange={(e) => updateItem(i, { unit: e.target.value })}
-                              placeholder="단위 직접입력"
-                              className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] px-2 py-1 text-[11px] outline-none focus:border-[#86868b]"
-                            />
-                          )}
-                        </div>
-                        {it.currency !== "USD" && (
-                          <label className="flex items-center gap-1.5 px-1 text-[11px] text-[#86868b]">
-                            <input
-                              type="checkbox"
-                              checked={it.vatApplicable ?? false}
-                              onChange={(e) => updateItem(i, { vatApplicable: e.target.checked })}
-                              className="h-3 w-3 accent-[#1d1d1f]"
-                            />
-                            VAT 별도
-                          </label>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setQuoteItems((prev) => [...prev, emptyLineItem()])}
-                    className="flex items-center gap-1 text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]"
-                  >
-                    <Plus size={12} /> 품목 추가
-                  </button>
+                  <QuoteItemsEditor items={quoteItems} onChange={setQuoteItems} priceDrafts={priceDrafts} setPriceDrafts={setPriceDrafts} />
                   <textarea
                     value={quoteMemo}
                     onChange={(e) => setQuoteMemo(e.target.value)}
@@ -765,6 +797,127 @@ function AddQuoteRequestModal({ onClose, onCreated }: { onClose: () => void; onC
         >
           {submitting ? "등록 중..." : "등록"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// 청구서의 "발주 없이 직접 등록"과 같은 취지 — 견적 문의(리드) 단계를 거치지 않고, 받는
+// 사람 정보와 품목을 한 번에 입력해 곧바로 정식 견적서를 발행·발송한다. 내부적으로는
+// quoteRequests 문서를 만들고 바로 issueQuote를 이어서 호출하는 것뿐이라, 목록에는
+// 처음부터 "발송됨" 상태로만 나타난다.
+function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreated: (quote: QuoteRequest) => void }) {
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [items, setItems] = useState<QuoteLineItem[]>([emptyLineItem()]);
+  const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>({});
+  const [quoteMemo, setQuoteMemo] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
+
+  async function handleSubmit() {
+    if (!name.trim() || !email.trim() || validItems.length === 0) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const ref = await createQuoteRequest({
+        name: name.trim(),
+        company: company.trim() || undefined,
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        description: "견적서 바로 만들기로 등록됨",
+      });
+      await issueQuote(ref.id, validItems, quoteMemo.trim());
+      onCreated({
+        id: ref.id,
+        name: name.trim(),
+        company: company.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        description: "견적서 바로 만들기로 등록됨",
+        stage: "",
+        status: "contacted",
+        createdAt: Date.now(),
+        memo: "",
+        quoteItems: validItems,
+        quoteMemo: quoteMemo.trim(),
+        quoteStatus: "sent",
+        quoteIssuedAt: Date.now(),
+      });
+    } catch (e: any) {
+      setError(e?.message ?? "발행 중 오류가 발생했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const inputClass = "w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col rounded-3xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 space-y-3 p-6 pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[#1d1d1f]">견적서 바로 만들기</h2>
+              <p className="mt-1 text-xs text-[#86868b]">견적 문의 없이, 받는 분 정보와 품목을 바로 입력해 정식 견적서를 발행·발송합니다.</p>
+            </div>
+            <button onClick={onClose} className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]">
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        <div className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-6">
+          <div>
+            <label className="mb-1.5 block text-xs text-[#86868b]">이름 *</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-[#86868b]">회사 / 브랜드명</label>
+            <input value={company} onChange={(e) => setCompany(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-[#86868b]">이메일 *</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs text-[#86868b]">연락처</label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
+              placeholder="010-0000-0000"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs text-[#86868b]">품목</label>
+            <QuoteItemsEditor items={items} onChange={setItems} priceDrafts={priceDrafts} setPriceDrafts={setPriceDrafts} />
+          </div>
+
+          <textarea
+            value={quoteMemo}
+            onChange={(e) => setQuoteMemo(e.target.value)}
+            rows={2}
+            placeholder="견적 조건·비고 (고객에게 노출됩니다)"
+            className="w-full resize-none rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
+
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || !name.trim() || !email.trim() || validItems.length === 0}
+            className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+          >
+            {submitting ? "발행 중..." : "견적서 발행 및 발송"}
+          </button>
+        </div>
       </div>
     </div>
   );

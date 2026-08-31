@@ -708,9 +708,23 @@ function ContractEditForm({ contract }: { contract: Contract }) {
 
         <ContractBodyEditor
           key={bodyTextVersion}
+          pageStyle
           contractId={contract.id}
           value={plainTextToHtml(form.bodyText)}
           onChange={(html) => { set("bodyText", html); setBodyTextDirty(true); }}
+          headerData={{
+            title: form.title,
+            companyName: form.companyName,
+            productName: form.productName || undefined,
+            contactName: form.contactName,
+            amount: Number(form.amount) || 0,
+            currency: form.currency,
+            vatApplicable: form.vatApplicable,
+            periodStart: form.periodStart || undefined,
+            periodEnd: form.periodEnd || undefined,
+            paymentTerms: form.paymentTerms || undefined,
+            handyhandIsGap: contract.handyhandIsGap,
+          }}
         />
       </div>
 
@@ -747,6 +761,7 @@ function ContractEditForm({ contract }: { contract: Contract }) {
                   </button>
                 </div>
                 <ContractBodyEditor
+                  pageStyle
                   contractId={contract.id}
                   value={plainTextToHtml(a.bodyHtml)}
                   onChange={(html) => updateAttachment(a.id, { bodyHtml: html })}

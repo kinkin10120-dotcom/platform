@@ -238,5 +238,13 @@ service cloud.firestore {
     match /contractTemplates/{templateId} {
       allow read, write: if isAdmin();
     }
+
+    // ---- work-intake 업로드 내역 (별도 내부 도구용 로그, 관리자 전용) ----
+    // pm-platform과 같은 Firebase 프로젝트를 공유하는 별도 앱(work-intake)이 파일 업로드 직후
+    // "최근 업로드 내역" 조회용으로 남기는 로그. 실제 파일/코멘트는 tasks/{taskId}/files·comments에
+    // 그대로 남고, 이 컬렉션은 그 요약만 별도로 빠르게 훑어보기 위한 용도다.
+    match /workIntakeUploads/{logId} {
+      allow read, write: if isAdmin();
+    }
   }
 }

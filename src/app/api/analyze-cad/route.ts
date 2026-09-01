@@ -1,6 +1,20 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
+// 내부용 별도 앱(work-intake, intake.handyhand.co.kr)이 CAD 파일 업로드 시 이 분석을 그대로
+// 재사용한다 — 이 라우트 자체는 원래 세션 인증이 없는 공개 API라 노출 범위가 늘어나진 않고,
+// 다른 오리진에서 fetch로 호출만 가능하게 CORS만 열어준다.
+const ALLOWED_ORIGIN = "https://intake.handyhand.co.kr";
+
+function withCors(res: NextResponse) {
+  res.headers.set("Access-Control-Allow-Origin", ALLOWED_ORIGIN);
+  return res;
+}
+
+export async function OPTIONS() {
+  return withCors(new NextResponse(null, { status: 204 }));
+}
+
 export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const formData = await req.formData();
@@ -10,7 +24,7 @@ export async function POST(req: NextRequest) {
   const quantity = (formData.get("quantity") as string | null) ?? "";
 
   if (!file && !purpose.trim()) {
-    return NextResponse.json({ error: "파일을 업로드하거나 제품 용도를 입력해주세요." }, { status: 400 });
+    return withCors(NextResponse.json({ error: "파일을 업로드하거나 제품 용도를 입력해주세요." }, { status: 400 }));
   }
 
   const TEXT_EXTS = ["stp", "step", "dxf"];
@@ -26,10 +40,10 @@ export async function POST(req: NextRequest) {
   const ext = file?.name.split(".").pop()?.toLowerCase();
 
   if (file && !TEXT_EXTS.includes(ext ?? "") && !BINARY_EXTS.includes(ext ?? "")) {
-    return NextResponse.json(
+    return withCors(NextResponse.json(
       { error: "STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, SLDASM 파일만 지원합니다." },
       { status: 400 }
-    );
+    ));
   }
 
   const isBinary = !!file && BINARY_EXTS.includes(ext ?? "");
@@ -145,9 +159,9 @@ initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 �
 
     const result = JSON.parse(jsonMatch[0]);
     result.isAssembly = isAssembly;
-    return NextResponse.json(result);
+    return withCors(NextResponse.json(result));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "분석 중 오류 발생";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return withCors(NextResponse.json({ error: msg }, { status: 500 }));
   }
 }

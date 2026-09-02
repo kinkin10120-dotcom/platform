@@ -130,12 +130,14 @@ export default function HomePage() {
   }, [appUser, isAdmin, router]);
 
   useEffect(() => {
-    if (isAdmin || projects.length === 0) return;
+    if (isAdmin || projects.length === 0 || !appUser?.clientId) return;
+    // clientId를 함께 넘겨야 한다 — 이유는 listenTasksByProject 주석 참고(list 규칙은 쿼리
+    // 제약만으로 권한을 증명해야 해서, projectId만으로 좁히면 클라이언트 계정에선 거부된다).
     const unsubs = projects.map((p) => listenTasksByProject(p.id, (ts) => {
       setAllTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...ts]);
-    }));
+    }, undefined, appUser.clientId));
     return () => unsubs.forEach((u) => u());
-  }, [isAdmin, projects]);
+  }, [isAdmin, projects, appUser?.clientId]);
 
   const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
 

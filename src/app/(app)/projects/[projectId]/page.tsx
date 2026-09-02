@@ -102,9 +102,21 @@ export default function ProjectWorkspacePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", description: "", startDate: "", endDate: "", status: "", projectType: [] as ProjectType[] });
   const [saving, setSaving] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
 
   useEffect(() => listenProject(projectId, setProject), [projectId]);
-  useEffect(() => listenTasksByProject(projectId, setTasks), [projectId]);
+  useEffect(() => {
+    if (!appUser) return;
+    return listenTasksByProject(
+      projectId,
+      (t) => {
+        setTasksError(null);
+        setTasks(t);
+      },
+      (e) => setTasksError(e.message),
+      isAdmin ? undefined : appUser.clientId
+    );
+  }, [projectId, appUser, isAdmin]);
 
   // 검색 결과(코멘트·자료)에서 ?task=taskId 로 들어오면 해당 업무 상세를 바로 연다.
   useEffect(() => {
@@ -398,6 +410,13 @@ export default function ProjectWorkspacePage() {
       {stats.total > 0 && (
         <div className="rounded-3xl bg-white p-6 sm:p-8">
           <AiDiagnosisPanel project={project} tasks={tasks} />
+        </div>
+      )}
+
+      {tasksError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+          <p className="text-sm font-medium text-red-700">업무 목록을 불러오지 못했습니다.</p>
+          <p className="mt-1 break-all text-xs text-red-600">{tasksError}</p>
         </div>
       )}
 

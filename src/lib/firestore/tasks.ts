@@ -77,12 +77,34 @@ function fromDoc(d: any): Task {
   };
 }
 
-export function listenTasksByProject(projectId: string, cb: (tasks: Task[]) => void) {
-  const q = query(colRef, where("projectId", "==", projectId));
-  return onSnapshot(q, (snap) => {
-    const tasks = snap.docs.map(fromDoc).sort((a, b) => a.order - b.order);
-    cb(tasks);
-  });
+// clientId는 클라이언트 계정으로 조회할 때 반드시 넘겨야 한다(관리자는 생략).
+// Firestore의 list 규칙은 문서를 하나씩 걸러주는 필터가 아니라, "쿼리가 반환할 수 있는 문서가
+// 전부 규칙을 만족한다"는 걸 쿼리의 제약조건만 보고 증명할 수 있어야 통과시킨다. tasks 규칙은
+// resource.data.clientId가 내 clientId와 같을 것을 요구하는데, projectId로만 좁힌 쿼리로는
+// 그게 증명되지 않아 쿼리 전체가 permission-denied로 실패했다(관리자는 isAdmin()이
+// resource.data를 보지 않아 정적으로 통과해서 이 문제가 드러나지 않았다).
+// 실제로 고객 화면에서만 간트 차트가 "등록된 업무가 없습니다"로 비어 보이던 원인이다.
+// onError를 넘기지 않으면 이런 실패가 조용히 삼켜져 원인 추적이 불가능하므로 콜백도 받는다.
+export function listenTasksByProject(
+  projectId: string,
+  cb: (tasks: Task[]) => void,
+  onError?: (e: Error) => void,
+  clientId?: string
+) {
+  const q = clientId
+    ? query(colRef, where("projectId", "==", projectId), where("clientId", "==", clientId))
+    : query(colRef, where("projectId", "==", projectId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const tasks = snap.docs.map(fromDoc).sort((a, b) => a.order - b.order);
+      cb(tasks);
+    },
+    (e) => {
+      console.error("[listenTasksByProject] 업무 조회 실패", e);
+      onError?.(e);
+    }
+  );
 }
 
 /** 관리자 전용: 전체 프로젝트를 아우르는 업무 목록(홈 화면 통합 요약용) */

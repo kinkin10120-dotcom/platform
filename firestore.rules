@@ -23,6 +23,20 @@ service cloud.firestore {
       return isSignedIn() && myProfile().role == 'client' && myProfile().clientId == clientId;
     }
 
+    // isAdmin()/belongsToClient()를 `isAdmin() || belongsToClient(x)`로 나열하면 myProfile()
+    // (=users 문서 조회)이 한 번의 판정에 최대 3번 호출된다. 규칙 안의 문서 조회는 요청당
+    // 횟수 제한이 있으므로 let으로 프로필을 한 번만 읽어 1회로 고정한다.
+    //
+    // 주의: 이 함수를 list 규칙에 쓰면 resource.data.clientId에 의존하게 되는데, Firestore의
+    // list 규칙은 문서를 하나씩 걸러주는 필터가 아니라 "쿼리 제약조건만 보고 결과 전체가
+    // 규칙을 만족함이 증명되어야" 통과한다. 따라서 클라이언트가 보내는 쿼리는 반드시
+    // where('clientId','==',내clientId)를 포함해야 한다(projects는 원래 그랬고, tasks는
+    // 빠져 있어서 고객 화면에서만 업무 목록이 통째로 거부되는 버그가 있었다).
+    function adminOrClientOf(clientId) {
+      let p = myProfile();
+      return p.role == 'admin' || (p.role == 'client' && p.clientId == clientId);
+    }
+
     // ---- users ----
     match /users/{userId} {
       allow get: if request.auth.uid == userId || isAdmin();
@@ -62,7 +76,7 @@ service cloud.firestore {
       // 여부(다른 회사 데이터 유출 방지)까지만 검사하고, clientVisible에 따라 개별 프로젝트를
       // 숨기는 건 앱 쪽에서(listenProjectsByClient) 걸러낸다. get은 그대로 clientVisible도
       // 함께 검사해 직접 URL로 들어오는 것까지 막는다.
-      allow list: if isAdmin() || belongsToClient(resource.data.clientId);
+      allow list: if isSignedIn() && adminOrClientOf(resource.data.clientId);
       allow create, delete: if isAdmin();
       // 캘린더 구독 링크는 클라이언트도 최초 생성할 수 있어야 하므로 그 필드만 예외적으로 허용
       allow update: if isAdmin() || (
@@ -79,16 +93,13 @@ service cloud.firestore {
         belongsToClient(resource.data.clientId) &&
         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
       );
-      // projects의 list와 달리, 클라이언트가 실제로 쓰는 tasks list 쿼리(listenTasksByProject)는
-      // 항상 프로젝트 하나(where projectId==)로만 범위를 좁혀서 나가므로, 그 결과에 포함된
-      // 업무들은 전부 같은 clientVisible 값을 공유한다 — "쿼리 결과가 섞여서 하나 때문에
-      // 전체가 실패"하는 문제가 애초에 생기지 않는다. 그래서 get 규칙과 동일하게 그대로
-      // clientVisible까지 검사해도 안전하고, 안 걸어두면 비공개 프로젝트 URL을 직접 아는
-      // 고객이 프로젝트 문서는 못 봐도 그 안의 업무 목록은 그대로 읽어갈 수 있다.
-      allow list: if isAdmin() || (
-        belongsToClient(resource.data.clientId) &&
-        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
-      );
+      // list에서는 clientVisible을 검사하지 않는다(위 get과 다른 점). list 규칙은 쿼리
+      // 제약조건만으로 판정되므로 부모 projects 문서를 들여다보는 조건은 쿼리로 증명할 수
+      // 없다 — projects의 list가 같은 이유로 clientVisible을 앱에서 거르는 것과 동일하다.
+      // 비공개 프로젝트는 projects의 get 규칙과 앱 필터(listenProjectsByClient)가 막는다.
+      // 클라이언트 쿼리는 반드시 where('clientId','==',내clientId)를 포함해야 한다
+      // (listenTasksByProject가 clientId 인자를 받는 이유).
+      allow list: if isSignedIn() && adminOrClientOf(resource.data.clientId);
       allow create, delete: if isAdmin();
       // 상태/진행률/체크리스트는 관리자 전용 관리 지표라 클라이언트는 못 건드리게 막고,
       // 확인/승인 요청 응답에 필요한 필드만 예외적으로 열어둔다.

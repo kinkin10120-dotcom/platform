@@ -69,12 +69,15 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
 
   // 선행 업무로 지정된 업무가 삭제되어 dependsOn에 유령 id만 남아있는 경우, 화면엔 아예
   // 안 보이게 하고(위 dependsOnEntries가 이미 걸러줌) 조용히 정리해 데이터도 맞춰둔다.
+  // 정리 자체가 관리자 전용 쓰기(선행 업무 변경)라 클라이언트가 실행하면 어차피 권한 거부로
+  // 실패하고, 내부적으로 도는 업무 조회도 규칙상 클라이언트에겐 거부된다 — 관리자만 실행한다.
   useEffect(() => {
+    if (!isAdmin) return;
     const danglingIds = task.dependsOn.filter((id) => !allTasks.some((t) => t.id === id));
     if (danglingIds.length === 0) return;
     updateTaskDependsOn(task, task.dependsOn.filter((id) => !danglingIds.includes(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task.id, task.dependsOn.join(","), allTasks.length]);
+  }, [isAdmin, task.id, task.dependsOn.join(","), allTasks.length]);
   const overdue = isOverdue(task);
   const dueSoon = isDueSoon(task);
 

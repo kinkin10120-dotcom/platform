@@ -115,14 +115,16 @@ export default function GlobalSearch() {
     return listenNotices(setNotices);
   }, [open, appUser]);
 
-  // 클라이언트 역할은 프로젝트별 업무를 각각 구독(전체 업무 컬렉션 접근 권한이 없으므로)
+  // 클라이언트 역할은 프로젝트별 업무를 각각 구독(전체 업무 컬렉션 접근 권한이 없으므로).
+  // clientId를 함께 넘겨야 한다 — list 규칙은 쿼리 제약만으로 권한을 증명해야 해서
+  // projectId로만 좁히면 통째로 거부된다(자세한 내용은 listenTasksByProject 주석 참고).
   useEffect(() => {
-    if (!open || isAdmin || projects.length === 0) return;
+    if (!open || isAdmin || projects.length === 0 || !appUser?.clientId) return;
     const unsubs = projects.map((p) => listenTasksByProject(p.id, (ts) => {
       setTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...ts]);
-    }));
+    }, undefined, appUser.clientId));
     return () => unsubs.forEach((u) => u());
-  }, [open, isAdmin, projects]);
+  }, [open, isAdmin, projects, appUser?.clientId]);
 
   // 클라이언트 역할은 collectionGroup 조회 권한이 없으므로, 자신의 업무 각각에 대해
   // 코멘트·첨부파일 서브컬렉션을 직접 구독한다.

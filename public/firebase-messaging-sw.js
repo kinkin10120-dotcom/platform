@@ -16,16 +16,34 @@ firebase.initializeApp({
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-const messaging = firebase.messaging();
+// firebase.messaging()은 토큰 발급·갱신에 필요해서 초기화만 해두고, 배너 표시는
+// 아래 push 이벤트 한 곳에서만 한다.
+//
+// 배너를 띄울 수 있는 경로가 두 개(FCM SDK의 onBackgroundMessage, 표준 push 이벤트)인데
+// 둘 다 등록하면 iOS 홈 화면 앱에서 같은 알림이 두 번 뜬다(같은 tag를 줘도 합쳐지지
+// 않는다 — iOS는 tag 기반 대체를 보장하지 않는다). 반대로 onBackgroundMessage만 쓰면
+// iOS에서는 데이터 전용 메시지에 아예 호출되지 않아 알림이 오지 않는다.
+// 그래서 모든 플랫폼에서 확실히 동작하는 표준 push 이벤트 하나만 남긴다.
+firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-  const title = payload.data?.title ?? "HANDYWORKS";
-  const body = payload.data?.body ?? "";
-  self.registration.showNotification(title, {
-    body,
-    icon: "/logo.png",
-    data: payload.data,
-  });
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    const raw = event.data ? event.data.json() : {};
+    // FCM은 data-only 메시지를 { data: {...} }, 알림 메시지는 { notification: {...} }
+    // 형태로 실어 보낸다 — 둘 다 받아준다.
+    data = raw.data ?? raw.notification ?? raw;
+  } catch {
+    data = { body: event.data ? event.data.text() : "" };
+  }
+  // iOS는 푸시를 받고도 아무것도 표시하지 않으면 푸시 권한을 회수하므로 항상 표시한다.
+  event.waitUntil(
+    self.registration.showNotification(data?.title ?? "HANDYWORKS", {
+      body: data?.body ?? "",
+      icon: "/logo.png",
+      data: data ?? {},
+    })
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

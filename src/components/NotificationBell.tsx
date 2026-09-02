@@ -7,7 +7,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { useAuth } from "@/lib/auth-context";
 import { listenNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, deleteAllNotifications } from "@/lib/firestore/notifications";
-import { enablePushNotifications, disablePushNotifications } from "@/lib/messaging";
+import { enablePushNotifications, disablePushNotifications, syncPushToken } from "@/lib/messaging";
 import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
 import { AppNotification } from "@/lib/types";
 import IosAddToHomeScreenGuide from "@/components/IosAddToHomeScreenGuide";
@@ -27,9 +27,21 @@ export default function NotificationBell() {
     return listenNotifications(appUser.uid, setItems);
   }, [appUser]);
 
+  // 토글 상태를 localStorage만 보고 정하면 실제 브라우저 권한·서버 토큰과 어긋난다.
+  // 서버가 만료 토큰을 정리하면 "켜짐"으로 보이지만 실제로는 푸시가 끊긴 상태가 되고,
+  // 그 상태에서 토글을 누르면 켜기가 아니라 끄기가 실행돼 사용자가 원인을 알 수 없다.
+  // 권한이 없으면 무조건 꺼짐으로 맞추고, 권한이 살아 있는데 끈 적이 없다면 토큰을
+  // 조용히 다시 등록해 스스로 복구한다.
   useEffect(() => {
-    setPushEnabled(localStorage.getItem("pushEnabled") === "true");
-  }, []);
+    if (!appUser) return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted" || localStorage.getItem("pushEnabled") === "false") {
+      setPushEnabled(false);
+      return;
+    }
+    setPushEnabled(true);
+    syncPushToken(appUser.uid);
+  }, [appUser]);
 
   const unreadCount = items.filter((i) => !i.read).length;
 
@@ -83,6 +95,9 @@ export default function NotificationBell() {
         const result = await enablePushNotifications(appUser.uid);
         if (result.ok) {
           setPushEnabled(true);
+          // 이미 권한이 허용된 기기(특히 홈 화면에 추가한 iOS 앱)에서는 권한 팝업이 뜨지
+          // 않아 아무 일도 안 일어난 것처럼 보인다 — 등록됐다는 걸 명시적으로 알려준다.
+          setPushError("푸시 알림이 켜졌습니다. 이제 이 기기로 알림이 옵니다.");
         } else {
           setPushError(result.error ?? "설정에 실패했습니다.");
         }
@@ -131,7 +146,11 @@ export default function NotificationBell() {
               )}
             </div>
           </div>
-          {pushError && <p className="border-b border-[#f0f0f0] px-4 py-2 text-xs text-red-500">{pushError}</p>}
+          {pushError && (
+            <p className={`border-b border-[#f0f0f0] px-4 py-2 text-xs ${pushEnabled ? "text-green-600" : "text-red-500"}`}>
+              {pushError}
+            </p>
+          )}
           <div className="scrollbar-thin max-h-96 overflow-y-auto">
             {items.length === 0 && (
               <p className="px-4 py-6 text-center text-sm text-[#86868b]">알림이 없습니다.</p>

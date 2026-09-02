@@ -35,6 +35,29 @@ export async function enablePushNotifications(uid: string): Promise<{ ok: boolea
   }
 }
 
+// 이미 알림 권한이 허용된 상태에서 토큰만 다시 등록한다(권한 팝업 없음).
+// 서버는 만료된 토큰을 자동으로 지우는데(onNotificationCreated의 stale token 정리),
+// 그러면 브라우저 권한은 그대로인데 서버에 보낼 대상이 없어 푸시만 조용히 끊긴다.
+// 앱을 열 때마다 이 함수로 토큰을 다시 심어 그 상태를 사용자 조작 없이 복구한다.
+export async function syncPushToken(uid: string): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (!("Notification" in window)) return false;
+  if (Notification.permission !== "granted") return false;
+  if (!VAPID_KEY) return false;
+  try {
+    if (!(await isSupported())) return false;
+    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
+    if (!token) return false;
+    await updateDoc(doc(db, "users", uid), { fcmTokens: arrayUnion(token) });
+    localStorage.setItem("pushEnabled", "true");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function disablePushNotifications(uid: string) {
   if (typeof window === "undefined") return;
   try {

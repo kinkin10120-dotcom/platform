@@ -300,22 +300,31 @@ export default function ContractBodyEditor({
       requestAnimationFrame(() => {
         if (cancelled || !editor || editor.isDestroyed) return;
         const dom = editor.view.dom as HTMLElement;
-        const blockEls = Array.from(dom.children).filter(
-          (el) => !(el instanceof HTMLElement && el.dataset.pageGap === "1")
-        ) as HTMLElement[];
-        // 블록 수가 예상과 다르면(예기치 못한 렌더링) 억지로 맞추지 않고 그대로 둔다.
-        if (blockEls.length !== nodeOffsets.length) return;
+
+        // 블록의 화면상 위치는 ProseMirror가 직접 알려주는 DOM 노드로 찾는다 — 편집 영역의
+        // 자식을 순서로 세면 위젯(회색 띠)이나 예상 못 한 렌더링 때문에 어긋날 수 있고,
+        // 그때 조용히 포기하면 스페이서가 0이 되어 페이지가 내용 길이만큼 짧아져 버린다.
+        // offsetTop은 모두 .po-page(position:relative) 기준이라 서로 빼도 안전하다.
+        const blockTop = (blockIdx: number): number | null => {
+          const pos = nodeOffsets[blockIdx];
+          if (pos === undefined) return null;
+          const node = editor.view.nodeDOM(pos);
+          return node instanceof HTMLElement ? node.offsetTop : null;
+        };
+        // 편집 영역 자체도 .po-page 안에서 헤더 아래로 밀려 있으므로, 문서 끝 위치를 구할 땐
+        // 그 오프셋을 더해 같은 기준으로 맞춘다(예전엔 scrollHeight를 그대로 써서 헤더+여백
+        // 높이만큼 마지막 장이 길어졌다).
+        const contentBottom = dom.offsetTop + dom.scrollHeight;
 
         const leftovers = pages.map((_p, i) => {
-          const startIdx = i === 0 ? 0 : pageEndBlockIndex[i - 1];
-          const budget = i === 0 ? budgets.first : budgets.rest;
-          const top = blockEls[startIdx]?.offsetTop ?? 0;
           const isLastPage = i === pages.length - 1;
+          const budget = i === 0 ? budgets.first : budgets.rest;
+          const top = blockTop(i === 0 ? 0 : pageEndBlockIndex[i - 1]);
+          const bottom = isLastPage ? contentBottom : blockTop(pageEndBlockIndex[i]);
+          if (top === null || bottom === null) return 0;
           // 다음 페이지 첫 블록의 위치까지가 이 페이지가 실제로 쓴 높이다(블록 사이 여백까지
           // 자연히 포함된다). 그 사이에 낀 회색 띠 높이는 빼준다.
-          const bottom = isLastPage ? dom.scrollHeight : (blockEls[pageEndBlockIndex[i]]?.offsetTop ?? dom.scrollHeight);
-          const band = isLastPage ? 0 : PAGE_PADDING_PX * 2;
-          const used = Math.max(0, bottom - top - band);
+          const used = Math.max(0, bottom - top - (isLastPage ? 0 : PAGE_PADDING_PX * 2));
           return Math.max(0, budget - used);
         });
 

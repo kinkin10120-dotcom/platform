@@ -4,7 +4,6 @@
 // 결과를 내도록, 쪽 나눔 알고리즘 자체를 이 파일 하나로 합쳤다. 두 화면 모두 여기 있는
 // 함수를 그대로 가져다 쓴다(같은 코드 = 같은 결과, 상수를 맞춰서 우연히 같아지는 게 아니라
 // 구조적으로 같다).
-import { sanitizeContractHtml } from "@/lib/contractSanitize";
 import { plainTextToHtml } from "@/lib/contractTemplate";
 
 // 조 사이 여백으로 쓰는 빈 문단(<p></p>, <p><br></p>, &nbsp;만 있는 문단).
@@ -47,9 +46,13 @@ export function isHeadingLikeBlock(html: string): boolean {
 // 측정 요소에 실제로 렌더링해 누적 높이를 재면서 한 페이지 예산을 넘기 직전까지 그리디하게
 // 묶는다 — 페이지 1장은 budgets.first, 그 이후 페이지들은 budgets.rest를 예산으로 쓴다.
 export function paginateHtml(html: string, budgets: { first: number; rest: number }, measureEl: HTMLDivElement): string[] {
-  const safe = sanitizeContractHtml(plainTextToHtml(html));
+  // 여기서 sanitize를 거치면 안 된다. DOMPurify가 허용 목록에 없는 태그를 풀어헤치면서
+  // 최상위 블록 개수가 바뀌는데(실측: 91개 → 93개), "크게 편집"은 이 블록 개수를 세서
+  // 문서상 어느 위치에 회색 띠를 넣을지 정하므로 그만큼 띠가 어긋나고, 결국 편집기에 보이는
+  // 페이지 내용이 분할기가 계산한 내용과 달라진다(2쪽이 예산 971px인데 실제 1039px이 되던
+  // 원인). 정리는 실제로 화면에 그릴 때 각 호출부가 다시 거치므로 여기서 뺀다.
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = safe;
+  wrapper.innerHTML = plainTextToHtml(html);
   const rawBlocks = Array.from(wrapper.children).map((el) => el.outerHTML);
   if (rawBlocks.length === 0) return [""];
 

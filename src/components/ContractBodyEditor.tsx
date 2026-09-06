@@ -211,6 +211,9 @@ export default function ContractBodyEditor({
   // 저장되는 본문 HTML에는 전혀 영향을 주지 않는다. 편집 영역 자체(줄바꿈이 반영된 실제 DOM)를
   // 직접 측정하므로 미리보기처럼 별도 숨김 요소나 웹폰트 로딩 경쟁 문제도 없다.
   const headerRef = useRef<HTMLDivElement>(null);
+  // 아래 쪽 나눔 effect의 의존성으로 쓰는 값 기준 키 — 객체 신원(identity)이 아니라 내용이
+  // 바뀔 때만 다시 계산하도록 한다(이유는 effect 하단 주석 참고).
+  const headerKey = headerData ? JSON.stringify(headerData) : "";
 
   // standalonePage일 때 상단바(계약서 미리보기와 같은 방식 — 앱 자체 헤더 h-14는 그대로
   // 두고 그 바로 아래에 position:fixed로 이어붙인다)의 실제 높이를 측정해 본문
@@ -297,9 +300,12 @@ export default function ContractBodyEditor({
       // 실제 렌더링은 미묘하게 다를 수 있어(서명 블록 노드뷰, 빈 문단의 trailing break 등)
       // 그 차이만큼 편집기 페이지 길이가 A4에서 벗어났다 — 미리보기와 아무리 맞춰도 어긋나던
       // 근본 원인이다. 실제 DOM을 기준으로 채우면 편집기 페이지는 정의상 항상 A4가 된다.
-      requestAnimationFrame(() => {
-        if (cancelled || !editor || editor.isDestroyed) return;
-        const dom = editor.view.dom as HTMLElement;
+      // 2차 계산은 반드시 동기로 한다. 예전엔 requestAnimationFrame으로 미뤘는데, 그 사이에
+      // effect가 정리되면(호출부 리렌더 등) 콜백이 취소돼 스페이서가 0인 채로 남았다 —
+      // 흰 종이가 A4로 안 채워지고 내용 길이만큼만 짧게 나오던 실제 원인이다.
+      // ProseMirror는 dispatch 시 DOM을 동기적으로 갱신하므로 바로 이어서 측정해도 된다.
+      {
+        const dom = editor!.view.dom as HTMLElement;
 
         // 블록의 화면상 위치는 ProseMirror가 직접 알려주는 DOM 노드로 찾는다 — 편집 영역의
         // 자식을 순서로 세면 위젯(회색 띠)이나 예상 못 한 렌더링 때문에 어긋날 수 있고,
@@ -308,13 +314,13 @@ export default function ContractBodyEditor({
         const blockTop = (blockIdx: number): number | null => {
           const pos = nodeOffsets[blockIdx];
           if (pos === undefined) return null;
-          const node = editor.view.nodeDOM(pos);
+          const node = editor!.view.nodeDOM(pos);
           return node instanceof HTMLElement ? node.offsetTop : null;
         };
-        // 편집 영역 자체도 .po-page 안에서 헤더 아래로 밀려 있으므로, 문서 끝 위치를 구할 땐
-        // 그 오프셋을 더해 같은 기준으로 맞춘다(예전엔 scrollHeight를 그대로 써서 헤더+여백
-        // 높이만큼 마지막 장이 길어졌다).
-        const contentBottom = dom.offsetTop + dom.scrollHeight;
+        // ProseMirror 편집 영역은 position:relative라 그 자체가 자식들의 offsetParent다 —
+        // 즉 위의 offsetTop은 "편집 영역 기준"이므로, 문서 끝도 같은 기준인 scrollHeight를
+        // 그대로 써야 한다(여기에 dom.offsetTop을 더하면 헤더 높이만큼 어긋난다).
+        const contentBottom = dom.scrollHeight;
 
         const leftovers = pages.map((_p, i) => {
           const isLastPage = i === pages.length - 1;
@@ -328,8 +334,8 @@ export default function ContractBodyEditor({
           return Math.max(0, budget - used);
         });
 
-        editor.view.dispatch(editor.view.state.tr.setMeta(pageGapsPluginKey, buildGaps(leftovers)));
-      });
+        editor!.view.dispatch(editor!.view.state.tr.setMeta(pageGapsPluginKey, buildGaps(leftovers)));
+      }
     }
     recompute();
     // 커스텀 웹폰트(Pretendard)가 로딩되기 전에 측정하면 대체 폰트 기준으로 줄바꿈이 잡혀서,
@@ -347,7 +353,13 @@ export default function ContractBodyEditor({
       editor.off("update", recompute);
       window.removeEventListener("resize", recompute);
     };
-  }, [editor, pageStyle, headerData]);
+    // headerData는 호출부에서 객체 리터럴로 넘기는 경우가 많아(예: contracts/[id]/edit)
+    // 렌더마다 새 객체가 된다 — 그대로 의존성에 넣으면 이 effect가 매 렌더 다시 돌면서,
+    // 2차 계산(실제 높이를 재서 스페이서를 채우는 단계)이 반영되기도 전에 1차(스페이서 0)
+    // 상태로 계속 되돌아간다. 실제로 그래서 흰 종이가 A4로 채워지지 않고 내용 길이만큼만
+    // 짧게 나왔다. 값 기준 키로 바꿔 내용이 진짜 바뀔 때만 다시 계산하게 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, pageStyle, headerKey]);
 
   function insertNextArticle() {
     if (!editor) return;

@@ -70,7 +70,13 @@ export const PageGaps = Extension.create({
 
                   return wrap;
                 },
-                { side: -1, key: `page-gap-${gap.pos}` }
+                {
+                  side: -1,
+                  // 키에 높이까지 넣어야 한다 — 위치만 넣으면 ProseMirror가 "같은 위젯"으로
+                  // 보고 이전 DOM을 그대로 재사용해서, 높이를 다시 계산해 보내도 화면이
+                  // 바뀌지 않는다(실제로 스페이서가 계속 0으로 남던 원인).
+                  key: `page-gap-${gap.pos}-${Math.round(gap.leftoverHeight)}-${Math.round(gap.height)}`,
+                }
               )
             );
             return DecorationSet.create(tr.doc, decorations);

@@ -51,14 +51,19 @@ export const PageGaps = Extension.create({
                     wrap.appendChild(spacer);
                   }
 
-                  const el = document.createElement("div");
-                  el.className = "contract-page-gap";
-                  el.style.height = `${gap.height}px`;
-                  const label = document.createElement("span");
-                  label.className = "contract-page-gap-label";
-                  label.textContent = gap.label;
-                  el.appendChild(label);
-                  wrap.appendChild(el);
+                  // height가 0이면(마지막 페이지) 회색 띠 자체를 만들지 않는다 — 아래쪽
+                  // 여백은 감싸는 .po-page의 패딩이 이미 담당하므로, 여기서 띠를 그리면
+                  // 그 장만 여백이 두 번 들어가 길어진다.
+                  if (gap.height > 0) {
+                    const el = document.createElement("div");
+                    el.className = "contract-page-gap";
+                    el.style.height = `${gap.height}px`;
+                    const label = document.createElement("span");
+                    label.className = "contract-page-gap-label";
+                    label.textContent = gap.label;
+                    el.appendChild(label);
+                    wrap.appendChild(el);
+                  }
 
                   return wrap;
                 },

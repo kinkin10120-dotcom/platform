@@ -239,7 +239,9 @@ export default function ContractBodyEditor({
 
   useEffect(() => {
     if (!editor || !pageStyle) return;
+    let cancelled = false;
     function recompute() {
+      if (cancelled) return;
       const measureEl = measureRef.current;
       if (!measureEl) return;
 
@@ -268,12 +270,14 @@ export default function ContractBodyEditor({
         const isLastPage = i === pages.length - 1;
 
         if (isLastPage) {
-          // 마지막 페이지는 다음 페이지로 넘어가는 경계가 없다 — 미리보기(항상 A4 한 장
-          // 전체 높이로 보이는)와 달리 내용이 끝나는 지점에서 뚝 끊겨 보이지 않도록, 남은
-          // 공간을 흰 스페이서로 채우고 아래쪽 여백만 문서 맨 끝에 붙인다.
+          // 마지막 페이지는 다음 페이지로 넘어가는 경계가 없다 — 내용이 끝나는 지점에서 뚝
+          // 끊겨 보이지 않도록 남은 공간만 흰 스페이서로 채워 A4 한 장 높이를 맞춘다.
+          // 아래쪽 여백(20mm)은 이 편집 영역을 감싸는 .po-page의 p-[20mm] 패딩이 이미
+          // 만들고 있으므로 여기서 또 붙이면 안 된다 — 예전엔 PAGE_PADDING_PX를 한 번 더
+          // 넣어서 마지막 장만 20mm 더 길어 보였다.
           gaps.push({
             pos: editor!.state.doc.content.size,
-            height: PAGE_PADDING_PX,
+            height: 0,
             leftoverHeight,
             label: `${i + 1}쪽 끝`,
           });
@@ -292,9 +296,18 @@ export default function ContractBodyEditor({
       editor!.view.dispatch(editor!.view.state.tr.setMeta(pageGapsPluginKey, gaps));
     }
     recompute();
+    // 커스텀 웹폰트(Pretendard)가 로딩되기 전에 측정하면 대체 폰트 기준으로 줄바꿈이 잡혀서,
+    // 폰트가 적용된 실제 화면·미리보기와 쪽 나눔 위치가 어긋난다. 미리보기
+    // (ContractPreviewDocument)는 이미 fonts.ready 후 다시 계산하는데 이 편집기에는 그게
+    // 빠져 있어서, 폰트가 캐시되지 않은 상태로 열면 "크게 편집"과 미리보기의 쪽 나눔이
+    // 서로 다르게 나왔다(캐시된 상태에선 우연히 맞아서 간헐적으로만 재현됐다).
+    if (typeof document !== "undefined" && "fonts" in document) {
+      document.fonts.ready.then(recompute).catch(() => {});
+    }
     editor.on("update", recompute);
     window.addEventListener("resize", recompute);
     return () => {
+      cancelled = true;
       editor.off("update", recompute);
       window.removeEventListener("resize", recompute);
     };

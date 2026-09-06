@@ -39,6 +39,9 @@ export const PageGaps = Extension.create({
                   // 점선 띠(실제 A4 여백, 고정 크기) 두 부분을 위아래로 쌓는다 — 이렇게 나눠야
                   // 줄을 지우거나 늘려도 흰 종이 영역 자체의 높이는 항상 A4 한 장 그대로다.
                   const wrap = document.createElement("div");
+                  // 편집기가 "이 페이지가 실제로 쓴 높이"를 잴 때 본문 블록과 이 위젯을
+                  // 구분해야 한다(ContractBodyEditor 참고) — 표시 전용 요소임을 명시한다.
+                  wrap.dataset.pageGap = "1";
                   wrap.style.marginLeft = `-${PAGE_PADDING_PX}px`;
                   wrap.style.marginRight = `-${PAGE_PADDING_PX}px`;
                   wrap.style.width = `calc(100% + ${PAGE_PADDING_PX * 2}px)`;

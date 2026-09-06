@@ -11,7 +11,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { storage } from "@/lib/firebase";
 import { compressImage } from "@/lib/imageCompress";
 import { PAGE_PADDING_PX, CONTENT_WIDTH_PX, CONTENT_HEIGHT_PX, SAFETY_BUFFER_PX, HEADER_BODY_GAP_PX } from "@/lib/a4Layout";
-import { paginateHtml, measurePageHeight } from "@/lib/contractPagination";
+import { paginateHtml } from "@/lib/contractPagination";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import { PageHeader, ContractHeaderData } from "@/components/ContractPreviewDocument";
 import { PageGaps, pageGapsPluginKey, PageGap } from "@/lib/tiptapPageGaps";
@@ -257,43 +257,70 @@ export default function ContractBodyEditor({
       const nodeOffsets: number[] = [];
       editor!.view.state.doc.forEach((_node, offset) => nodeOffsets.push(offset));
 
-      const gaps: PageGap[] = [];
+      // 각 페이지가 원본 블록 몇 번째까지 쓰는지(경계 인덱스)를 구한다. paginateHtml은
+      // 블록을 버리거나 순서를 바꾸지 않으므로, 페이지 HTML의 최상위 자식 개수를 누적하면
+      // 문서상의 블록 인덱스와 정확히 대응한다.
+      const pageEndBlockIndex: number[] = [];
       let blockIndex = 0;
-      pages.forEach((pageHtml, i) => {
+      for (const pageHtml of pages) {
         const wrapper = document.createElement("div");
         wrapper.innerHTML = pageHtml;
         blockIndex += wrapper.children.length;
+        pageEndBlockIndex.push(blockIndex);
+      }
 
-        const budget = i === 0 ? budgets.first : budgets.rest;
-        const used = measurePageHeight(pageHtml, measureEl);
-        const leftoverHeight = Math.max(0, budget - used);
-        const isLastPage = i === pages.length - 1;
-
-        if (isLastPage) {
-          // 마지막 페이지는 다음 페이지로 넘어가는 경계가 없다 — 내용이 끝나는 지점에서 뚝
-          // 끊겨 보이지 않도록 남은 공간만 흰 스페이서로 채워 A4 한 장 높이를 맞춘다.
-          // 아래쪽 여백(20mm)은 이 편집 영역을 감싸는 .po-page의 p-[20mm] 패딩이 이미
-          // 만들고 있으므로 여기서 또 붙이면 안 된다 — 예전엔 PAGE_PADDING_PX를 한 번 더
-          // 넣어서 마지막 장만 20mm 더 길어 보였다.
-          gaps.push({
-            pos: editor!.state.doc.content.size,
-            height: 0,
-            leftoverHeight,
-            label: `${i + 1}쪽 끝`,
-          });
-        } else {
-          const pos = nodeOffsets[blockIndex];
-          if (pos !== undefined) {
-            // 회색 띠 높이는 항상 A4 여백(위+아래) 고정값만 쓰고, 이 페이지에 아직 못 채운
-            // 남은 공간은 흰 스페이서(leftoverHeight)로 따로 채운다 — 그래야 줄을 지우거나
-            // 늘려도 "흰 종이 영역" 자체의 높이는 항상 A4 한 장 그대로 유지되고, 회색 띠는
-            // 항상 같은 크기라 그 자체를 기준자처럼 믿을 수 있다.
-            gaps.push({ pos, height: PAGE_PADDING_PX * 2, leftoverHeight, label: `${i + 1}쪽 끝` });
+      function buildGaps(leftovers: number[]): PageGap[] {
+        const out: PageGap[] = [];
+        pages.forEach((_pageHtml, i) => {
+          const isLastPage = i === pages.length - 1;
+          if (isLastPage) {
+            // 마지막 페이지는 넘어갈 다음 장이 없다 — 남은 공간만 흰 스페이서로 채워 A4 한 장
+            // 높이를 맞춘다. 아래 여백(20mm)은 감싸는 .po-page의 p-[20mm]가 이미 만들므로
+            // 여기서 띠를 또 넣으면 그 장만 20mm 길어진다.
+            out.push({ pos: editor!.state.doc.content.size, height: 0, leftoverHeight: leftovers[i] ?? 0, label: `${i + 1}쪽 끝` });
+          } else {
+            const pos = nodeOffsets[pageEndBlockIndex[i]];
+            if (pos !== undefined) {
+              // 회색 띠는 항상 A4 여백(위+아래) 고정값, 못 채운 공간은 흰 스페이서로 따로 채운다.
+              out.push({ pos, height: PAGE_PADDING_PX * 2, leftoverHeight: leftovers[i] ?? 0, label: `${i + 1}쪽 끝` });
+            }
           }
-        }
-      });
+        });
+        return out;
+      }
 
-      editor!.view.dispatch(editor!.view.state.tr.setMeta(pageGapsPluginKey, gaps));
+      // 1차: 스페이서 없이 회색 띠만 넣어 실제 화면을 확정한다.
+      editor!.view.dispatch(editor!.view.state.tr.setMeta(pageGapsPluginKey, buildGaps([])));
+
+      // 2차: "숨겨둔 사본"이 아니라 편집기가 실제로 그린 DOM에서 각 페이지의 실제 높이를 재서
+      // 남은 공간을 채운다. 예전엔 사본에서 잰 높이로 스페이서를 정했는데, 사본과 ProseMirror의
+      // 실제 렌더링은 미묘하게 다를 수 있어(서명 블록 노드뷰, 빈 문단의 trailing break 등)
+      // 그 차이만큼 편집기 페이지 길이가 A4에서 벗어났다 — 미리보기와 아무리 맞춰도 어긋나던
+      // 근본 원인이다. 실제 DOM을 기준으로 채우면 편집기 페이지는 정의상 항상 A4가 된다.
+      requestAnimationFrame(() => {
+        if (cancelled || !editor || editor.isDestroyed) return;
+        const dom = editor.view.dom as HTMLElement;
+        const blockEls = Array.from(dom.children).filter(
+          (el) => !(el instanceof HTMLElement && el.dataset.pageGap === "1")
+        ) as HTMLElement[];
+        // 블록 수가 예상과 다르면(예기치 못한 렌더링) 억지로 맞추지 않고 그대로 둔다.
+        if (blockEls.length !== nodeOffsets.length) return;
+
+        const leftovers = pages.map((_p, i) => {
+          const startIdx = i === 0 ? 0 : pageEndBlockIndex[i - 1];
+          const budget = i === 0 ? budgets.first : budgets.rest;
+          const top = blockEls[startIdx]?.offsetTop ?? 0;
+          const isLastPage = i === pages.length - 1;
+          // 다음 페이지 첫 블록의 위치까지가 이 페이지가 실제로 쓴 높이다(블록 사이 여백까지
+          // 자연히 포함된다). 그 사이에 낀 회색 띠 높이는 빼준다.
+          const bottom = isLastPage ? dom.scrollHeight : (blockEls[pageEndBlockIndex[i]]?.offsetTop ?? dom.scrollHeight);
+          const band = isLastPage ? 0 : PAGE_PADDING_PX * 2;
+          const used = Math.max(0, bottom - top - band);
+          return Math.max(0, budget - used);
+        });
+
+        editor.view.dispatch(editor.view.state.tr.setMeta(pageGapsPluginKey, buildGaps(leftovers)));
+      });
     }
     recompute();
     // 커스텀 웹폰트(Pretendard)가 로딩되기 전에 측정하면 대체 폰트 기준으로 줄바꿈이 잡혀서,

@@ -113,13 +113,3 @@ export function paginateHtml(html: string, budgets: { first: number; rest: numbe
   if (current.length > 0) pages.push(current.join(""));
   return pages.length > 0 ? pages : [""];
 }
-
-// 한 페이지 분량 HTML 문자열이 실제로 예산 중 얼마를 썼는지 잰다 — 크게 편집 화면에서
-// "이 페이지에 아직 남은 여백"을 흰 스페이서로 채워, 미리보기처럼 항상 A4 한 장 전체
-// 높이로 보이게 하는 데 쓴다.
-export function measurePageHeight(pageHtml: string, measureEl: HTMLDivElement): number {
-  measureEl.innerHTML = pageHtml;
-  const height = measureEl.scrollHeight;
-  measureEl.innerHTML = "";
-  return height;
-}

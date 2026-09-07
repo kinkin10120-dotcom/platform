@@ -119,7 +119,8 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                     ))}
                     {(it.costs ?? []).map((c, ci) => (
                       <p key={ci} className="mt-0.5 pl-2 text-xs text-[#86868b]">
-                        + {c.name} : {formatSupplierMoney(c.amount, data.currency)}
+                        + {c.nameEn || c.name} : {formatSupplierMoney(c.amount, data.currency)}
+                        {(c.quantity ?? 1) !== 1 && ` × ${c.quantity} = ${formatSupplierMoney(c.amount * (c.quantity ?? 1), data.currency)}`}
                       </p>
                     ))}
                   </div>

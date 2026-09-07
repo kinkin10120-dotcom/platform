@@ -353,7 +353,12 @@ export const SHIPPING_TERM_LABEL: Record<ShippingTerm, string> = {
 // 조립을 우리가 하기도 하고 공장이 하기도 해서, 매번 같은 항목이 붙지는 않기 때문이다.
 export interface SupplierCostItem {
   name: string;
+  // 발주서에 찍히는 영문/중문 항목명 — 공장이 한글을 못 읽는다. 비워두면 한글 이름이 그대로 간다.
+  nameEn?: string;
+  // 단가 성격의 금액. 실제로 더해지는 값은 amount × quantity다(조립비를 개당으로 받는 경우가
+  // 있어서 개수를 따로 둔다). 개수가 없던 시절 데이터는 1개로 본다.
   amount: number;
+  quantity?: number;
 }
 
 // 조립품은 완제품 하나에 여러 부품이 들어가고, 공장과는 부품별 단가로 이야기한다 — 발주서에도

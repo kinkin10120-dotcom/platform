@@ -15,6 +15,7 @@ import {
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import {
+  calcCostsTotal,
   calcSupplierItemTotal,
   calcSupplierOrderTotal,
   createSupplierOrder,
@@ -443,7 +444,9 @@ function PurchaseInfoEditor({
   const cleanParts = parts
     .filter((p) => p.name.trim())
     .map((p) => ({ name: p.name.trim(), nameEn: p.nameEn?.trim() || undefined, unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 }));
-  const cleanCosts = costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 }));
+  const cleanCosts = costItems
+    .filter((c) => c.name.trim())
+    .map((c) => ({ name: c.name.trim(), nameEn: c.nameEn?.trim() || undefined, amount: Number(c.amount) || 0, quantity: c.quantity ?? 1 }));
 
   async function handleImageChange(file: File | null) {
     if (!file) return;
@@ -672,18 +675,31 @@ function PurchaseInfoEditor({
       <div className="space-y-1.5">
         <p className="text-xs text-[#86868b]">부대비용 기본 목록 (발주할 때 로트별로 골라 담습니다)</p>
         {costItems.map((c, i) => (
-          <div key={i} className="flex gap-2">
+          <div key={i} className="flex flex-wrap gap-2">
             <input
               value={c.name}
               onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: e.target.value } : it)))}
               placeholder="항목 (조립비·포장비 등)"
-              className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+              className="min-w-[7rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <input
+              value={c.nameEn ?? ""}
+              onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, nameEn: e.target.value } : it)))}
+              placeholder="영문/중문"
+              className="min-w-[7rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
             <NumberInput
               value={c.amount}
               onChange={(n) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, amount: n } : it)))}
               placeholder="금액"
-              className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+              className="w-20 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <NumberInput
+              value={c.quantity ?? 1}
+              onChange={(n) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity: n } : it)))}
+              decimal={false}
+              placeholder="개수"
+              className="w-16 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
             <button
               onClick={() => setCostItems((prev) => prev.filter((_, idx) => idx !== i))}
@@ -694,12 +710,19 @@ function PurchaseInfoEditor({
             </button>
           </div>
         ))}
-        <button
-          onClick={() => setCostItems((prev) => [...prev, { name: "", amount: 0 }])}
-          className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
-        >
-          <Plus size={13} /> 부대비용 항목 추가
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setCostItems((prev) => [...prev, { name: "", amount: 0, quantity: 1 }])}
+            className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+          >
+            <Plus size={13} /> 부대비용 항목 추가
+          </button>
+          {costItems.length > 0 && (
+            <span className="text-xs text-[#86868b]">
+              부대비용 합계 <span className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(calcCostsTotal(cleanCosts), purchaseCurrency)}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-2 pt-1">
@@ -1130,7 +1153,7 @@ function SupplierOrderComposer({
               <p className="text-xs font-semibold text-[#86868b]">이번 로트 부대비용</p>
               {it.costOptions.length === 0 && <p className="text-xs text-[#d1d1d6]">등록된 부대비용이 없습니다. 아래에서 직접 추가할 수 있습니다.</p>}
               {it.costOptions.map((opt, ci) => (
-                <div key={ci} className="flex items-center gap-2">
+                <div key={ci} className="flex flex-wrap items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={opt.checked}
@@ -1148,7 +1171,17 @@ function SupplierOrderComposer({
                       })
                     }
                     placeholder="항목명"
-                    className="flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
+                  <input
+                    value={opt.cost.nameEn ?? ""}
+                    onChange={(e) =>
+                      patchItem(it.key, {
+                        costOptions: it.costOptions.map((o, idx) => (idx === ci ? { ...o, cost: { ...o.cost, nameEn: e.target.value } } : o)),
+                      })
+                    }
+                    placeholder="영문/중문"
+                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <NumberInput
                     value={opt.cost.amount}
@@ -1160,6 +1193,17 @@ function SupplierOrderComposer({
                     placeholder="금액"
                     className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
+                  <NumberInput
+                    value={opt.cost.quantity ?? 1}
+                    onChange={(n) =>
+                      patchItem(it.key, {
+                        costOptions: it.costOptions.map((o, idx) => (idx === ci ? { ...o, cost: { ...o.cost, quantity: n } } : o)),
+                      })
+                    }
+                    decimal={false}
+                    placeholder="개수"
+                    className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
                   <button
                     onClick={() => patchItem(it.key, { costOptions: it.costOptions.filter((_, idx) => idx !== ci) })}
                     className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
@@ -1169,12 +1213,22 @@ function SupplierOrderComposer({
                   </button>
                 </div>
               ))}
-              <button
-                onClick={() => patchItem(it.key, { costOptions: [...it.costOptions, { cost: { name: "", amount: 0 }, checked: true }] })}
-                className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
-              >
-                <Plus size={12} /> 항목 추가
-              </button>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => patchItem(it.key, { costOptions: [...it.costOptions, { cost: { name: "", amount: 0, quantity: 1 }, checked: true }] })}
+                  className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+                >
+                  <Plus size={12} /> 항목 추가
+                </button>
+                {it.costOptions.some((c) => c.checked) && (
+                  <span className="text-xs text-[#86868b]">
+                    부대비용 합계{" "}
+                    <span className="font-semibold text-[#1d1d1f]">
+                      {formatSupplierMoney(calcCostsTotal(it.costOptions.filter((c) => c.checked).map((c) => c.cost)), currency)}
+                    </span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -1424,6 +1478,7 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
                 {(it.costs ?? []).map((c, ci) => (
                   <p key={ci} className="mt-0.5 pl-3 text-xs text-[#86868b]">
                     + {c.name} {formatSupplierMoney(c.amount, order.currency)}
+                    {(c.quantity ?? 1) !== 1 && ` × ${c.quantity} = ${formatSupplierMoney(c.amount * (c.quantity ?? 1), order.currency)}`}
                   </p>
                 ))}
               </div>

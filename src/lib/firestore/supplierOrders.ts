@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
-import { SupplierCurrency, SupplierOrder, SupplierOrderItem, SupplierOrderStatus } from "@/lib/types";
+import { SupplierCostItem, SupplierCurrency, SupplierOrder, SupplierOrderItem, SupplierOrderStatus } from "@/lib/types";
 
 // 매입(핸디핸드 → 공장) 전용 컬렉션. 매출 쪽 purchaseOrders와 절대 섞지 않는다 — 방향이
 // 반대라 금액의 의미가 정반대이고, 무엇보다 이 문서에는 clientId가 없어서 firestore.rules에서
@@ -52,8 +52,15 @@ function fromDoc(d: any): SupplierOrder {
 // 금액"으로 확정된 값이라 수량을 곱하지 않는다(조립비를 로트 단위로 받는 실제 거래 방식과 같다).
 export function calcSupplierItemTotal(item: SupplierOrderItem): number {
   const base = item.unitPrice * item.quantity;
-  const costs = (item.costs ?? []).reduce((sum, c) => sum + (c.amount || 0), 0);
+  const costs = calcCostsTotal(item.costs);
   return base + costs;
+}
+
+// 부대비용 합계 — 부품과 같이 "단가 × 개수"로 더한다. 개수를 안 넣은 항목(과거 데이터 포함)은
+// 1개로 본다. 완제품 수량을 곱하지는 않는다 — 조립비를 로트 단위로 받는 경우가 있어서,
+// 몇 개분인지는 이 개수 칸으로 직접 적는 쪽이 실제 거래 방식과 맞는다.
+export function calcCostsTotal(costs?: SupplierCostItem[]): number {
+  return (costs ?? []).reduce((sum, c) => sum + (c.amount || 0) * (c.quantity ?? 1), 0);
 }
 
 export function calcSupplierOrderTotal(items: SupplierOrderItem[]): number {

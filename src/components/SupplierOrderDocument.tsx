@@ -115,6 +115,8 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                     {(it.parts ?? []).map((pt, pi) => (
                       <p key={pi} className="mt-0.5 pl-2 text-xs text-[#86868b]">
                         · {pt.nameEn || pt.name} {formatSupplierMoney(pt.unitPrice, data.currency)} × {pt.quantity}
+                        {/* 부품별 합계 — 수량이 1이면 단가와 같아서 굳이 반복하지 않는다. */}
+                        {pt.quantity !== 1 && ` = ${formatSupplierMoney(pt.unitPrice * pt.quantity, data.currency)}`}
                       </p>
                     ))}
                     {(it.costs ?? []).map((c, ci) => (

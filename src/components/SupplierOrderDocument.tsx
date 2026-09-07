@@ -45,11 +45,7 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
   const singleClient = clientNames.length === 1 ? clientNames[0] : null;
 
   return (
-    /* 높이를 화면과 인쇄에서 다르게 주면 푸터 위치가 어긋난다(실제로 그랬다) — 아예 문서
-       자체가 한 가지 높이만 갖게 해서 "보이는 대로 인쇄"를 구조적으로 보장한다. A4(297mm)가
-       아니라 1mm 낮은 이유는, 정확히 페이지 높이와 같으면 반올림 오차로 빈 페이지가 한 장 더
-       생기기 때문이다(계약서에서 확인한 문제). */
-    <div className="po-page flex h-[296mm] w-[210mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
+<div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
       <div className="flex items-start justify-between border-b-2 border-[#1d1d1f] pb-6">
         <div>
           <p className="text-3xl font-bold tracking-tight">采购订单</p>

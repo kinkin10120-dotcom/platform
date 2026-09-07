@@ -75,6 +75,10 @@ export function listenSupplierOrders(cb: (orders: SupplierOrder[]) => void) {
   });
 }
 
+export function listenSupplierOrder(id: string, cb: (order: SupplierOrder | null) => void) {
+  return onSnapshot(doc(db, "supplierOrders", id), (snap) => cb(snap.exists() ? fromDoc(snap) : null));
+}
+
 export interface CreateSupplierOrderInput {
   supplierName: string;
   items: SupplierOrderItem[];

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -223,7 +224,6 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
       <SupplierOrderDetail
         order={selected}
         onClose={() => setSelected(null)}
-        onPreview={onPreview}
         onEdit={() => { setEditingOrder(selected); setSelected(null); }}
       />
     );
@@ -1052,7 +1052,7 @@ function SupplierOrderComposer({
 
   if (previewOpen) {
     return (
-      <PrintablePreview onClose={() => setPreviewOpen(false)} label="구매발주서 미리보기 — 인쇄 시 A4 크기로 저장됩니다.">
+      <PrintablePreview onClose={() => setPreviewOpen(false)} label="발행 전 미리보기 — 실제 발주서와 동일합니다.">
         <SupplierOrderDocument
           data={{
             supplierName,
@@ -1523,30 +1523,13 @@ function SupplierOrderComposer({
 function SupplierOrderDetail({
   order,
   onClose,
-  onPreview,
   onEdit,
 }: {
   order: SupplierOrder;
   onClose: () => void;
-  onPreview: (open: boolean) => void;
   onEdit: () => void;
 }) {
-  const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-
-  usePrintFileName([order.supplierName, "구매발주서", order.soNumber], previewOpen);
-  useEffect(() => {
-    onPreview(previewOpen);
-    return () => onPreview(false);
-  }, [previewOpen, onPreview]);
-
-  if (previewOpen) {
-    return (
-      <PrintablePreview onClose={() => setPreviewOpen(false)} label={`${order.soNumber} — 인쇄 시 A4 크기로 저장됩니다.`}>
-        <SupplierOrderDocument data={{ ...order, createdAt: order.createdAt }} />
-      </PrintablePreview>
-    );
-  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 rounded-3xl bg-white p-6">
@@ -1622,12 +1605,15 @@ function SupplierOrderDetail({
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-[#f0f0f0] pt-4">
-        <button
-          onClick={() => setPreviewOpen(true)}
+        {/* 인쇄는 (app) 레이아웃 바깥의 전용 페이지에서 한다 — 사이드바·상단바가 있는 화면
+            안에서 인쇄하면 숨긴 요소들이 자리를 차지해 빈 두 번째 장이 생긴다(발주서·청구서가
+            전부 전용 라우트인 이유). */}
+        <Link
+          href={`/supplier-orders/${order.id}/print`}
           className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black"
         >
           <Printer size={14} /> 발주서 보기 / PDF
-        </button>
+        </Link>
         <button
           onClick={onEdit}
           className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
@@ -1673,10 +1659,9 @@ function SupplierOrderDetail({
 
 // 견적서 미리보기와 같은 구조 — 화면에 보이는 것을 그대로 인쇄한다(인쇄용 사본을 따로 두면
 // 페이지 나눔이 어긋난다는 걸 계약서 쪽에서 이미 겪었다).
-// 계약서 미리보기(ContractPreviewModal)와 똑같은 틀 — 상단에 고정된 바 + 그 아래 A4 문서.
-// 화면에 보이는 것을 그대로 인쇄한다(인쇄용 사본을 따로 두면 페이지 나눔이 어긋난다는 걸
-// 계약서 쪽에서 이미 겪었다). position:fixed로 문서 전체를 덮는 방식도 인쇄 엔진이 여러
-// 페이지로 못 나누는 문제가 있어서, 고정하는 건 상단 바 하나뿐이다.
+// 작성 중인 발주서를 화면에서 확인하는 용도. 인쇄는 여기서 하지 않는다 — 사이드바·상단바가
+// 있는 (app) 레이아웃 안에서 인쇄하면 숨긴 요소들이 자리를 그대로 차지해서 빈 두 번째 장이
+// 생긴다. 저장한 뒤 /supplier-orders/[id]/print 전용 페이지에서 뽑는다.
 function PrintablePreview({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -1693,45 +1678,8 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
 
   return (
     <div
-      id="supplier-order-print-root"
-      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))] print:m-0 print:mt-0 print:bg-white"
+      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))]"
     >
-      <style>{`
-        @page { size: A4; margin: 0; }
-        @media print {
-          /* 페이지 자체를 A4 한 장 크기로 못박는다. 여기까지 하지 않으면 문서 높이를 아무리
-             맞춰도 브라우저·프린터 설정(여백 기본값 등)에 따라 조금씩 넘쳐서 빈 두 번째
-             장이 생긴다 — 실제로 계속 그랬다. overflow를 잘라내는 것까지가 한 세트다. */
-          html, body {
-            width: 210mm !important;
-            height: 297mm !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: hidden !important;
-          }
-          /* 사이드바·상단바 등 나머지 화면은 인쇄에서 빼고 이 문서만 남긴다. */
-          body * { visibility: hidden; }
-          #supplier-order-print-root, #supplier-order-print-root * { visibility: visible; }
-          /* 바깥 컨테이너의 min-h-screen(=100vh)은 인쇄에서 A4 한 장을 통째로 차지해버려
-             문서 뒤에 빈 페이지를 만든다. 문서 자체의 높이(296mm)는 SupplierOrderDocument가
-             화면과 공통으로 갖고 있으므로 여기서 손대지 않는다 — 손대는 순간 미리보기와
-             인쇄가 어긋난다. */
-          #supplier-order-print-root {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 210mm;
-            min-height: 0 !important;
-          }
-          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
-          .pdf-scale-wrapper { width: auto !important; height: auto !important; }
-          .pdf-scale-inner { transform: none !important; width: auto !important; }
-          /* 헤더 높이만큼 준 인라인 padding-top은 인쇄 시 필요 없다(헤더 자체가 안 보인다) —
-             인라인 style은 !important 없이는 못 이겨서 명시한다. */
-          .supplier-preview-body { padding-top: 0 !important; }
-        }
-      `}</style>
-
       {/* 앱 상단바(h-14, fixed) 바로 아래에 이어붙인다 — 덮지 않고 그 밑에 붙어야 한다. */}
       <div
         ref={headerRef}
@@ -1748,16 +1696,14 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
             </button>
             <p className="text-sm text-[#86868b]">{label}</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
-          >
-            <Printer size={15} /> 인쇄 / PDF 저장
-          </button>
+          {/* 여기서 바로 인쇄하지 않는다 — 사이드바·상단바가 있는 화면 안에서 인쇄하면
+              숨긴 요소들이 자리를 차지해 빈 두 번째 장이 생긴다. 저장한 뒤 전용 인쇄
+              페이지에서 뽑는다. */}
+          <p className="text-xs text-[#86868b]">저장한 뒤 &quot;발주서 보기 / PDF&quot;에서 인쇄할 수 있습니다.</p>
         </div>
       </div>
 
-      <div className="supplier-preview-body px-4 pb-10 print:p-0" style={{ paddingTop: 56 + headerHeight }}>
+      <div className="px-4 pb-10" style={{ paddingTop: 56 + headerHeight }}>
         <PdfPageScaler>{children}</PdfPageScaler>
       </div>
     </div>

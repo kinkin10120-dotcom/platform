@@ -80,6 +80,13 @@ export interface CatalogEntry {
 interface DraftItem extends SupplierOrderItem {
   key: string;
   costOptions: { cost: SupplierCostItem; checked: boolean }[];
+  // 부품 수량은 "실제로 발주할 개수"다. 보통은 발주 수량을 따라가므로(2000세트면 부품도 2000개),
+  // 카탈로그에 등록된 "완제품 1개당 수량"을 여기 들고 있다가 발주 수량이 바뀔 때마다 곱해서
+  // 다시 맞춘다 — 세트당 자석이 2개면 2000세트에서 4000개가 되어야 하기 때문이다.
+  partsPerUnit: number[];
+  // 사용자가 그 부품 수량을 직접 고쳤으면 더는 자동으로 건드리지 않는다 — 어떤 부품만 여유분을
+  // 더 발주하는 경우가 있어서다.
+  partsOverridden: boolean[];
 }
 
 export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boolean) => void }) {
@@ -873,6 +880,8 @@ function SupplierOrderComposer({
         // 부품 내역과 사진은 값을 복사해 둔다 — 나중에 품목 쪽이 바뀌어도 이미 나간 발주서는
         // 그대로여야 한다(부대비용을 복사해 담는 것과 같은 이유).
         parts: e.parts?.map((pt) => ({ ...pt })),
+        partsPerUnit: (e.parts ?? []).map((pt) => pt.quantity || 1),
+        partsOverridden: (e.parts ?? []).map(() => false),
         imageUrl: e.imageUrl,
         clientName: e.clientName,
         costOptions: (e.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
@@ -888,16 +897,48 @@ function SupplierOrderComposer({
   function addBlankItem() {
     setItems((prev) => [
       ...prev,
-      { key: `blank-${Date.now()}`, name: "직접 입력 품목", unitPrice: 0, quantity: 1, unit: "SET", costOptions: [] },
+      { key: `blank-${Date.now()}`, name: "직접 입력 품목", unitPrice: 0, quantity: 1, unit: "SET", costOptions: [], partsPerUnit: [], partsOverridden: [] },
     ]);
   }
 
-  // 부품을 고치면 완제품 단가를 부품 합계로 다시 맞춘다 — 매입 정보 편집기와 같은 규칙이다.
-  // 두 값을 따로 두면 언젠가 어긋나고, 금액 계산은 unitPrice 하나만 쓰므로 여기서 맞춰줘야 한다.
-  function patchParts(key: string, nextParts: SupplierPartItem[]) {
-    const sum = nextParts.reduce((acc, p) => acc + (p.unitPrice || 0) * (p.quantity || 0), 0);
+  // 부품이 있으면 그 합계가 곧 이 품목의 금액이다. 금액 계산(calcSupplierItemTotal)은
+  // unitPrice × quantity를 쓰므로, 부품 합계를 발주 수량으로 나눈 값을 unitPrice에 넣어두면
+  // 다시 곱해졌을 때 정확히 부품 합계가 된다 — 화면에 보이는 단가도 "세트당 얼마"가 되어 맞다.
+  function syncedUnitPrice(parts: SupplierPartItem[], quantity: number, fallback: number) {
+    if (parts.length === 0) return fallback;
+    const sum = parts.reduce((acc, p) => acc + (p.unitPrice || 0) * (p.quantity || 0), 0);
+    return quantity > 0 ? sum / quantity : sum;
+  }
+
+  function patchParts(key: string, nextParts: SupplierPartItem[], opts?: { overriddenIndex?: number }) {
     setItems((prev) =>
-      prev.map((it) => (it.key === key ? { ...it, parts: nextParts, unitPrice: nextParts.length > 0 ? sum : it.unitPrice } : it))
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        const partsOverridden = [...it.partsOverridden];
+        if (opts?.overriddenIndex != null) partsOverridden[opts.overriddenIndex] = true;
+        // 부품이 새로 추가·삭제되면 보조 배열 길이도 맞춰준다.
+        const partsPerUnit = nextParts.map((p, i) => it.partsPerUnit[i] ?? (it.quantity > 0 ? (p.quantity || 0) / it.quantity : p.quantity || 1));
+        return {
+          ...it,
+          parts: nextParts,
+          partsPerUnit,
+          partsOverridden: nextParts.map((_, i) => partsOverridden[i] ?? false),
+          unitPrice: syncedUnitPrice(nextParts, it.quantity, it.unitPrice),
+        };
+      })
+    );
+  }
+
+  // 발주 수량을 바꾸면 부품 수량도 함께 따라간다(직접 고친 부품은 그대로 둔다).
+  function patchQuantity(key: string, quantity: number) {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.key !== key) return it;
+        const parts = (it.parts ?? []).map((p, i) =>
+          it.partsOverridden[i] ? p : { ...p, quantity: Math.round((it.partsPerUnit[i] ?? 1) * quantity) }
+        );
+        return { ...it, quantity, parts, unitPrice: syncedUnitPrice(parts, quantity, it.unitPrice) };
+      })
     );
   }
 
@@ -1085,7 +1126,7 @@ function SupplierOrderComposer({
               <span className="text-xs text-[#86868b]">×</span>
               <NumberInput
                 value={it.quantity}
-                onChange={(n) => patchItem(it.key, { quantity: n })}
+                onChange={(n) => patchQuantity(it.key, n)}
                 decimal={false}
                 className="w-16 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
               />
@@ -1103,7 +1144,17 @@ function SupplierOrderComposer({
             {/* 구성 부품 — 카탈로그에서 담아온 것도, 직접 입력 품목도 여기서 바로 고칠 수 있다.
                 부품이 하나라도 있으면 위 단가는 부품 합계로 자동 계산된다. */}
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-[#86868b]">구성 부품</p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-[#86868b]">구성 부품 (수량은 발주 수량을 따라갑니다)</p>
+                {(it.parts ?? []).length > 0 && (
+                  <span className="text-xs text-[#86868b]">
+                    부품 합계{" "}
+                    <span className="font-semibold text-[#1d1d1f]">
+                      {formatSupplierMoney((it.parts ?? []).reduce((sum, p) => sum + p.unitPrice * p.quantity, 0), currency)}
+                    </span>
+                  </span>
+                )}
+              </div>
               {(it.parts ?? []).map((pt, pi) => (
                 <div key={pi} className="flex flex-wrap items-center gap-1.5">
                   <input
@@ -1126,11 +1177,19 @@ function SupplierOrderComposer({
                   />
                   <NumberInput
                     value={pt.quantity}
-                    onChange={(n) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: n } : x)))}
+                    onChange={(n) =>
+                      patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: n } : x)), { overriddenIndex: pi })
+                    }
                     decimal={false}
                     placeholder="수량"
-                    className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    title={it.partsOverridden[pi] ? "직접 지정한 수량 — 발주 수량을 바꿔도 그대로 유지됩니다." : "발주 수량을 따라갑니다."}
+                    className={`w-16 rounded-lg border bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] ${
+                      it.partsOverridden[pi] ? "border-[#1d1d1f]" : "border-[#d1d1d6]"
+                    }`}
                   />
+                  <span className="w-20 shrink-0 text-right text-xs font-medium text-[#1d1d1f]">
+                    {formatSupplierMoney(pt.unitPrice * pt.quantity, currency)}
+                  </span>
                   <button
                     onClick={() => patchParts(it.key, (it.parts ?? []).filter((_, xi) => xi !== pi))}
                     className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
@@ -1141,7 +1200,7 @@ function SupplierOrderComposer({
                 </div>
               ))}
               <button
-                onClick={() => patchParts(it.key, [...(it.parts ?? []), { name: "", unitPrice: 0, quantity: 1 }])}
+                onClick={() => patchParts(it.key, [...(it.parts ?? []), { name: "", unitPrice: 0, quantity: it.quantity || 1 }])}
                 className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
               >
                 <Plus size={12} /> 부품 추가

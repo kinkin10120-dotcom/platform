@@ -1588,12 +1588,12 @@ function SupplierOrderDetail({
                   {formatSupplierMoney(it.unitPrice, order.currency)} × {it.quantity} {it.unit || "PCS"}
                 </p>
                 {(it.parts ?? []).map((pt, pi) => (
-                  <p key={pi} className="mt-0.5 pl-3 text-xs text-[#86868b]">
+                  <p key={pi} className="mt-0.5 text-xs text-[#86868b]">
                     · {pt.name} {formatSupplierMoney(pt.unitPrice, order.currency)} × {pt.quantity}
                   </p>
                 ))}
                 {(it.costs ?? []).map((c, ci) => (
-                  <p key={ci} className="mt-0.5 pl-3 text-xs text-[#86868b]">
+                  <p key={ci} className="mt-0.5 text-xs text-[#86868b]">
                     + {c.name} {formatSupplierMoney(c.amount, order.currency)}
                     {(c.quantity ?? 1) !== 1 && ` × ${c.quantity} = ${formatSupplierMoney(c.amount * (c.quantity ?? 1), order.currency)}`}
                   </p>

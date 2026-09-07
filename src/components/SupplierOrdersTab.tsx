@@ -396,19 +396,26 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             onKeyDown={(e) => { if (e.key === "Enter") setSelected(o); }}
             className="w-full cursor-pointer rounded-2xl border border-[#e5e5e5] bg-white p-4 text-left transition hover:border-[#86868b]"
           >
+            {/* 목록에서 눌러보지 않고도 "아, 그 건이구나" 하고 알아볼 수 있어야 하므로
+                고객명과 품목명을 맨 앞에 둔다. 발주번호·로트는 식별자라 아래로 내린다. */}
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate font-medium text-[#1d1d1f]">{o.supplierName || "-"}</p>
+              <p className="truncate font-medium text-[#1d1d1f]">
+                {Array.from(new Set(o.items.map((it) => it.clientName).filter(Boolean))).join(", ") || o.supplierName || "-"}
+              </p>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
                 {SUPPLIER_ORDER_STATUS_LABEL[o.status]}
               </span>
             </div>
+            <p className="mt-0.5 truncate text-sm text-[#1d1d1f]">
+              {o.items.map((it) => it.name).filter(Boolean).join(", ") || "품목 없음"}
+            </p>
             <p className="mt-1 truncate text-xs text-[#86868b]">
+              {o.supplierName || "-"} · {formatSupplierMoney(o.totalAmount, o.currency)} · {new Date(o.createdAt).toLocaleDateString("ko-KR")}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-[#d1d1d6]">
               {o.soNumber}
               {o.lotNo ? ` · Lot ${o.lotNo}` : ""}
               {o.linkedPurchaseOrderNo ? ` · 고객발주 ${o.linkedPurchaseOrderNo}` : ""}
-            </p>
-            <p className="mt-1.5 text-xs text-[#d1d1d6]">
-              {formatSupplierMoney(o.totalAmount, o.currency)} · {new Date(o.createdAt).toLocaleDateString("ko-KR")}
             </p>
           </div>
         ))}

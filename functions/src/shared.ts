@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getStorage } from "firebase-admin/storage";
 import { setGlobalOptions } from "firebase-functions/v2";
@@ -45,6 +45,36 @@ function emailShell(contentHtml: string): string {
   `;
 }
 
+// 알림이 안 나가도 여태 흔적이 남는 곳은 Cloud Functions 로그뿐이라, 관리자는 "알림이 오는지"
+// 직접 테스트해보는 수밖에 없었다. 발송이 실패하면 여기에 기록해두고, 관리자 화면 상단에
+// 빨간 띠로 띄운다 — 고장을 찾아다니는 게 아니라 고장이 먼저 알려주게 하려는 것이다.
+//
+// 실패가 연달아 나도 문서가 쌓이지 않도록 "종류 + 날짜"를 문서 id로 써서 하루 한 건으로
+// 합치고, 몇 번 실패했는지만 세어둔다.
+export async function recordSystemAlert(kind: string, message: string): Promise<void> {
+  try {
+    const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }); // YYYY-MM-DD
+    await db
+      .collection("systemAlerts")
+      .doc(`${kind}-${day}`)
+      .set(
+        {
+          kind,
+          message,
+          day,
+          count: FieldValue.increment(1),
+          lastAt: FieldValue.serverTimestamp(),
+          // 같은 날 다시 실패하면(관리자가 이미 닫았더라도) 다시 띄운다.
+          resolved: false,
+        },
+        { merge: true }
+      );
+  } catch (e) {
+    // 기록 자체가 실패해도 원래 하려던 일을 막지는 않는다.
+    console.error("시스템 경고 기록 실패:", e);
+  }
+}
+
 export async function sendNotifyEmail(to: string, subject: string, html: string): Promise<void> {
   try {
     const res = await fetch("https://handyhand.co.kr/api/notify-email", {
@@ -53,10 +83,13 @@ export async function sendNotifyEmail(to: string, subject: string, html: string)
       body: JSON.stringify({ to, subject, html: emailShell(html) }),
     });
     if (!res.ok) {
-      console.error(`알림 이메일 발송 실패 (to: ${to}, status: ${res.status}): ${await res.text().catch(() => "")}`);
+      const body = await res.text().catch(() => "");
+      console.error(`알림 이메일 발송 실패 (to: ${to}, status: ${res.status}): ${body}`);
+      await recordSystemAlert("email", `알림 이메일 발송이 실패했습니다 (${res.status}). 마지막 수신자: ${to}`);
     }
   } catch (e) {
     console.error(`알림 이메일 발송 중 네트워크 오류 (to: ${to}):`, e);
+    await recordSystemAlert("email", `알림 이메일 발송 중 네트워크 오류가 났습니다. 마지막 수신자: ${to}`);
   }
 }
 

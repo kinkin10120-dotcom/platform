@@ -8,6 +8,7 @@ import Sidebar from "@/components/Sidebar";
 import NotificationBell from "@/components/NotificationBell";
 import GlobalSearch from "@/components/GlobalSearch";
 import AddToHomeScreenBanner from "@/components/AddToHomeScreenBanner";
+import SystemAlertBanner from "@/components/SystemAlertBanner";
 
 function TodayDate() {
   const today = new Date();
@@ -95,6 +96,7 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
           className="no-scrollbar flex-1 overflow-y-auto bg-[#f5f5f7] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+4.5rem)] md:px-6 md:pb-6 md:pt-[calc(env(safe-area-inset-top)+5.5rem)]"
         >
           <AddToHomeScreenBanner />
+          <SystemAlertBanner />
           {children}
         </main>
       </div>

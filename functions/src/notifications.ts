@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
-import { db, messaging, internalNotifySecret, sendNotifyEmail } from "./shared";
+import { db, messaging, internalNotifySecret, sendNotifyEmail, recordSystemAlert } from "./shared";
 
 /* ------------------------------------------------------------------ */
 /* 5) 알림 생성 시 이메일 발송                                             */
@@ -88,6 +88,16 @@ export const onNotificationCreated = onDocumentCreated(
       ? "https://handyhand.co.kr/contracts"
       : "https://handyhand.co.kr/home";
 
+    // 홈 화면 앱을 지웠거나 브라우저를 바꾸면 토큰이 사라지는데, 그러면 조용히 푸시만 안 온다 —
+    // 관리자 본인 계정에 토큰이 하나도 없으면 그 사실을 화면에 띄운다(고객 계정은 제외:
+    // 고객이 푸시를 안 켜두는 건 정상이라 매번 경고가 뜨면 소음이 된다).
+    if (fcmTokens.length === 0 && userData?.role === "admin") {
+      await recordSystemAlert(
+        "push-token",
+        "관리자 계정에 등록된 푸시 토큰이 없어 푸시 알림이 가지 않습니다. 홈 화면에 추가한 앱에서 알림을 다시 허용해 주세요."
+      );
+    }
+
     if (fcmTokens.length > 0) {
       // 최상위 notification 필드를 넣으면 브라우저가 자동으로 배너를 띄우는 동시에
       // 서비스워커의 onBackgroundMessage도 별도로 showNotification을 호출해서, 기기에
@@ -103,6 +113,17 @@ export const onNotificationCreated = onDocumentCreated(
         .filter((t): t is string => !!t);
       if (staleTokens.length > 0) {
         await userSnap.ref.update({ fcmTokens: FieldValue.arrayRemove(...staleTokens) });
+      }
+      // 만료된 토큰(위에서 정리함)이 아닌 진짜 실패는 관리자 화면에 띄운다 — 여태 이런 실패는
+      // Cloud Functions 로그에만 남아서, 푸시가 안 오는 걸 사람이 직접 눈치채야 했다.
+      const realFailures = res.responses.filter(
+        (r) => !r.success && r.error?.code !== "messaging/registration-token-not-registered"
+      );
+      if (realFailures.length > 0) {
+        await recordSystemAlert(
+          "push",
+          `푸시 알림 발송이 실패했습니다 (${realFailures.length}건). 사유: ${realFailures[0].error?.code ?? "알 수 없음"}`
+        );
       }
     }
 

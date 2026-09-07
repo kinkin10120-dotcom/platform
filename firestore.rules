@@ -250,6 +250,14 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---- system alerts (알림 발송 실패 등 시스템 경고, 관리자 전용) ----
+    // 생성은 Cloud Functions(Admin SDK)만 한다 — Admin SDK는 규칙을 우회하므로 create를
+    // 막아두면 클라이언트가 가짜 경고를 심을 수 없다.
+    match /systemAlerts/{alertId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if false;
+    }
+
     // ---- supplier products (매입 전용 품목: 금형·부자재 등, 관리자 전용) ----
     // 고객 제품(clientProducts)과 달리 clientId가 없다 — supplierOrders와 같은 원칙으로,
     // 고객에게 열어줄 근거 자체를 만들지 않는다.

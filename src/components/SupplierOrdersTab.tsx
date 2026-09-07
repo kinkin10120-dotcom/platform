@@ -50,6 +50,10 @@ const STATUS_STYLE: Record<string, string> = {
 
 const NO_SUPPLIER = "미지정";
 
+// 결제조건 기본 문구 — 원화(국내) 발주서는 한글로 나가므로 기본값도 한글로 맞춘다.
+const DEFAULT_PAYMENT_FOREIGN = "T/T 30% deposit, 70% before shipment";
+const DEFAULT_PAYMENT_KRW = "계약금 30%, 출고 전 잔금 70%";
+
 // 구매 카탈로그 한 줄. 출처가 둘(고객에게도 파는 제품 / 매입 전용 품목)이라, 화면과 발주
 // 담기 로직이 출처를 신경 쓰지 않도록 공통 모양으로 한 번 펴서 쓴다.
 export interface CatalogEntry {
@@ -396,18 +400,21 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             {/* 목록에서 눌러보지 않고도 "아, 그 건이구나" 하고 알아볼 수 있어야 하므로
                 고객명과 품목명을 맨 앞에 둔다. 발주번호·로트는 식별자라 아래로 내린다. */}
             <div className="flex items-center justify-between gap-2">
-              <p className="truncate font-medium text-[#1d1d1f]">
-                {Array.from(new Set(o.items.map((it) => it.clientName).filter(Boolean))).join(", ") || o.supplierName || "-"}
-              </p>
+              <p className="truncate font-medium text-[#1d1d1f]">{o.supplierName || "-"}</p>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
                 {SUPPLIER_ORDER_STATUS_LABEL[o.status]}
               </span>
             </div>
+            {/* 눌러보지 않고도 어느 건인지 알 수 있게 품목명과 고객사를 나란히 둔다. */}
             <p className="mt-0.5 truncate text-sm text-[#1d1d1f]">
               {o.items.map((it) => it.name).filter(Boolean).join(", ") || "품목 없음"}
+              {(() => {
+                const clients = Array.from(new Set(o.items.map((it) => it.clientName).filter(Boolean)));
+                return clients.length > 0 ? <span className="text-[#86868b]"> · {clients.join(", ")}</span> : null;
+              })()}
             </p>
             <p className="mt-1 truncate text-xs text-[#86868b]">
-              {o.supplierName || "-"} · {formatSupplierMoney(o.totalAmount, o.currency)} · {new Date(o.createdAt).toLocaleDateString("ko-KR")}
+              {formatSupplierMoney(o.totalAmount, o.currency)} · {new Date(o.createdAt).toLocaleDateString("ko-KR")}
             </p>
             <p className="mt-0.5 truncate text-xs text-[#d1d1d6]">
               {o.soNumber}
@@ -828,7 +835,7 @@ function SupplierOrderComposer({
   const [rateLoading, setRateLoading] = useState(false);
   const [incoterms, setIncoterms] = useState(editing?.incoterms ?? "");
   const [portOfLoading, setPortOfLoading] = useState(editing?.portOfLoading ?? "");
-  const [paymentTerms, setPaymentTerms] = useState(editing?.paymentTerms ?? "T/T 30% deposit, 70% before shipment");
+  const [paymentTerms, setPaymentTerms] = useState(editing?.paymentTerms ?? DEFAULT_PAYMENT_FOREIGN);
   const [leadTimeDays, setLeadTimeDays] = useState(editing?.leadTimeDays != null ? String(editing.leadTimeDays) : "");
   const [packingNote, setPackingNote] = useState(editing?.packingNote ?? "");
   const [memo, setMemo] = useState(editing?.memo ?? "");
@@ -876,6 +883,15 @@ function SupplierOrderComposer({
   // 저장된 발주를 열 때는 그때 박아둔 환율을 그대로 둔다 — 지금 시세로 덮으면 그 건의
   // 원가가 나중에 바뀌어버린다. 통화를 실제로 바꿨을 때만 새로 받아온다.
   const rateInitialized = useRef(false);
+  // 통화를 바꾸면 결제조건 기본 문구도 그 언어로 바꿔준다 — 직접 고쳐 쓴 문구는 건드리지 않는다.
+  useEffect(() => {
+    setPaymentTerms((prev) => {
+      if (prev === DEFAULT_PAYMENT_FOREIGN && currency === "KRW") return DEFAULT_PAYMENT_KRW;
+      if (prev === DEFAULT_PAYMENT_KRW && currency !== "KRW") return DEFAULT_PAYMENT_FOREIGN;
+      return prev;
+    });
+  }, [currency]);
+
   useEffect(() => {
     if (!rateInitialized.current) {
       rateInitialized.current = true;

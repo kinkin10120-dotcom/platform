@@ -870,6 +870,15 @@ function SupplierOrderComposer({
     ]);
   }
 
+  // 부품을 고치면 완제품 단가를 부품 합계로 다시 맞춘다 — 매입 정보 편집기와 같은 규칙이다.
+  // 두 값을 따로 두면 언젠가 어긋나고, 금액 계산은 unitPrice 하나만 쓰므로 여기서 맞춰줘야 한다.
+  function patchParts(key: string, nextParts: SupplierPartItem[]) {
+    const sum = nextParts.reduce((acc, p) => acc + (p.unitPrice || 0) * (p.quantity || 0), 0);
+    setItems((prev) =>
+      prev.map((it) => (it.key === key ? { ...it, parts: nextParts, unitPrice: nextParts.length > 0 ? sum : it.unitPrice } : it))
+    );
+  }
+
   function patchItem(key: string, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
   }
@@ -1039,13 +1048,19 @@ function SupplierOrderComposer({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={it.unitPrice || ""}
-                onChange={(e) => patchItem(it.key, { unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 })}
-                inputMode="decimal"
-                placeholder="단가"
-                className="w-24 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-              />
+              {(it.parts ?? []).length > 0 ? (
+                <span className="rounded-lg bg-white px-2.5 py-1 text-xs text-[#1d1d1f]" title="부품 합계로 자동 계산됩니다">
+                  {formatSupplierMoney(it.unitPrice, currency)}
+                </span>
+              ) : (
+                <input
+                  value={it.unitPrice || ""}
+                  onChange={(e) => patchItem(it.key, { unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 })}
+                  inputMode="decimal"
+                  placeholder="단가"
+                  className="w-24 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
+              )}
               <span className="text-xs text-[#86868b]">×</span>
               <input
                 value={it.quantity || ""}
@@ -1064,16 +1079,54 @@ function SupplierOrderComposer({
               </span>
             </div>
 
-            {(it.parts ?? []).length > 0 && (
-              <div className="space-y-0.5">
-                <p className="text-xs font-semibold text-[#86868b]">구성 부품</p>
-                {it.parts!.map((pt, pi) => (
-                  <p key={pi} className="pl-3 text-xs text-[#86868b]">
-                    {pt.name} {formatSupplierMoney(pt.unitPrice, currency)} × {pt.quantity}
-                  </p>
-                ))}
-              </div>
-            )}
+            {/* 구성 부품 — 카탈로그에서 담아온 것도, 직접 입력 품목도 여기서 바로 고칠 수 있다.
+                부품이 하나라도 있으면 위 단가는 부품 합계로 자동 계산된다. */}
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-[#86868b]">구성 부품</p>
+              {(it.parts ?? []).map((pt, pi) => (
+                <div key={pi} className="flex flex-wrap items-center gap-1.5">
+                  <input
+                    value={pt.name}
+                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, name: e.target.value } : x)))}
+                    placeholder="부품명"
+                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
+                  <input
+                    value={pt.nameEn ?? ""}
+                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, nameEn: e.target.value } : x)))}
+                    placeholder="영문/중문"
+                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
+                  <input
+                    value={pt.unitPrice || ""}
+                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : x)))}
+                    inputMode="decimal"
+                    placeholder="단가"
+                    className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
+                  <input
+                    value={pt.quantity || ""}
+                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 } : x)))}
+                    inputMode="numeric"
+                    placeholder="수량"
+                    className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                  />
+                  <button
+                    onClick={() => patchParts(it.key, (it.parts ?? []).filter((_, xi) => xi !== pi))}
+                    className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+                    title="삭제"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={() => patchParts(it.key, [...(it.parts ?? []), { name: "", unitPrice: 0, quantity: 1 }])}
+                className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+              >
+                <Plus size={12} /> 부품 추가
+              </button>
+            </div>
 
             {/* 로트별 부대비용 — 체크한 것만 이번 발주에 들어간다. */}
             <div className="space-y-1">

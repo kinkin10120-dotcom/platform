@@ -204,20 +204,3 @@ export async function uploadQuoteBizRegCert(quoteId: string, email: string, file
   const res = await fn({ quoteId, email, fileDataUrl });
   return res.data;
 }
-
-// 구매발주 회신본 열기 — 저장된 건 파일 경로뿐이고, 파일 내용은 이 엔드포인트가 관리자인지
-// 확인한 뒤 직접 내려준다(외부에 남는 공개 URL을 만들지 않기 위함). 받은 바이트로 브라우저
-// 안에서만 쓰이는 임시 주소(blob:)를 만들어 새 탭에서 연다 — 그 주소는 탭을 닫으면 사라진다.
-export async function fetchSupplierOrderFile(path: string): Promise<string> {
-  const { getAuth } = await import("firebase/auth");
-  const user = getAuth(app).currentUser;
-  if (!user) throw new Error("로그인이 필요합니다.");
-  const idToken = await user.getIdToken();
-  const res = await fetch("https://asia-northeast3-handyhand-a175a.cloudfunctions.net/supplierOrderFile", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ path }),
-  });
-  if (!res.ok) throw new Error(`파일을 가져오지 못했습니다 (${res.status})`);
-  return URL.createObjectURL(await res.blob());
-}

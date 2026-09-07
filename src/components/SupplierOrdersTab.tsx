@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil, RefreshCw } from "lucide-react";
+import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
@@ -23,13 +23,12 @@ import {
   formatSupplierMoney,
   listenSupplierOrders,
   setSupplierOrderStatus,
-  uploadSupplierOrderConfirmation,
+  updateSupplierOrder,
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import NumberInput from "@/components/NumberInput";
 import { usePrintFileName } from "@/lib/usePrintFileName";
-import { fetchSupplierOrderFile } from "@/lib/functions";
 import {
   Client,
   ClientProduct,
@@ -99,6 +98,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [selected, setSelected] = useState<SupplierOrder | null>(null);
   const [composing, setComposing] = useState(false);
+  // 저장된 발주를 다시 열어 고칠 때 — 작성 화면을 그대로 재사용하고 저장만 갱신으로 바꾼다.
+  const [editingOrder, setEditingOrder] = useState<SupplierOrder | null>(null);
   // 매입 정보를 편집 중인 제품 id — 고객 판매 정보(제품 카탈로그 탭)와 화면을 완전히 분리해서,
   // 파는 가격과 사오는 가격을 같은 칸에서 만지다 헷갈리는 일이 없게 한다.
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -201,15 +202,16 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
     [products, internals]
   );
 
-  if (composing) {
+  if (composing || editingOrder) {
     return (
       <SupplierOrderComposer
+        editing={editingOrder}
         grouped={grouped}
         clientNameById={clientNameById}
         clientOrders={clientOrders}
         existingOrders={orders}
-        onClose={() => setComposing(false)}
-        onCreated={() => setComposing(false)}
+        onClose={() => { setComposing(false); setEditingOrder(null); }}
+        onCreated={() => { setComposing(false); setEditingOrder(null); }}
         createdBy={appUser?.uid ?? ""}
         onPreview={onPreview}
       />
@@ -217,7 +219,14 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   }
 
   if (selected) {
-    return <SupplierOrderDetail order={selected} onClose={() => setSelected(null)} onPreview={onPreview} />;
+    return (
+      <SupplierOrderDetail
+        order={selected}
+        onClose={() => setSelected(null)}
+        onPreview={onPreview}
+        onEdit={() => { setEditingOrder(selected); setSelected(null); }}
+      />
+    );
   }
 
   return (
@@ -774,6 +783,7 @@ function SupplierOrderComposer({
   onCreated,
   createdBy,
   onPreview,
+  editing,
 }: {
   grouped: [string, CatalogEntry[]][];
   clientNameById: Record<string, string>;
@@ -783,22 +793,34 @@ function SupplierOrderComposer({
   onCreated: () => void;
   createdBy: string;
   onPreview: (open: boolean) => void;
+  // 있으면 새로 만드는 게 아니라 이 발주를 고치는 중이다.
+  editing: SupplierOrder | null;
 }) {
-  const [supplierName, setSupplierName] = useState(grouped[0]?.[0] ?? "");
-  const [items, setItems] = useState<DraftItem[]>([]);
-  const [currency, setCurrency] = useState<SupplierCurrency>("USD");
-  const [exchangeRate, setExchangeRate] = useState("");
+  const [supplierName, setSupplierName] = useState(editing?.supplierName ?? grouped[0]?.[0] ?? "");
+  // 저장된 품목을 작성용 형태로 되돌린다 — 담겨 있던 부대비용은 전부 "체크된" 상태로 본다
+  // (저장된 건 실제로 이번 발주에 들어간 것들뿐이다).
+  const [items, setItems] = useState<DraftItem[]>(() =>
+    (editing?.items ?? []).map((it, i) => ({
+      ...it,
+      key: `edit-${i}`,
+      costOptions: (it.costs ?? []).map((c) => ({ cost: { ...c }, checked: true })),
+      partsPerUnit: (it.parts ?? []).map((p) => (it.quantity > 0 ? p.quantity / it.quantity : p.quantity || 1)),
+      partsOverridden: (it.parts ?? []).map(() => false),
+    }))
+  );
+  const [currency, setCurrency] = useState<SupplierCurrency>(editing?.currency ?? "USD");
+  const [exchangeRate, setExchangeRate] = useState(editing?.exchangeRate != null ? String(editing.exchangeRate) : "");
   const [rateDate, setRateDate] = useState("");
   const [rateLoading, setRateLoading] = useState(false);
-  const [incoterms, setIncoterms] = useState("");
-  const [portOfLoading, setPortOfLoading] = useState("");
-  const [paymentTerms, setPaymentTerms] = useState("T/T 30% deposit, 70% before shipment");
-  const [leadTimeDays, setLeadTimeDays] = useState("");
-  const [packingNote, setPackingNote] = useState("");
-  const [memo, setMemo] = useState("");
+  const [incoterms, setIncoterms] = useState(editing?.incoterms ?? "");
+  const [portOfLoading, setPortOfLoading] = useState(editing?.portOfLoading ?? "");
+  const [paymentTerms, setPaymentTerms] = useState(editing?.paymentTerms ?? "T/T 30% deposit, 70% before shipment");
+  const [leadTimeDays, setLeadTimeDays] = useState(editing?.leadTimeDays != null ? String(editing.leadTimeDays) : "");
+  const [packingNote, setPackingNote] = useState(editing?.packingNote ?? "");
+  const [memo, setMemo] = useState(editing?.memo ?? "");
   // 로트 번호는 직접 안 적어도 되게 자동으로 만든다 — LOT-날짜-그날순번. 비워두면 계속
   // 자동값이 쓰이고, 공장이 자기 번호 체계를 요구하면 그 자리에 덮어쓰면 된다.
-  const [lotNo, setLotNo] = useState("");
+  const [lotNo, setLotNo] = useState(editing?.lotNo ?? "");
   const autoLotNo = useMemo(() => {
     const d = new Date();
     const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -807,7 +829,7 @@ function SupplierOrderComposer({
     return `${prefix}-${String(todayCount + 1).padStart(2, "0")}`;
   }, [existingOrders]);
   const effectiveLotNo = lotNo.trim() || autoLotNo;
-  const [linkedPoId, setLinkedPoId] = useState("");
+  const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -837,9 +859,16 @@ function SupplierOrderComposer({
     }
   }, []);
 
+  // 저장된 발주를 열 때는 그때 박아둔 환율을 그대로 둔다 — 지금 시세로 덮으면 그 건의
+  // 원가가 나중에 바뀌어버린다. 통화를 실제로 바꿨을 때만 새로 받아온다.
+  const rateInitialized = useRef(false);
   useEffect(() => {
+    if (!rateInitialized.current) {
+      rateInitialized.current = true;
+      if (editing) return;
+    }
     fetchRate(currency);
-  }, [currency, fetchRate]);
+  }, [currency, fetchRate, editing]);
 
   // 저장할 때 넘기는 최종 품목 — 체크된 부대비용만 담는다.
   const finalItems: SupplierOrderItem[] = items.map((it) => ({
@@ -950,6 +979,26 @@ function SupplierOrderComposer({
     if (!supplierName.trim() || finalItems.length === 0) return;
     setSaving(true);
     try {
+      if (editing) {
+        // 발주번호·상태·회신본은 그대로 두고 내용만 갱신한다.
+        await updateSupplierOrder(editing.id, {
+          supplierName: supplierName.trim(),
+          items: finalItems,
+          currency,
+          exchangeRate: exchangeRate.trim() ? Number(exchangeRate) : undefined,
+          incoterms: incoterms.trim() || undefined,
+          portOfLoading: portOfLoading.trim() || undefined,
+          paymentTerms: paymentTerms.trim() || undefined,
+          leadTimeDays: leadTimeDays.trim() ? Number(leadTimeDays) : undefined,
+          packingNote: packingNote.trim() || undefined,
+          memo: memo.trim() || undefined,
+          lotNo: effectiveLotNo,
+          linkedPurchaseOrderId: linkedPo?.id,
+          linkedPurchaseOrderNo: linkedPo?.poNumber,
+        });
+        onCreated();
+        return;
+      }
       await createSupplierOrder({
         supplierName: supplierName.trim(),
         items: finalItems,
@@ -1050,7 +1099,7 @@ function SupplierOrderComposer({
       {/* 오른쪽 — 담긴 품목 + 발주 조건 */}
       <div className="space-y-4 self-start rounded-3xl bg-white p-6">
         <div className="flex items-center justify-between gap-3">
-          <p className="font-semibold text-[#1d1d1f]">구매발주서 작성</p>
+          <p className="font-semibold text-[#1d1d1f]">{editing ? `${editing.soNumber} 수정` : "구매발주서 작성"}</p>
           <button
             onClick={() => setPreviewOpen(true)}
             disabled={finalItems.length === 0}
@@ -1432,7 +1481,7 @@ function SupplierOrderComposer({
             disabled={saving || finalItems.length === 0 || !supplierName.trim()}
             className="rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
           >
-            {saving ? "저장 중..." : "발주서 저장"}
+            {saving ? "저장 중..." : editing ? "수정 저장" : "발주서 저장"}
           </button>
         </div>
       </div>
@@ -1442,11 +1491,18 @@ function SupplierOrderComposer({
 
 // ---- 발행된 구매발주 상세 ----
 
-function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrder; onClose: () => void; onPreview: (open: boolean) => void }) {
+function SupplierOrderDetail({
+  order,
+  onClose,
+  onPreview,
+  onEdit,
+}: {
+  order: SupplierOrder;
+  onClose: () => void;
+  onPreview: (open: boolean) => void;
+  onEdit: () => void;
+}) {
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [opening, setOpening] = useState(false);
-  const [fileError, setFileError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   usePrintFileName([order.supplierName, "구매발주서", order.soNumber], previewOpen);
@@ -1454,38 +1510,6 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
     onPreview(previewOpen);
     return () => onPreview(false);
   }, [previewOpen, onPreview]);
-
-  // 저장된 건 경로뿐이라, 열 때마다 관리자 확인을 거쳐 5분짜리 URL을 새로 받아온다.
-  async function handleOpenConfirmation() {
-    if (!order.confirmationFilePath || opening) return;
-    setOpening(true);
-    setFileError("");
-    // URL을 받아오는 동안(비동기) window.open을 부르면 사파리가 팝업으로 보고 막는다 —
-    // 클릭 직후 동기적으로 빈 탭을 먼저 열어두고, 주소만 나중에 채운다.
-    const tab = window.open("", "_blank");
-    try {
-      const url = await fetchSupplierOrderFile(order.confirmationFilePath);
-      if (tab) tab.location.href = url;
-      else window.location.href = url; // 팝업이 막힌 환경에서는 현재 탭에서 연다
-      // blob: 주소는 이 탭이 살아있는 동안만 유효하다 — 넉넉히 두고 정리한다.
-      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
-    } catch {
-      tab?.close();
-      setFileError("파일을 여는 데 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setOpening(false);
-    }
-  }
-
-  async function handleUpload(file: File | null) {
-    if (!file) return;
-    setUploading(true);
-    try {
-      await uploadSupplierOrderConfirmation(order.id, file);
-    } finally {
-      setUploading(false);
-    }
-  }
 
   if (previewOpen) {
     return (
@@ -1556,29 +1580,16 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
         <div className="text-right">
           <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(order.totalAmount, order.currency)}</p>
           {order.exchangeRate ? (
-            <p className="text-xs text-[#86868b]">약 {Math.round(order.totalAmount * order.exchangeRate).toLocaleString("ko-KR")}원</p>
+            <p className="text-xs text-[#86868b]">
+              약 {Math.round(order.totalAmount * order.exchangeRate).toLocaleString("ko-KR")}원
+              {/* 발행 당시 환율을 함께 남긴다 — 나중에 시세가 움직여도 이 건의 원가가 어떤
+                  기준으로 계산된 값인지 알 수 있어야 한다. */}
+              <span className="ml-1 text-[#d1d1d6]">
+                (1 {order.currency} = {order.exchangeRate.toLocaleString("ko-KR")}원)
+              </span>
+            </p>
           ) : null}
         </div>
-      </div>
-
-      {/* 공장 회신본 */}
-      <div className="space-y-2 border-t border-[#f0f0f0] pt-4">
-        <p className="text-xs font-semibold text-[#86868b]">공장 회신본 (도장 스캔본)</p>
-        {order.confirmationFilePath ? (
-          <button
-            onClick={handleOpenConfirmation}
-            disabled={opening}
-            className="flex w-full items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100 disabled:opacity-60"
-          >
-            <Check size={14} /> {order.confirmationFileName || "회신본"} {opening ? "여는 중..." : "열기"}
-          </button>
-        ) : (
-          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-[#d1d1d6] px-4 py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-            <Upload size={14} /> {uploading ? "업로드 중..." : "회신본 업로드"}
-            <input type="file" className="hidden" onChange={(e) => handleUpload(e.target.files?.[0] ?? null)} disabled={uploading} />
-          </label>
-        )}
-        {fileError && <p className="text-xs text-red-500">{fileError}</p>}
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-[#f0f0f0] pt-4">
@@ -1588,6 +1599,12 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
         >
           <Printer size={14} /> 발주서 보기 / PDF
         </button>
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+        >
+          <Pencil size={13} /> 수정
+        </button>
         {order.status === "draft" && (
           <button
             onClick={() => setSupplierOrderStatus(order.id, "issued")}
@@ -1596,7 +1613,7 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
             발행 처리
           </button>
         )}
-        {order.status === "confirmed" && (
+        {order.status === "issued" && (
           <button
             onClick={() => setSupplierOrderStatus(order.id, "closed")}
             className="rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
@@ -1657,7 +1674,14 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           body * { visibility: hidden; }
           #supplier-order-print-root, #supplier-order-print-root * { visibility: visible; }
           #supplier-order-print-root { position: absolute; top: 0; left: 0; width: 210mm; }
-          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
+          /* min-height:0이 핵심이다 — .po-page는 화면용으로 min-height 297mm(A4 한 장)를 갖고
+             있는데, 인쇄 시 이걸 그대로 두면 실제 콘텐츠 높이가 반올림 오차 등으로 297mm 경계에
+             정확히 걸려서 인쇄 엔진이 페이지를 한 번 더 쪼갠다(그 몫은 사실상 빈 페이지다).
+             계약서 미리보기에서 똑같은 증상을 겪고 확인한 원인이라, 여기도 같은 방식으로 푼다.
+             바깥 컨테이너의 min-h-screen(=100vh)도 인쇄에서는 A4 한 장을 통째로 차지해 같은
+             문제를 만들므로 함께 없앤다. */
+          #supplier-order-print-root { min-height: 0 !important; }
+          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; min-height: 0 !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }
           /* 헤더 높이만큼 준 인라인 padding-top은 인쇄 시 필요 없다(헤더 자체가 안 보인다) —

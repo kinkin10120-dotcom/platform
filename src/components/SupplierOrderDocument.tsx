@@ -87,9 +87,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <tr className="border-y-2 border-[#1d1d1f] text-xs">
             <th className="w-8 py-2.5 pr-2 text-left font-semibold">No</th>
             <th className="py-2.5 pr-2 text-left font-semibold">品名 / Description</th>
-            <th className="w-20 py-2.5 pr-2 text-right font-semibold">单价 / Price</th>
-            <th className="w-20 py-2.5 pr-2 text-right font-semibold">数量 / Qty</th>
-            <th className="w-24 py-2.5 pl-2 text-right font-semibold">金额 / Amount</th>
+            <th className="w-20 py-2.5 pr-2 text-center font-semibold">单价 / Price</th>
+            <th className="w-20 py-2.5 pr-2 text-center font-semibold">数量 / Qty</th>
+            <th className="w-24 py-2.5 pl-2 text-center font-semibold">金额 / Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -137,9 +137,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                   </div>
                 </div>
               </td>
-              <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : formatSupplierMoney(it.unitPrice, data.currency)}</td>
-              <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : `${it.quantity} ${it.unit || "PCS"}`}</td>
-              <td className="whitespace-nowrap py-3 pl-2 text-right font-medium">{formatSupplierMoney(calcSupplierItemTotal(it), data.currency)}</td>
+              <td className="whitespace-nowrap py-3 pr-2 text-center text-[#86868b]">{mixedPartQty ? "" : formatSupplierMoney(it.unitPrice, data.currency)}</td>
+              <td className="whitespace-nowrap py-3 pr-2 text-center text-[#86868b]">{mixedPartQty ? "" : `${it.quantity} ${it.unit || "PCS"}`}</td>
+              <td className="whitespace-nowrap py-3 pl-2 text-center font-medium">{formatSupplierMoney(calcSupplierItemTotal(it), data.currency)}</td>
             </tr>
             );
           })}
@@ -184,22 +184,13 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
             만들어 둘 이유가 없다. */}
         <div className="flex justify-end">
           <div className="w-40 shrink-0 text-center">
+            {/* 발행 주체는 상단 로고와 아래 표기로 이미 드러나므로, 직인 밑에 회사명을 또 적지 않는다. */}
             {isHk ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/stamp-aim-technology-hk.png" alt={`${HK_COMPANY.nameEn} 직인`} className="mx-auto h-[65px] object-contain" />
-                <p className="mt-1.5 text-xs leading-relaxed text-[#86868b]">{HK_COMPANY.nameEn}</p>
-              </>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/stamp-aim-technology-hk.png" alt={`${HK_COMPANY.nameEn} 직인`} className="mx-auto h-[65px] object-contain" />
             ) : (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
-                <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
-                  주식회사 핸디핸드
-                  <br />
-                  대표 최형준
-                </p>
-              </>
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
             )}
           </div>
         </div>

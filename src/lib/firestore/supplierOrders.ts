@@ -7,8 +7,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { ref as storageRef, uploadBytes } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { SupplierCostItem, SupplierCurrency, SupplierOrder, SupplierOrderItem, SupplierOrderStatus } from "@/lib/types";
 
 // 매입(핸디핸드 → 공장) 전용 컬렉션. 매출 쪽 purchaseOrders와 절대 섞지 않는다 — 방향이
@@ -39,9 +38,6 @@ function fromDoc(d: any): SupplierOrder {
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     status: data.status ?? "draft",
     issuedAt: data.issuedAt?.toMillis ? data.issuedAt.toMillis() : data.issuedAt,
-    confirmationFilePath: data.confirmationFilePath || undefined,
-    confirmationFileName: data.confirmationFileName || undefined,
-    confirmedAt: data.confirmedAt?.toMillis ? data.confirmedAt.toMillis() : data.confirmedAt,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
     createdBy: data.createdBy ?? "",
@@ -154,7 +150,12 @@ export type SupplierOrderPatch = Partial<
 >;
 
 export async function updateSupplierOrder(id: string, patch: SupplierOrderPatch) {
-  const payload: Record<string, unknown> = { ...patch, updatedAt: serverTimestamp() };
+  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  // Firestore는 undefined를 값으로 받지 않고 예외를 던진다 — "비웠다"는 뜻이면 null로 보낸다
+  // (읽어올 때 fromDoc이 null을 다시 undefined로 되돌린다).
+  for (const [key, value] of Object.entries(patch)) {
+    payload[key] = value === undefined ? null : value;
+  }
   // 합계는 항목이 바뀔 때마다 다시 계산해서 저장해둔다 — 목록에서 문서마다 항목을 훑지 않고
   // 바로 원가를 더할 수 있어야 한다.
   if (patch.items) payload.totalAmount = calcSupplierOrderTotal(patch.items);
@@ -168,24 +169,6 @@ export async function setSupplierOrderStatus(id: string, status: SupplierOrderSt
     ...(status === "issued" ? { issuedAt: serverTimestamp() } : {}),
     updatedAt: serverTimestamp(),
   });
-}
-
-// 공장이 도장(公章)을 찍어 회신한 스캔본. 이게 올라오면 상태를 "공장 확인"으로 올린다 —
-// 전자서명 루프를 만들지 않고 실제 거래 방식(위챗·메일로 주고받고 스캔본 회신)을 그대로 기록한다.
-export async function uploadSupplierOrderConfirmation(orderId: string, file: File) {
-  const path = `supplierOrders/${orderId}/confirmation-${Date.now()}-${file.name}`;
-  await uploadBytes(storageRef(storage, path), file);
-  // 여기서 getDownloadURL을 부르면 안 된다 — 한 번 부르는 순간 영구적으로 유효한 공개 토큰
-  // URL이 발급되고, 나중에 규칙을 아무리 조여도 이미 나간 토큰은 되돌릴 수 없다. 경로만
-  // 저장해두고 열어볼 때 임시 URL을 받는다.
-  await updateDoc(doc(db, "supplierOrders", orderId), {
-    confirmationFilePath: path,
-    confirmationFileName: file.name,
-    confirmedAt: serverTimestamp(),
-    status: "confirmed" as SupplierOrderStatus,
-    updatedAt: serverTimestamp(),
-  });
-  return path;
 }
 
 export async function deleteSupplierOrder(id: string) {

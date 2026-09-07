@@ -41,13 +41,6 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
-    // 구매발주 회신본(공장 도장 스캔본) — 매입 원가가 그대로 찍힌 문서라, 다른 경로들처럼
-    // read를 공개로 두지 않고 로그인한 사용자 중 관리자만 읽고 쓸 수 있게 잠근다.
-    match /supplierOrders/{orderId}/{allPaths=**} {
-      allow read, write: if request.auth != null &&
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
-    }
-
     // 계약서 등에 쓰이는 공용 브랜드 자산(을 직인 이미지 등) — 로그인 없는 상대방도 서명
     // 페이지·이메일에서 봐야 하므로 읽기는 항상 허용한다.
     match /assets/{allPaths=**} {

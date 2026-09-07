@@ -22,7 +22,6 @@ import {
 } from "@/lib/firestore/products";
 import {
   listenClientProductInternals,
-  listenAllClientProductInternals,
   setClientProductInternal,
   deleteClientProductInternal,
 } from "@/lib/firestore/productInternal";
@@ -1136,14 +1135,6 @@ function CatalogTab() {
   const [customsNote, setCustomsNote] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [adding, setAdding] = useState(false);
-  // 매입 정보의 "공급 업체명"은 별도 컬렉션 없이 문자열로 받는 대신, 이미 쓴 이름을 자동완성으로
-  // 제안해서 오타로 같은 업체가 둘로 갈라지는 걸 막는다 — 그래서 클라이언트를 가리지 않고 전부 읽는다.
-  const [allInternals, setAllInternals] = useState<Record<string, ClientProductInternal>>({});
-  useEffect(() => listenAllClientProductInternals(setAllInternals), []);
-  const supplierNames = Array.from(
-    new Set(Object.values(allInternals).map((i) => i.supplierName).filter((n): n is string => !!n))
-  ).sort((a, b) => a.localeCompare(b, "ko"));
-
   const currency: Currency = purchaseType === "overseas" ? "USD" : "KRW";
 
   useEffect(() => listenClients((cs) => {
@@ -1206,12 +1197,6 @@ function CatalogTab() {
 
   return (
     <div className="space-y-8">
-      {/* 제품 편집 행의 "공급 업체명" 입력이 참조하는 자동완성 목록 — 화면당 한 번만 그린다. */}
-      <datalist id="supplier-name-options">
-        {supplierNames.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
       <div className="max-w-2xl space-y-5">
       <div className="rounded-3xl bg-white p-5 space-y-3">
         <h2 className="text-sm font-semibold text-[#1d1d1f]">제품 추가</h2>
@@ -1467,12 +1452,6 @@ function ProductRow({
   const [unitPrice, setUnitPrice] = useState(String(product.unitPrice));
   const [unit, setUnit] = useState(product.unit ?? "");
   const [shippingTerm, setShippingTerm] = useState<ShippingTerm | "">(internal?.shippingTerm ?? "");
-  // 매입(구매발주) 정보 — 고객에게는 절대 안 보이는 값이라 clientProductInternal에만 저장한다.
-  const [supplierName, setSupplierName] = useState(internal?.supplierName ?? "");
-  const [purchasePrice, setPurchasePrice] = useState(internal?.purchasePrice != null ? String(internal.purchasePrice) : "");
-  const [purchaseCurrency, setPurchaseCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
-  const [nameEn, setNameEn] = useState(internal?.nameEn ?? "");
-  const [costItems, setCostItems] = useState<SupplierCostItem[]>(internal?.costItems ?? []);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -1486,11 +1465,6 @@ function ProductRow({
     setUnitPrice(String(product.unitPrice));
     setUnit(product.unit ?? "");
     setShippingTerm(internal?.shippingTerm ?? "");
-    setSupplierName(internal?.supplierName ?? "");
-    setPurchasePrice(internal?.purchasePrice != null ? String(internal.purchasePrice) : "");
-    setPurchaseCurrency(internal?.purchaseCurrency ?? "USD");
-    setNameEn(internal?.nameEn ?? "");
-    setCostItems(internal?.costItems ?? []);
     setExpanded(true);
   }
 
@@ -1524,11 +1498,6 @@ function ProductRow({
         purchaseType,
         shippingTerm: shippingTerm || undefined,
         customsNote: customsNote.trim() || undefined,
-        supplierName: supplierName.trim(),
-        purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : null,
-        purchaseCurrency,
-        nameEn: nameEn.trim(),
-        costItems: costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 })),
       });
       setExpanded(false);
     } finally {
@@ -1640,77 +1609,6 @@ function ProductRow({
             className="w-full resize-none rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
           />
 
-          {/* 매입 정보 — 여기 값이 "구매 발주" 탭의 업체별 카탈로그와 발주서 품목으로 그대로 간다.
-              고객은 clientProducts만 읽을 수 있고 이 값들은 clientProductInternal에만 있어서
-              화면에서도 데이터에서도 고객 쪽으로 넘어가지 않는다. */}
-          <div className="space-y-2 rounded-xl bg-[#f5f5f7] p-3">
-            <p className="text-xs font-semibold text-[#86868b]">매입 정보 (고객에게 보이지 않음)</p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                list="supplier-name-options"
-                placeholder="공급 업체명"
-                className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-              />
-              <select
-                value={purchaseCurrency}
-                onChange={(e) => setPurchaseCurrency(e.target.value as SupplierCurrency)}
-                className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
-              >
-                <option value="USD">USD $</option>
-                <option value="CNY">CNY ¥</option>
-                <option value="KRW">KRW 원</option>
-              </select>
-              <input
-                value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value.replace(/[^0-9.]/g, ""))}
-                inputMode="decimal"
-                placeholder="매입 단가"
-                className="w-28 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-              />
-              <input
-                value={nameEn}
-                onChange={(e) => setNameEn(e.target.value)}
-                placeholder="영문/중문 품명 (발주서용)"
-                className="min-w-[10rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-              />
-            </div>
-
-            {/* 부대비용 기본 목록 — 발주(로트)마다 이 중에서 골라 담는다. */}
-            <div className="space-y-1.5">
-              {costItems.map((c, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    value={c.name}
-                    onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: e.target.value } : it)))}
-                    placeholder="부대비용 항목 (조립비 등)"
-                    className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-                  />
-                  <input
-                    value={c.amount || ""}
-                    onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, amount: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : it)))}
-                    inputMode="decimal"
-                    placeholder="금액"
-                    className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-                  />
-                  <button
-                    onClick={() => setCostItems((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
-                    title="삭제"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => setCostItems((prev) => [...prev, { name: "", amount: 0 }])}
-                className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
-              >
-                <Plus size={13} /> 부대비용 항목 추가
-              </button>
-            </div>
-          </div>
           <div className="flex gap-2">
             <button
               onClick={handleSave}

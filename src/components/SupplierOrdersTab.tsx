@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, X, Printer, Upload, Check, FileText } from "lucide-react";
+import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts } from "@/lib/firestore/products";
-import { listenAllClientProductInternals } from "@/lib/firestore/productInternal";
+import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import {
@@ -58,6 +58,10 @@ export default function SupplierOrdersTab() {
   const [clientOrders, setClientOrders] = useState<PurchaseOrder[]>([]);
   const [selected, setSelected] = useState<SupplierOrder | null>(null);
   const [composing, setComposing] = useState(false);
+  // 매입 정보를 편집 중인 제품 id — 고객 판매 정보(제품 카탈로그 탭)와 화면을 완전히 분리해서,
+  // 파는 가격과 사오는 가격을 같은 칸에서 만지다 헷갈리는 일이 없게 한다.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => listenAllClientProducts(setProducts), []);
   useEffect(() => listenAllClientProductInternals(setInternals), []);
@@ -92,6 +96,20 @@ export default function SupplierOrdersTab() {
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "ko"));
   }, [products, internals]);
 
+  const supplierNames = useMemo(
+    () => Array.from(new Set(Object.values(internals).map((i) => i.supplierName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b, "ko")),
+    [internals]
+  );
+
+  // 아직 매입 정보가 없는 제품들 — "구매 품목으로 등록" 목록에 뜬다.
+  const unregistered = useMemo(
+    () => products.filter((p) => {
+      const internal = internals[p.id];
+      return !internal || (!internal.supplierName && internal.purchasePrice == null);
+    }),
+    [products, internals]
+  );
+
   if (composing) {
     return (
       <SupplierOrderComposer
@@ -113,12 +131,59 @@ export default function SupplierOrdersTab() {
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {/* 왼쪽 — 업체별 구매 카탈로그 */}
       <div className="space-y-3">
-        <button
-          onClick={() => setComposing(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#d1d1d6] py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
-        >
-          <FileText size={14} /> 구매발주서 작성
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setComposing(true)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#d1d1d6] py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+          >
+            <FileText size={14} /> 구매발주서 작성
+          </button>
+          <button
+            onClick={() => setPickerOpen((v) => !v)}
+            className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#d1d1d6] px-4 py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+          >
+            <Plus size={14} /> 구매 품목 등록
+          </button>
+        </div>
+
+        {pickerOpen && (
+          <div className="overflow-hidden rounded-3xl bg-white">
+            <div className="flex items-center justify-between border-b border-[#f0f0f0] px-5 py-3">
+              <p className="text-xs font-semibold text-[#86868b]">매입 정보를 넣을 제품 고르기</p>
+              <button onClick={() => setPickerOpen(false)} className="rounded-full p-1 text-[#d1d1d6] transition hover:text-[#1d1d1f]">
+                <X size={14} />
+              </button>
+            </div>
+            {unregistered.length === 0 && (
+              <p className="px-5 py-6 text-center text-sm text-[#86868b]">모든 제품에 매입 정보가 들어가 있습니다.</p>
+            )}
+            {unregistered.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => { setEditingId(p.id); setPickerOpen(false); }}
+                className="flex w-full items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3 text-left transition last:border-b-0 hover:bg-[#f5f5f7]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[#1d1d1f]">{p.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-[#86868b]">{clientNameById[p.clientId] ?? "-"}</p>
+                </div>
+                <Plus size={14} className="shrink-0 text-[#d1d1d6]" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* 아직 매입 정보가 없는 제품을 고른 직후 — 목록에는 아직 안 뜨므로 여기서 바로 편집한다. */}
+        {editingId && !grouped.some(([, rows]) => rows.some((r) => r.product.id === editingId)) && (
+          <div className="rounded-3xl bg-white p-5">
+            <PurchaseInfoEditor
+              product={products.find((p) => p.id === editingId)!}
+              internal={internals[editingId]}
+              supplierNames={supplierNames}
+              onDone={() => setEditingId(null)}
+            />
+          </div>
+        )}
 
         {grouped.length === 0 && (
           <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm leading-relaxed text-[#86868b]">
@@ -138,25 +203,46 @@ export default function SupplierOrdersTab() {
               const costTotal = (internal.costItems ?? []).reduce((s, c) => s + (c.amount || 0), 0);
               const cur = internal.purchaseCurrency ?? "USD";
               return (
-                <div key={product.id} className="flex items-start justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1d1d1f]">{product.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-[#86868b]">
-                      {clientNameById[product.clientId] ?? "-"}
-                      {internal.nameEn ? ` · ${internal.nameEn}` : ""}
-                    </p>
-                    {(internal.costItems ?? []).length > 0 && (
-                      <p className="mt-0.5 text-xs text-[#d1d1d6]">
-                        부대비용 {internal.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, cur)}
+                <div key={product.id} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{product.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-[#86868b]">
+                        {clientNameById[product.clientId] ?? "-"}
+                        {internal.nameEn ? ` · ${internal.nameEn}` : ""}
                       </p>
-                    )}
+                      {(internal.costItems ?? []).length > 0 && (
+                        <p className="mt-0.5 text-xs text-[#d1d1d6]">
+                          부대비용 {internal.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, cur)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-start gap-2">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-[#1d1d1f]">
+                          {internal.purchasePrice != null ? formatSupplierMoney(internal.purchasePrice, cur) : "단가 미입력"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#d1d1d6]">매입 단가</p>
+                      </div>
+                      <button
+                        onClick={() => setEditingId((prev) => (prev === product.id ? null : product.id))}
+                        className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                        title="매입 정보 수정"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-[#1d1d1f]">
-                      {internal.purchasePrice != null ? formatSupplierMoney(internal.purchasePrice, cur) : "단가 미입력"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#d1d1d6]">매입 단가</p>
-                  </div>
+                  {editingId === product.id && (
+                    <div className="mt-3 border-t border-[#f0f0f0] pt-3">
+                      <PurchaseInfoEditor
+                        product={product}
+                        internal={internal}
+                        supplierNames={supplierNames}
+                        onDone={() => setEditingId(null)}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -196,6 +282,141 @@ export default function SupplierOrdersTab() {
             </p>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- 매입 정보 편집 ----
+//
+// 고객에게 파는 가격(제품 카탈로그 탭)과 내가 사오는 가격을 같은 칸에서 만지면 헷갈린다는
+// 피드백에 따라, 매입 정보 입력은 전부 이 구매 발주 탭 안으로 옮겼다. 저장 위치는 그대로
+// clientProductInternal이라(관리자 전용 컬렉션) 고객 노출 위험은 달라지지 않고, 제품과
+// 이어져 있어서 나중에 판매가 대비 매입가를 비교하는 것도 그대로 가능하다.
+function PurchaseInfoEditor({
+  product,
+  internal,
+  supplierNames,
+  onDone,
+}: {
+  product: ClientProduct;
+  internal?: ClientProductInternal;
+  supplierNames: string[];
+  onDone: () => void;
+}) {
+  const [supplierName, setSupplierName] = useState(internal?.supplierName ?? "");
+  const [purchasePrice, setPurchasePrice] = useState(internal?.purchasePrice != null ? String(internal.purchasePrice) : "");
+  const [purchaseCurrency, setPurchaseCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
+  const [nameEn, setNameEn] = useState(internal?.nameEn ?? "");
+  const [costItems, setCostItems] = useState<SupplierCostItem[]>(internal?.costItems ?? []);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await setClientProductInternal(product.id, product.clientId, {
+        supplierName: supplierName.trim(),
+        purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : null,
+        purchaseCurrency,
+        nameEn: nameEn.trim(),
+        costItems: costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 })),
+      });
+      onDone();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold text-[#86868b]">{product.name} — 매입 정보</p>
+      <datalist id="supplier-name-options">
+        {supplierNames.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+
+      <div className="flex flex-wrap gap-2">
+        <input
+          value={supplierName}
+          onChange={(e) => setSupplierName(e.target.value)}
+          list="supplier-name-options"
+          placeholder="공급 업체명"
+          className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+        />
+        <select
+          value={purchaseCurrency}
+          onChange={(e) => setPurchaseCurrency(e.target.value as SupplierCurrency)}
+          className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+        >
+          <option value="USD">USD $</option>
+          <option value="CNY">CNY ¥</option>
+          <option value="KRW">KRW 원</option>
+        </select>
+        <input
+          value={purchasePrice}
+          onChange={(e) => setPurchasePrice(e.target.value.replace(/[^0-9.]/g, ""))}
+          inputMode="decimal"
+          placeholder="매입 단가"
+          className="w-28 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+        />
+        <input
+          value={nameEn}
+          onChange={(e) => setNameEn(e.target.value)}
+          placeholder="영문/중문 품명 (발주서용)"
+          className="min-w-[10rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <p className="text-xs text-[#86868b]">부대비용 기본 목록 (발주할 때 로트별로 골라 담습니다)</p>
+        {costItems.map((c, i) => (
+          <div key={i} className="flex gap-2">
+            <input
+              value={c.name}
+              onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: e.target.value } : it)))}
+              placeholder="항목 (조립비·포장비 등)"
+              className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <input
+              value={c.amount || ""}
+              onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, amount: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : it)))}
+              inputMode="decimal"
+              placeholder="금액"
+              className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <button
+              onClick={() => setCostItems((prev) => prev.filter((_, idx) => idx !== i))}
+              className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+              title="삭제"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => setCostItems((prev) => [...prev, { name: "", amount: 0 }])}
+          className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+        >
+          <Plus size={13} /> 부대비용 항목 추가
+        </button>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-full bg-[#1d1d1f] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+        >
+          {saving ? "저장 중..." : "저장"}
+        </button>
+        <button
+          onClick={onDone}
+          disabled={saving}
+          className="rounded-full border border-[#d1d1d6] px-4 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+        >
+          취소
+        </button>
       </div>
     </div>
   );
@@ -269,6 +490,15 @@ function SupplierOrderComposer({
     // 제품에 저장된 통화를 발주 통화로 따라간다 — 첫 품목을 담을 때만 맞춰주고, 이후엔
     // 관리자가 고른 값을 존중한다(한 발주서 안에서 통화를 섞을 수는 없다).
     if (items.length === 0 && internal.purchaseCurrency) setCurrency(internal.purchaseCurrency);
+  }
+
+  // 금형비처럼 고객에게 파는 제품이 아니라 카탈로그에 없는 일회성 품목도 발주에 담아야 한다 —
+  // 그런 것까지 제품으로 등록하게 만들면 고객 카탈로그가 지저분해진다.
+  function addBlankItem() {
+    setItems((prev) => [
+      ...prev,
+      { key: `blank-${Date.now()}`, name: "직접 입력 품목", unitPrice: 0, quantity: 1, unit: "SET", costOptions: [] },
+    ]);
   }
 
   function patchItem(key: string, patch: Partial<DraftItem>) {
@@ -378,7 +608,7 @@ function SupplierOrderComposer({
 
         {items.length === 0 && (
           <p className="rounded-2xl border border-dashed border-[#d1d1d6] px-4 py-8 text-center text-sm text-[#86868b]">
-            왼쪽에서 제품을 눌러 담아주세요.
+            왼쪽에서 제품을 눌러 담거나, 아래에서 직접 입력하세요.
           </p>
         )}
 
@@ -386,7 +616,12 @@ function SupplierOrderComposer({
           <div key={it.key} className="space-y-2 rounded-2xl bg-[#f5f5f7] p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#1d1d1f]">{it.name}</p>
+                <input
+                  value={it.name}
+                  onChange={(e) => patchItem(it.key, { name: e.target.value })}
+                  placeholder="품명 (내부용)"
+                  className="w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs font-medium outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
                 <input
                   value={it.nameEn ?? ""}
                   onChange={(e) => patchItem(it.key, { nameEn: e.target.value })}
@@ -491,6 +726,13 @@ function SupplierOrderComposer({
             </div>
           </div>
         ))}
+
+        <button
+          onClick={addBlankItem}
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#d1d1d6] py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+        >
+          <Plus size={13} /> 직접 입력 품목 추가 (금형비 등)
+        </button>
 
         {/* 발주 조건 */}
         <div className="space-y-2 border-t border-[#f0f0f0] pt-4">

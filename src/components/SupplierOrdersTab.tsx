@@ -189,6 +189,7 @@ export default function SupplierOrdersTab() {
         grouped={grouped}
         clientNameById={clientNameById}
         clientOrders={clientOrders}
+        existingOrders={orders}
         onClose={() => setComposing(false)}
         onCreated={() => setComposing(false)}
         createdBy={appUser?.uid ?? ""}
@@ -708,6 +709,7 @@ function SupplierOrderComposer({
   grouped,
   clientNameById,
   clientOrders,
+  existingOrders,
   onClose,
   onCreated,
   createdBy,
@@ -715,6 +717,7 @@ function SupplierOrderComposer({
   grouped: [string, CatalogEntry[]][];
   clientNameById: Record<string, string>;
   clientOrders: PurchaseOrder[];
+  existingOrders: SupplierOrder[];
   onClose: () => void;
   onCreated: () => void;
   createdBy: string;
@@ -729,7 +732,17 @@ function SupplierOrderComposer({
   const [leadTimeDays, setLeadTimeDays] = useState("");
   const [packingNote, setPackingNote] = useState("");
   const [memo, setMemo] = useState("");
+  // 로트 번호는 직접 안 적어도 되게 자동으로 만든다 — LOT-날짜-그날순번. 비워두면 계속
+  // 자동값이 쓰이고, 공장이 자기 번호 체계를 요구하면 그 자리에 덮어쓰면 된다.
   const [lotNo, setLotNo] = useState("");
+  const autoLotNo = useMemo(() => {
+    const d = new Date();
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    const prefix = `LOT-${dateStr}`;
+    const todayCount = existingOrders.filter((o) => o.lotNo?.startsWith(prefix)).length;
+    return `${prefix}-${String(todayCount + 1).padStart(2, "0")}`;
+  }, [existingOrders]);
+  const effectiveLotNo = lotNo.trim() || autoLotNo;
   const [linkedPoId, setLinkedPoId] = useState("");
   const [saving, setSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -807,7 +820,7 @@ function SupplierOrderComposer({
         leadTimeDays: leadTimeDays.trim() ? Number(leadTimeDays) : undefined,
         packingNote: packingNote.trim() || undefined,
         memo: memo.trim() || undefined,
-        lotNo: lotNo.trim() || undefined,
+        lotNo: effectiveLotNo,
         linkedPurchaseOrderId: linkedPo?.id,
         linkedPurchaseOrderNo: linkedPo?.poNumber,
         createdBy,
@@ -833,7 +846,7 @@ function SupplierOrderComposer({
             leadTimeDays: leadTimeDays.trim() ? Number(leadTimeDays) : undefined,
             packingNote,
             memo,
-            lotNo,
+            lotNo: effectiveLotNo,
             createdAt: Date.now(),
           }}
         />
@@ -1071,10 +1084,10 @@ function SupplierOrderComposer({
               />
             )}
             <input
-              value={lotNo}
+              value={lotNo || autoLotNo}
               onChange={(e) => setLotNo(e.target.value)}
-              placeholder="로트 번호"
-              className="w-28 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+              title="자동으로 매겨집니다. 공장이 쓰는 번호가 따로 있으면 덮어쓰세요."
+              className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
             />
           </div>
 

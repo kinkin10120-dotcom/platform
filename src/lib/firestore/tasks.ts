@@ -221,7 +221,9 @@ export async function updateTaskDates(
   newStartDate: string,
   newDueDate: string,
   allTasks: Task[],
-  actorName: string
+  actorName: string,
+  // 일정을 바꾼 사람 본인에게는 알림을 보내지 않기 위한 값. 없으면 담당자에게 그대로 보낸다.
+  actorId?: string
 ) {
   const deltaDays = Math.round(
     (new Date(`${newDueDate}T00:00:00`).getTime() - new Date(`${task.dueDate}T00:00:00`).getTime()) / 86400000
@@ -272,6 +274,24 @@ export async function updateTaskDates(
   }
 
   await batch.commit();
+
+  // 지금까지는 "선행 업무가 밀려서 내 업무도 자동 조정된" 경우에만 알림이 갔고, 정작 일정을
+  // 직접 바꾼 그 업무의 담당자에게는 아무 알림도 가지 않았다 — 상태 변경(updateTaskStatus)은
+  // 담당자에게 알리는데 날짜 변경만 빠져 있어서, 일정을 바꿔도 아무 연락이 없던 원인이다.
+  if (dateChanged && task.assigneeId && task.assigneeId !== actorId) {
+    const movedDays = Math.abs(deltaDays);
+    const direction = deltaDays > 0 ? "연기" : "단축";
+    await createNotification({
+      userId: task.assigneeId,
+      projectId: task.projectId,
+      taskId: task.id,
+      type: "rescheduled",
+      message:
+        movedDays > 0
+          ? `${actorName}님이 "${task.name}" 업무 일정을 ${movedDays}일 ${direction}했습니다. (${newStartDate} ~ ${newDueDate})`
+          : `${actorName}님이 "${task.name}" 업무 일정을 변경했습니다. (${newStartDate} ~ ${newDueDate})`,
+    });
+  }
 
   if (downstream.length > 0) {
     const direction = deltaDays > 0 ? "지연" : "단축";

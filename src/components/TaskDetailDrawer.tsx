@@ -123,7 +123,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
     if (startDate === task.startDate && dueDate === task.dueDate) return;
     setSaving(true);
     try {
-      const result = await updateTaskDates(task, startDate, dueDate, allTasks, appUser?.name ?? "알 수 없음");
+      const result = await updateTaskDates(task, startDate, dueDate, allTasks, appUser?.name ?? "알 수 없음", appUser?.uid);
       if (result.shiftedCount > 0) {
         const direction = result.deltaDays > 0 ? "지연" : "단축";
         setShiftMessage(`후속 업무 ${result.shiftedCount}건 일정이 ${Math.abs(result.deltaDays)}일 함께 ${direction}됐습니다.`);

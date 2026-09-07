@@ -87,9 +87,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <tr className="border-y-2 border-[#1d1d1f] text-xs">
             <th className="w-8 py-2.5 pr-2 text-left font-semibold">No</th>
             <th className="py-2.5 pr-2 text-left font-semibold">品名 / Description</th>
-            <th className="w-24 py-2.5 pr-2 text-right font-semibold">单价 / Price</th>
-            <th className="w-20 py-2.5 pr-2 text-right font-semibold">数量 / Qty</th>
-            <th className="w-28 py-2.5 pl-2 text-right font-semibold">金额 / Amount</th>
+            <th className="w-20 py-2.5 pr-2 text-right font-semibold">单价 / Price</th>
+            <th className="w-16 py-2.5 pr-2 text-right font-semibold">数量 / Qty</th>
+            <th className="w-24 py-2.5 pl-2 text-right font-semibold">金额 / Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -113,14 +113,16 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                     {/* 조립품은 부품별 단가로 협의하므로 그 내역을 그대로 보여준다. 합계는 이미
                         오른쪽 단가에 반영되어 있어 따로 더하지 않는다. */}
                     {(it.parts ?? []).map((pt, pi) => (
-                      <p key={pi} className="mt-0.5 pl-2 text-xs text-[#86868b]">
+                      /* 한 내역은 반드시 한 줄에 — 줄바꿈되면 어느 금액이 어느 부품 건지
+                         읽기 어려워진다. 대신 글씨를 한 단계 줄여 폭을 확보한다. */
+                      <p key={pi} className="mt-0.5 whitespace-nowrap pl-2 text-[10px] text-[#86868b]">
                         · {pt.nameEn || pt.name} {formatSupplierMoney(pt.unitPrice, data.currency)} × {pt.quantity}
                         {/* 부품별 합계 — 수량이 1이면 단가와 같아서 굳이 반복하지 않는다. */}
                         {pt.quantity !== 1 && ` = ${formatSupplierMoney(pt.unitPrice * pt.quantity, data.currency)}`}
                       </p>
                     ))}
                     {(it.costs ?? []).map((c, ci) => (
-                      <p key={ci} className="mt-0.5 pl-2 text-xs text-[#86868b]">
+                      <p key={ci} className="mt-0.5 whitespace-nowrap pl-2 text-[10px] text-[#86868b]">
                         + {c.nameEn || c.name} : {formatSupplierMoney(c.amount, data.currency)}
                         {(c.quantity ?? 1) !== 1 && ` × ${c.quantity} = ${formatSupplierMoney(c.amount * (c.quantity ?? 1), data.currency)}`}
                       </p>

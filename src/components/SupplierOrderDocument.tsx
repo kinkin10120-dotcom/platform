@@ -24,14 +24,12 @@ export interface SupplierOrderDocumentData {
 // 같은 기준이다. 해외송금 계좌가 홍콩 법인 앞으로 되어 있어 원화 문서와 발행 주체를 분리한다.
 const HK_COMPANY = {
   nameEn: "AIM TECHNOLOGY (HK) COMPANY",
-  address: "11/F, CNT House, 120 Johnston Rd., Wanchai, Hong Kong",
   ceo: "CHOI HYUNGJUN",
 };
 
 const KR_COMPANY = {
   nameEn: "HANDYHAND CO., LTD.",
   nameKo: "주식회사 핸디핸드",
-  address: "F804, Goyang Arc-Biz, 63 Samwon-ro, Deogyang-gu, Goyang-si, Gyeonggi-do, Korea",
   bizNo: "128-87-00105",
   ceo: "CHOI HYUNGJUN",
 };
@@ -49,15 +47,18 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <p className="text-3xl font-bold tracking-tight">采购订单</p>
           <p className="mt-1 text-xs tracking-wide text-[#86868b]">PURCHASE ORDER</p>
         </div>
+        {/* 견적서·청구서 헤더와 같은 구성 — 홍콩 법인은 로고만, 국내는 로고 + 사업 소개 한 줄. */}
         <div className="text-right text-sm">
           {isHk ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src="/logo-aim-technology-hk.png" alt={HK_COMPANY.nameEn} className="ml-auto h-[30px] object-contain" />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+              <p className="mt-1.5 text-xs text-[#86868b]">제품기획 · 설계 · 개발 · 금형 · 양산</p>
+            </>
           )}
-          <p className="mt-1.5 max-w-[80mm] text-xs leading-relaxed text-[#86868b]">{buyer.address}</p>
         </div>
       </div>
 

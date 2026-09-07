@@ -24,6 +24,7 @@ import { formatMoney } from "@/lib/orderCalc";
 import { formatPhoneInput, formatAmountInput } from "@/lib/formatInput";
 import { Currency } from "@/lib/types";
 import QuoteDocument from "@/components/QuoteDocument";
+import { usePrintFileName } from "@/lib/usePrintFileName";
 import PdfPageScaler from "@/components/PdfPageScaler";
 
 const StepViewer = dynamic(() => import("@/components/StepViewer"), { ssr: false });
@@ -203,6 +204,14 @@ export default function QuotesPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [directQuoteOpen, setDirectQuoteOpen] = useState(false);
+
+  // 인쇄 대화상자가 제안하는 파일명(업체명_견적서_품목). 미리보기가 열려있을 때만 적용된다.
+  // 발행 전 초안은 아직 저장 전이라 지금 편집 중인 품목(quoteItems)을, 발행된 건은 저장된
+  // 품목을 그대로 쓴다 — 화면에 그려지는 QuoteDocument의 data와 같은 출처여야 어긋나지 않는다.
+  usePrintFileName(
+    [selected?.company || selected?.name, "견적서", (selected?.quoteStatus ? selected?.quoteItems ?? [] : quoteItems).map((it) => it.name).filter(Boolean).join(",")],
+    previewOpen && !!selected
+  );
 
   useEffect(() => {
     return listenQuoteRequests(setQuotes);
@@ -819,6 +828,9 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
+
+  // 위 QuotesPage와 같은 이유 — 여기는 문의 없이 바로 만드는 경로라 입력 중인 값을 그대로 쓴다.
+  usePrintFileName([company || name, "견적서", validItems.map((it) => it.name).filter(Boolean).join(",")], previewOpen);
 
   async function handleSubmit() {
     if (!name.trim() || !email.trim() || validItems.length === 0) return;

@@ -1697,18 +1697,32 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
       className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))] print:m-0 print:mt-0 print:bg-white"
     >
       <style>{`
-        @page { size: 210mm 297mm; margin: 0; }
+        @page { size: A4; margin: 0; }
         @media print {
+          /* 페이지 자체를 A4 한 장 크기로 못박는다. 여기까지 하지 않으면 문서 높이를 아무리
+             맞춰도 브라우저·프린터 설정(여백 기본값 등)에 따라 조금씩 넘쳐서 빈 두 번째
+             장이 생긴다 — 실제로 계속 그랬다. overflow를 잘라내는 것까지가 한 세트다. */
+          html, body {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+          }
           /* 사이드바·상단바 등 나머지 화면은 인쇄에서 빼고 이 문서만 남긴다. */
           body * { visibility: hidden; }
           #supplier-order-print-root, #supplier-order-print-root * { visibility: visible; }
-          #supplier-order-print-root { position: absolute; top: 0; left: 0; width: 210mm; }
-          /* 바깥 컨테이너의 min-h-screen(=100vh)은 인쇄에서 A4 한 장을 통째로 차지해버려서,
-             문서 뒤에 빈 페이지가 한 장 더 생긴다 — 인쇄에서는 없앤다. 문서 자체의 높이는
-             SupplierOrderDocument가 화면과 공통으로 갖고 있으므로 여기서 손대지 않는다. */
-          #supplier-order-print-root { min-height: 0 !important; }
-          /* 높이는 건드리지 않는다 — SupplierOrderDocument가 화면·인쇄 공통으로 296mm를 갖고
-             있어서, 여기서 또 바꾸면 그 순간 미리보기와 인쇄가 어긋난다. */
+          /* 바깥 컨테이너의 min-h-screen(=100vh)은 인쇄에서 A4 한 장을 통째로 차지해버려
+             문서 뒤에 빈 페이지를 만든다. 문서 자체의 높이(296mm)는 SupplierOrderDocument가
+             화면과 공통으로 갖고 있으므로 여기서 손대지 않는다 — 손대는 순간 미리보기와
+             인쇄가 어긋난다. */
+          #supplier-order-print-root {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 210mm;
+            min-height: 0 !important;
+          }
           .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }

@@ -126,14 +126,14 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                     {(it.parts ?? []).map((pt, pi) => (
                       /* 한 내역은 반드시 한 줄에 — 줄바꿈되면 어느 금액이 어느 부품 건지
                          읽기 어려워진다. 대신 글씨를 한 단계 줄여 폭을 확보한다. */
-                      <p key={pi} className="mt-0.5 whitespace-nowrap pl-2 text-[11px] text-[#86868b]">
+                      <p key={pi} className="mt-0.5 whitespace-nowrap text-[11px] text-[#86868b]">
                         · {pt.nameEn || pt.name} {formatSupplierMoney(pt.unitPrice, data.currency)} × {pt.quantity}
                         {/* 부품별 합계 — 수량이 1이면 단가와 같아서 굳이 반복하지 않는다. */}
                         {pt.quantity !== 1 && ` = ${formatSupplierMoney(pt.unitPrice * pt.quantity, data.currency)}`}
                       </p>
                     ))}
                     {(it.costs ?? []).map((c, ci) => (
-                      <p key={ci} className="mt-0.5 whitespace-nowrap pl-2 text-[11px] text-[#86868b]">
+                      <p key={ci} className="mt-0.5 whitespace-nowrap text-[11px] text-[#86868b]">
                         + {c.nameEn || c.name} : {formatSupplierMoney(c.amount, data.currency)}
                         {(c.quantity ?? 1) !== 1 && ` × ${c.quantity} = ${formatSupplierMoney(c.amount * (c.quantity ?? 1), data.currency)}`}
                       </p>

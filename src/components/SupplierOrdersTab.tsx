@@ -1586,6 +1586,8 @@ function SupplierOrderDetail({
   onEdit: () => void;
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const kinds = Array.from(new Set(order.items.map((it) => it.orderKind ?? "production")));
+  const singleKind = kinds.length === 1 ? kinds[0] : null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 rounded-3xl bg-white p-6">
@@ -1598,6 +1600,17 @@ function SupplierOrderDetail({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {/* 품목이 전부 같은 성격이면 발주 전체의 성격이므로 상태 뱃지 옆에 함께 보여준다.
+              섞여 있으면 여기 대신 품목마다 표시한다. */}
+          {singleKind && (
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                singleKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
+              }`}
+            >
+              {SUPPLIER_ORDER_KIND_LABEL[singleKind]}
+            </span>
+          )}
           <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[order.status]}`}>
             {SUPPLIER_ORDER_STATUS_LABEL[order.status]}
           </span>
@@ -1619,7 +1632,9 @@ function SupplierOrderDetail({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-[#1d1d1f]">
-                  <span className="mr-1 text-xs text-[#86868b]">[{SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"]}]</span>
+                  {!singleKind && (
+                    <span className="mr-1 text-xs text-[#86868b]">[{SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"]}]</span>
+                  )}
                   {it.name}
                 </p>
                 {it.nameEn && <p className="mt-0.5 truncate text-xs text-[#86868b]">{it.nameEn}</p>}

@@ -91,7 +91,7 @@ export default function OrdersPage() {
             onClick={() => setTab("orders")}
             className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "orders" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
           >
-            발주 목록
+            고객 발주 목록
           </button>
           <button
             onClick={() => setTab("catalog")}

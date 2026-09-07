@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
@@ -67,6 +67,8 @@ export interface CatalogEntry {
   parts?: SupplierPartItem[];
   costItems?: SupplierCostItem[];
   subtitle: string;
+  // 고객 제품일 때의 고객사명 — 발주서에 표기한다(매입 전용 품목은 없다).
+  clientName?: string;
   // kind === "client"일 때만 — 매입 정보를 clientProductInternal에 저장할 때 필요하다.
   clientId?: string;
 }
@@ -136,6 +138,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         parts: internal.parts,
         costItems: internal.costItems,
         subtitle: clientNameById[p.clientId] ?? "-",
+        clientName: clientNameById[p.clientId],
         clientId: p.clientId,
       });
     }
@@ -729,6 +732,8 @@ function SupplierOrderComposer({
   const [items, setItems] = useState<DraftItem[]>([]);
   const [currency, setCurrency] = useState<SupplierCurrency>("USD");
   const [exchangeRate, setExchangeRate] = useState("");
+  const [rateDate, setRateDate] = useState("");
+  const [rateLoading, setRateLoading] = useState(false);
   const [incoterms, setIncoterms] = useState("");
   const [portOfLoading, setPortOfLoading] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("T/T 30% deposit, 70% before shipment");
@@ -751,6 +756,34 @@ function SupplierOrderComposer({
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const rows = grouped.find(([s]) => s === supplierName)?.[1] ?? [];
+
+  // 환율은 오늘 시세로 자동으로 채워준다 — 직접 찾아 입력하지 않아도 되게. 이미 값을 넣어둔
+  // 상태에서 통화만 바꾼 경우에도 새 통화 기준으로 다시 받아온다(예전 통화의 환율이 남으면
+  // 원가가 엉뚱하게 계산된다).
+  const fetchRate = useCallback(async (cur: SupplierCurrency) => {
+    if (cur === "KRW") {
+      setExchangeRate("");
+      setRateDate("");
+      return;
+    }
+    setRateLoading(true);
+    try {
+      const res = await fetch(`/api/fx?base=${cur}`);
+      if (!res.ok) throw new Error("fx");
+      const data = (await res.json()) as { rate: number; date: string };
+      setExchangeRate(String(data.rate));
+      setRateDate(data.date);
+    } catch {
+      // 조회에 실패해도 발주 작성 자체는 막지 않는다 — 직접 입력하면 된다.
+      setRateDate("");
+    } finally {
+      setRateLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRate(currency);
+  }, [currency, fetchRate]);
 
   // 저장할 때 넘기는 최종 품목 — 체크된 부대비용만 담는다.
   const finalItems: SupplierOrderItem[] = items.map((it) => ({
@@ -792,6 +825,7 @@ function SupplierOrderComposer({
         // 그대로여야 한다(부대비용을 복사해 담는 것과 같은 이유).
         parts: e.parts?.map((pt) => ({ ...pt })),
         imageUrl: e.imageUrl,
+        clientName: e.clientName,
         costOptions: (e.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
       },
     ]);
@@ -959,6 +993,14 @@ function SupplierOrderComposer({
                   placeholder="사양 (재질·캐비티·치수 등)"
                   className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                 />
+                {/* 고객 제품에서 담으면 자동으로 채워지고, 매입 전용·직접 입력 품목은 여기서
+                    직접 적는다 — 어느 고객 건인지가 발주서에 찍혀야 라벨·포장 구분이 된다. */}
+                <input
+                  value={it.clientName ?? ""}
+                  onChange={(e) => patchItem(it.key, { clientName: e.target.value })}
+                  placeholder="고객명 (발주서에 표기)"
+                  className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
               </div>
               <button
                 onClick={() => setItems((prev) => prev.filter((x) => x.key !== it.key))}
@@ -1083,13 +1125,27 @@ function SupplierOrderComposer({
               <option value="KRW">KRW 원</option>
             </select>
             {currency !== "KRW" && (
-              <input
-                value={exchangeRate}
-                onChange={(e) => setExchangeRate(e.target.value.replace(/[^0-9.]/g, ""))}
-                inputMode="decimal"
-                placeholder={`환율 (1 ${currency} = ?원)`}
-                className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-              />
+              <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs">
+                  <span className="shrink-0 text-[#86868b]">1 {currency} =</span>
+                  <input
+                    value={exchangeRate}
+                    onChange={(e) => setExchangeRate(e.target.value.replace(/[^0-9.]/g, ""))}
+                    inputMode="decimal"
+                    placeholder={rateLoading ? "불러오는 중" : "직접 입력"}
+                    className="w-16 bg-transparent text-right outline-none placeholder:text-[#d1d1d6]"
+                  />
+                  <span className="shrink-0 text-[#86868b]">원</span>
+                </div>
+                <button
+                  onClick={() => fetchRate(currency)}
+                  disabled={rateLoading}
+                  title="오늘 시세로 다시 불러오기"
+                  className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f] disabled:opacity-40"
+                >
+                  <RefreshCw size={13} className={rateLoading ? "animate-spin" : ""} />
+                </button>
+              </div>
             )}
             <input
               value={lotNo || autoLotNo}
@@ -1168,7 +1224,10 @@ function SupplierOrderComposer({
           <span className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(total, currency)}</span>
         </div>
         {exchangeRate.trim() && currency !== "KRW" && (
-          <p className="-mt-2 text-right text-xs text-[#86868b]">약 {Math.round(total * Number(exchangeRate)).toLocaleString("ko-KR")}원</p>
+          <p className="-mt-2 text-right text-xs text-[#86868b]">
+            약 {Math.round(total * Number(exchangeRate)).toLocaleString("ko-KR")}원
+            {rateDate && <span className="ml-1 text-[#d1d1d6]">· 시장 환율 {rateDate.slice(0, 16)}</span>}
+          </p>
         )}
 
         <div className="flex gap-2">

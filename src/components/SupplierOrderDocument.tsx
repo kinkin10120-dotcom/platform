@@ -39,6 +39,10 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
   const total = calcSupplierOrderTotal(data.items);
   const isHk = data.currency !== "KRW";
   const buyer = isHk ? HK_COMPANY : KR_COMPANY;
+  // 한 발주서가 대체로 한 고객 건이므로, 모든 품목의 고객명이 같으면 상단에 한 줄로 묶어
+  // 보여주고 품목마다 반복하지 않는다. 여러 고객이 섞였을 때만 품목별로 따로 적는다.
+  const clientNames = Array.from(new Set(data.items.map((it) => it.clientName).filter((n): n is string => !!n)));
+  const singleClient = clientNames.length === 1 ? clientNames[0] : null;
 
   return (
     <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -67,6 +71,7 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <Row label="供应商 / Supplier" value={data.supplierName || "-"} />
           <Row label="订单号 / PO No." value={data.soNumber ?? "발행 시 자동 발급"} />
           {data.lotNo && <Row label="批次 / Lot" value={data.lotNo} />}
+          {singleClient && <Row label="客户 / Client" value={singleClient} />}
           <Row label="日期 / Date" value={issuedDate} />
         </div>
         <div className="space-y-1.5">
@@ -102,6 +107,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                   <div className="min-w-0">
                     <p className="font-medium">{it.nameEn || it.name}</p>
                     {it.spec && <p className="mt-0.5 text-xs text-[#86868b]">{it.spec}</p>}
+                    {!singleClient && it.clientName && (
+                      <p className="mt-0.5 text-xs text-[#86868b]">客户 / Client: {it.clientName}</p>
+                    )}
                     {/* 조립품은 부품별 단가로 협의하므로 그 내역을 그대로 보여준다. 합계는 이미
                         오른쪽 단가에 반영되어 있어 따로 더하지 않는다. */}
                     {(it.parts ?? []).map((pt, pi) => (

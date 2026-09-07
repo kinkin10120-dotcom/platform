@@ -583,6 +583,9 @@ export interface SupplierOrderItem {
   parts?: SupplierPartItem[];
   // 제품 사진 — 공장이 어떤 물건인지 바로 알아보게 발주서에 함께 실린다.
   imageUrl?: string;
+  // 이 품목이 어느 고객 건인지 — 발주서에 표기해서 라벨·포장·구분에 쓴다. 담는 시점의
+  // 이름을 복사해 둔다(고객사명이 나중에 바뀌어도 이미 나간 발주서는 그대로여야 한다).
+  clientName?: string;
   // 어느 제품에서 담았는지 — 구매 카탈로그와 이어보기 위한 참조일 뿐, 금액 계산에는 안 쓴다.
   sourceProductId?: string;
 }

@@ -402,7 +402,9 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             발행한 구매발주가 없습니다.
           </div>
         )}
-        {orders.map((o) => (
+        {orders.map((o) => {
+          const orderKinds = Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
+          return (
           <div
             key={o.id}
             onClick={() => setSelected(o)}
@@ -415,18 +417,28 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                 고객명과 품목명을 맨 앞에 둔다. 발주번호·로트는 식별자라 아래로 내린다. */}
             <div className="flex items-center justify-between gap-2">
               <p className="truncate font-medium text-[#1d1d1f]">{o.supplierName || "-"}</p>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
-                {SUPPLIER_ORDER_STATUS_LABEL[o.status]}
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {/* 상세 화면과 같은 규칙 — 품목이 전부 같은 성격이면 발주 전체의 성격이라
+                    상태 뱃지 옆에 한 번만 두고, 섞였을 때만 품목 줄에 표시한다. */}
+                {orderKinds.length === 1 && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      orderKinds[0] === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
+                    }`}
+                  >
+                    {SUPPLIER_ORDER_KIND_LABEL[orderKinds[0]]}
+                  </span>
+                )}
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
+                  {SUPPLIER_ORDER_STATUS_LABEL[o.status]}
+                </span>
+              </div>
             </div>
             {/* 눌러보지 않고도 어느 건인지 알 수 있게 품목명과 고객사를 나란히 둔다. */}
             <p className="mt-0.5 truncate text-sm text-[#1d1d1f]">
-              {(() => {
-                const kinds = Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
-                return kinds.length === 1 ? (
-                  <span className="mr-1 text-[#86868b]">[{SUPPLIER_ORDER_KIND_LABEL[kinds[0]]}]</span>
-                ) : null;
-              })()}
+              {orderKinds.length > 1 && (
+                <span className="mr-1 text-[#86868b]">[{orderKinds.map((k) => SUPPLIER_ORDER_KIND_LABEL[k]).join("/")}]</span>
+              )}
               {o.items.map((it) => it.name).filter(Boolean).join(", ") || "품목 없음"}
               {(() => {
                 const clients = Array.from(new Set(o.items.map((it) => it.clientName).filter(Boolean)));
@@ -442,7 +454,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               {o.linkedPurchaseOrderNo ? ` · 고객발주 ${o.linkedPurchaseOrderNo}` : ""}
             </p>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

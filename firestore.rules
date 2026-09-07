@@ -250,6 +250,13 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---- supplier products (매입 전용 품목: 금형·부자재 등, 관리자 전용) ----
+    // 고객 제품(clientProducts)과 달리 clientId가 없다 — supplierOrders와 같은 원칙으로,
+    // 고객에게 열어줄 근거 자체를 만들지 않는다.
+    match /supplierProducts/{productId} {
+      allow read, write: if isAdmin();
+    }
+
     // ---- supplier orders (구매발주: 핸디핸드 → 해외 공급사, 관리자 전용) ----
     // 매출 쪽 purchaseOrders와 달리 이 문서에는 clientId가 아예 없다. 필드가 없으면 "고객은
     // 자기 것만" 식으로 규칙을 여는 것 자체가 불가능해서, 원가·마진이 고객에게 노출될 경로가

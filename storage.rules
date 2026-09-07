@@ -34,6 +34,13 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
+    // 매입 전용 품목 사진 — 발주서 PDF에도 실려야 하는데 인쇄 시점에는 인증 헤더를 붙일 수
+    // 없으므로, 다른 제품 사진들과 같이 읽기를 열어둔다. 사진에 금액은 없어서 원가 노출과 무관하다.
+    match /supplierProducts/{productId}/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     // 구매발주 회신본(공장 도장 스캔본) — 매입 원가가 그대로 찍힌 문서라, 다른 경로들처럼
     // read를 공개로 두지 않고 로그인한 사용자 중 관리자만 읽고 쓸 수 있게 잠근다.
     match /supplierOrders/{orderId}/{allPaths=**} {

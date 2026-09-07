@@ -5,6 +5,13 @@ import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil } from "lucid
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
+import {
+  createSupplierProduct,
+  deleteSupplierProduct,
+  listenSupplierProducts,
+  updateSupplierProduct,
+  uploadSupplierProductImage,
+} from "@/lib/firestore/supplierProducts";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import {
@@ -32,6 +39,7 @@ import {
   SupplierOrder,
   SupplierOrderItem,
   SupplierPartItem,
+  SupplierProduct,
 } from "@/lib/types";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -42,6 +50,26 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const NO_SUPPLIER = "미지정";
+
+// 구매 카탈로그 한 줄. 출처가 둘(고객에게도 파는 제품 / 매입 전용 품목)이라, 화면과 발주
+// 담기 로직이 출처를 신경 쓰지 않도록 공통 모양으로 한 번 펴서 쓴다.
+export interface CatalogEntry {
+  kind: "client" | "supplier";
+  id: string;
+  name: string;
+  nameEn?: string;
+  spec?: string;
+  imageUrl?: string;
+  supplierName: string;
+  purchasePrice?: number;
+  currency: SupplierCurrency;
+  unit?: string;
+  parts?: SupplierPartItem[];
+  costItems?: SupplierCostItem[];
+  subtitle: string;
+  // kind === "client"일 때만 — 매입 정보를 clientProductInternal에 저장할 때 필요하다.
+  clientId?: string;
+}
 
 // 카탈로그에서 제품을 담을 때 만들어지는 발주 품목. 제품의 기본 부대비용은 전부 담되 체크는
 // 꺼둔 상태로 시작한다 — 로트마다 붙는 항목이 달라서, 기본으로 켜두면 실수로 딸려 들어간다.
@@ -57,18 +85,21 @@ export default function SupplierOrdersTab() {
   const [clients, setClients] = useState<Client[]>([]);
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [clientOrders, setClientOrders] = useState<PurchaseOrder[]>([]);
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [selected, setSelected] = useState<SupplierOrder | null>(null);
   const [composing, setComposing] = useState(false);
   // 매입 정보를 편집 중인 제품 id — 고객 판매 정보(제품 카탈로그 탭)와 화면을 완전히 분리해서,
   // 파는 가격과 사오는 가격을 같은 칸에서 만지다 헷갈리는 일이 없게 한다.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [creatingNew, setCreatingNew] = useState(false);
 
   useEffect(() => listenAllClientProducts(setProducts), []);
   useEffect(() => listenAllClientProductInternals(setInternals), []);
   useEffect(() => listenClients(setClients), []);
   useEffect(() => listenSupplierOrders(setOrders), []);
   useEffect(() => listenAllPurchaseOrders(setClientOrders), []);
+  useEffect(() => listenSupplierProducts(setSupplierProducts), []);
 
   useEffect(() => {
     if (!selected) return;
@@ -84,22 +115,63 @@ export default function SupplierOrdersTab() {
 
   // 업체별 묶음 — 매입 정보가 하나라도 채워진 제품만 구매 카탈로그에 올린다(고객 판매용으로만
   // 등록해둔 제품까지 전부 나오면 목록이 쓸모없어진다).
-  const grouped = useMemo(() => {
-    const map = new Map<string, { product: ClientProduct; internal: ClientProductInternal }[]>();
+  const entries = useMemo<CatalogEntry[]>(() => {
+    const list: CatalogEntry[] = [];
+    // 고객에게도 파는 제품 — 매입 정보가 하나라도 채워진 것만 구매 카탈로그에 올린다
+    // (판매용으로만 등록해둔 제품까지 전부 나오면 목록이 쓸모없어진다).
     for (const p of products) {
       const internal = internals[p.id];
       if (!internal) continue;
       if (!internal.supplierName && internal.purchasePrice == null) continue;
-      const key = internal.supplierName || NO_SUPPLIER;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push({ product: p, internal });
+      list.push({
+        kind: "client",
+        id: p.id,
+        name: p.name,
+        nameEn: internal.nameEn,
+        imageUrl: p.imageUrl,
+        supplierName: internal.supplierName || NO_SUPPLIER,
+        purchasePrice: internal.purchasePrice,
+        currency: internal.purchaseCurrency ?? "USD",
+        unit: p.unit,
+        parts: internal.parts,
+        costItems: internal.costItems,
+        subtitle: clientNameById[p.clientId] ?? "-",
+        clientId: p.clientId,
+      });
+    }
+    // 매입 전용 품목(금형·부자재 등) — 고객 제품과 무관하게 여기서 직접 등록한 것들.
+    for (const sp of supplierProducts) {
+      list.push({
+        kind: "supplier",
+        id: sp.id,
+        name: sp.name,
+        nameEn: sp.nameEn,
+        spec: sp.spec,
+        imageUrl: sp.imageUrl,
+        supplierName: sp.supplierName || NO_SUPPLIER,
+        purchasePrice: sp.purchasePrice,
+        currency: sp.purchaseCurrency ?? "USD",
+        unit: sp.unit,
+        parts: sp.parts,
+        costItems: sp.costItems,
+        subtitle: "매입 전용",
+      });
+    }
+    return list;
+  }, [products, internals, supplierProducts, clientNameById]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, CatalogEntry[]>();
+    for (const e of entries) {
+      if (!map.has(e.supplierName)) map.set(e.supplierName, []);
+      map.get(e.supplierName)!.push(e);
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "ko"));
-  }, [products, internals]);
+  }, [entries]);
 
   const supplierNames = useMemo(
-    () => Array.from(new Set(Object.values(internals).map((i) => i.supplierName).filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b, "ko")),
-    [internals]
+    () => Array.from(new Set(entries.map((e) => e.supplierName).filter((n) => n !== NO_SUPPLIER))).sort((a, b) => a.localeCompare(b, "ko")),
+    [entries]
   );
 
   // 아직 매입 정보가 없는 제품들 — "구매 품목으로 등록" 목록에 뜬다.
@@ -140,17 +212,26 @@ export default function SupplierOrdersTab() {
             <FileText size={14} /> 구매발주서 작성
           </button>
           <button
-            onClick={() => setPickerOpen((v) => !v)}
+            onClick={() => { setCreatingNew(true); setPickerOpen(false); setEditingId(null); }}
             className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[#d1d1d6] px-4 py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
           >
-            <Plus size={14} /> 구매 품목 등록
+            <Plus size={14} /> 새 품목 등록
           </button>
         </div>
+
+        {/* 고객에게도 파는 제품은 이미 제품 카탈로그에 있으므로, 새로 만들지 않고 거기에 매입
+            정보만 채운다 — 같은 물건을 두 군데 만들면 단가가 갈라진다. */}
+        <button
+          onClick={() => { setPickerOpen((v) => !v); setCreatingNew(false); }}
+          className="w-full text-center text-xs font-medium text-[#86868b] underline underline-offset-4 transition hover:text-[#1d1d1f]"
+        >
+          고객 제품에 매입 정보 넣기
+        </button>
 
         {pickerOpen && (
           <div className="overflow-hidden rounded-3xl bg-white">
             <div className="flex items-center justify-between border-b border-[#f0f0f0] px-5 py-3">
-              <p className="text-xs font-semibold text-[#86868b]">매입 정보를 넣을 제품 고르기</p>
+              <p className="text-xs font-semibold text-[#86868b]">매입 정보를 넣을 고객 제품 고르기</p>
               <button onClick={() => setPickerOpen(false)} className="rounded-full p-1 text-[#d1d1d6] transition hover:text-[#1d1d1f]">
                 <X size={14} />
               </button>
@@ -174,12 +255,31 @@ export default function SupplierOrdersTab() {
           </div>
         )}
 
-        {/* 아직 매입 정보가 없는 제품을 고른 직후 — 목록에는 아직 안 뜨므로 여기서 바로 편집한다. */}
-        {editingId && !grouped.some(([, rows]) => rows.some((r) => r.product.id === editingId)) && (
+        {/* 매입 전용 품목 새로 만들기 */}
+        {creatingNew && (
           <div className="rounded-3xl bg-white p-5">
             <PurchaseInfoEditor
-              product={products.find((p) => p.id === editingId)!}
-              internal={internals[editingId]}
+              entry={null}
+              supplierNames={supplierNames}
+              onDone={() => setCreatingNew(false)}
+            />
+          </div>
+        )}
+
+        {/* 아직 매입 정보가 없는 고객 제품을 고른 직후 — 목록에는 아직 안 뜨므로 여기서 바로 편집한다. */}
+        {editingId && !entries.some((e) => e.id === editingId) && products.some((p) => p.id === editingId) && (
+          <div className="rounded-3xl bg-white p-5">
+            <PurchaseInfoEditor
+              entry={{
+                kind: "client",
+                id: editingId,
+                name: products.find((p) => p.id === editingId)!.name,
+                imageUrl: products.find((p) => p.id === editingId)!.imageUrl,
+                supplierName: "",
+                currency: "USD",
+                subtitle: "",
+                clientId: products.find((p) => p.id === editingId)!.clientId,
+              }}
               supplierNames={supplierNames}
               onDone={() => setEditingId(null)}
             />
@@ -188,9 +288,9 @@ export default function SupplierOrdersTab() {
 
         {grouped.length === 0 && (
           <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm leading-relaxed text-[#86868b]">
-            매입 정보가 등록된 제품이 없습니다.
+            등록된 구매 품목이 없습니다.
             <br />
-            <span className="text-xs">제품 카탈로그에서 제품을 열고 &quot;매입 정보&quot;에 공급 업체와 매입 단가를 입력해 주세요.</span>
+            <span className="text-xs">위 &quot;구매 품목 등록&quot;에서 새 품목을 만들거나, 고객 제품에 매입 정보를 넣어주세요.</span>
           </div>
         )}
 
@@ -200,37 +300,36 @@ export default function SupplierOrdersTab() {
               <p className="font-semibold text-[#1d1d1f]">{supplier}</p>
               <span className="text-xs text-[#86868b]">{rows.length}개 품목</span>
             </div>
-            {rows.map(({ product, internal }) => {
-              const costTotal = (internal.costItems ?? []).reduce((s, c) => s + (c.amount || 0), 0);
-              const cur = internal.purchaseCurrency ?? "USD";
+            {rows.map((e) => {
+              const costTotal = (e.costItems ?? []).reduce((sum, c) => sum + (c.amount || 0), 0);
               return (
-                <div key={product.id} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
+                <div key={`${e.kind}-${e.id}`} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
-                    {product.imageUrl && (
+                    {e.imageUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
+                      <img src={e.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{product.name}</p>
+                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
                       <p className="mt-0.5 truncate text-xs text-[#86868b]">
-                        {clientNameById[product.clientId] ?? "-"}
-                        {internal.nameEn ? ` · ${internal.nameEn}` : ""}
+                        {e.subtitle}
+                        {e.nameEn ? ` · ${e.nameEn}` : ""}
                       </p>
-                      {(internal.costItems ?? []).length > 0 && (
+                      {(e.costItems ?? []).length > 0 && (
                         <p className="mt-0.5 text-xs text-[#d1d1d6]">
-                          부대비용 {internal.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, cur)}
+                          부대비용 {e.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, e.currency)}
                         </p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-start gap-2">
                       <div className="text-right">
                         <p className="text-sm font-semibold text-[#1d1d1f]">
-                          {internal.purchasePrice != null ? formatSupplierMoney(internal.purchasePrice, cur) : "단가 미입력"}
+                          {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "단가 미입력"}
                         </p>
                         <p className="mt-0.5 text-xs text-[#d1d1d6]">매입 단가</p>
                       </div>
                       <button
-                        onClick={() => setEditingId((prev) => (prev === product.id ? null : product.id))}
+                        onClick={() => setEditingId((prev) => (prev === e.id ? null : e.id))}
                         className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
                         title="매입 정보 수정"
                       >
@@ -238,14 +337,9 @@ export default function SupplierOrdersTab() {
                       </button>
                     </div>
                   </div>
-                  {editingId === product.id && (
+                  {editingId === e.id && (
                     <div className="mt-3 border-t border-[#f0f0f0] pt-3">
-                      <PurchaseInfoEditor
-                        product={product}
-                        internal={internal}
-                        supplierNames={supplierNames}
-                        onDone={() => setEditingId(null)}
-                      />
+                      <PurchaseInfoEditor entry={e} supplierNames={supplierNames} onDone={() => setEditingId(null)} />
                     </div>
                   )}
                 </div>
@@ -299,22 +393,27 @@ export default function SupplierOrdersTab() {
 // clientProductInternal이라(관리자 전용 컬렉션) 고객 노출 위험은 달라지지 않고, 제품과
 // 이어져 있어서 나중에 판매가 대비 매입가를 비교하는 것도 그대로 가능하다.
 function PurchaseInfoEditor({
-  product,
-  internal,
+  entry,
   supplierNames,
   onDone,
 }: {
-  product: ClientProduct;
-  internal?: ClientProductInternal;
+  // null이면 "매입 전용 품목 새로 만들기" — 고객 제품과 무관하게 supplierProducts에 저장한다.
+  entry: CatalogEntry | null;
   supplierNames: string[];
   onDone: () => void;
 }) {
-  const [supplierName, setSupplierName] = useState(internal?.supplierName ?? "");
-  const [purchasePrice, setPurchasePrice] = useState(internal?.purchasePrice != null ? String(internal.purchasePrice) : "");
-  const [purchaseCurrency, setPurchaseCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
-  const [nameEn, setNameEn] = useState(internal?.nameEn ?? "");
-  const [costItems, setCostItems] = useState<SupplierCostItem[]>(internal?.costItems ?? []);
-  const [parts, setParts] = useState<SupplierPartItem[]>(internal?.parts ?? []);
+  const isNew = entry === null;
+  const [name, setName] = useState(entry?.name ?? "");
+  const [supplierName, setSupplierName] = useState(entry && entry.supplierName !== NO_SUPPLIER ? entry.supplierName : "");
+  const [purchasePrice, setPurchasePrice] = useState(entry?.purchasePrice != null ? String(entry.purchasePrice) : "");
+  const [purchaseCurrency, setPurchaseCurrency] = useState<SupplierCurrency>(entry?.currency ?? "USD");
+  const [nameEn, setNameEn] = useState(entry?.nameEn ?? "");
+  const [spec, setSpec] = useState(entry?.spec ?? "");
+  const [unit, setUnit] = useState(entry?.unit ?? "");
+  const [costItems, setCostItems] = useState<SupplierCostItem[]>(entry?.costItems ?? []);
+  const [parts, setParts] = useState<SupplierPartItem[]>(entry?.parts ?? []);
+  const [imageUrl, setImageUrl] = useState(entry?.imageUrl);
+  const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -324,43 +423,110 @@ function PurchaseInfoEditor({
   const hasParts = parts.length > 0;
   const effectivePrice = hasParts ? partsTotal : purchasePrice.trim() ? Number(purchasePrice) : null;
 
+  const cleanParts = parts
+    .filter((p) => p.name.trim())
+    .map((p) => ({ name: p.name.trim(), nameEn: p.nameEn?.trim() || undefined, unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 }));
+  const cleanCosts = costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 }));
+
   async function handleImageChange(file: File | null) {
     if (!file) return;
+    // 새로 만드는 중이면 문서가 아직 없어서 올릴 곳이 없다 — 저장할 때 함께 올린다.
+    if (isNew) {
+      setPendingImage(file);
+      setImageUrl(URL.createObjectURL(file));
+      return;
+    }
     setUploading(true);
     try {
-      await uploadClientProductImage(product.id, file);
+      if (entry!.kind === "client") await uploadClientProductImage(entry!.id, file);
+      else await uploadSupplierProductImage(entry!.id, file);
     } finally {
       setUploading(false);
     }
   }
 
   async function handleSave() {
+    if (isNew && !name.trim()) return;
     setSaving(true);
     try {
-      await setClientProductInternal(product.id, product.clientId, {
-        supplierName: supplierName.trim(),
-        purchasePrice: effectivePrice,
-        purchaseCurrency,
-        nameEn: nameEn.trim(),
-        costItems: costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 })),
-        parts: parts
-          .filter((p) => p.name.trim())
-          .map((p) => ({ name: p.name.trim(), nameEn: p.nameEn?.trim() || undefined, unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 })),
-      });
+      if (isNew) {
+        const ref = await createSupplierProduct({
+          supplierName: supplierName.trim(),
+          name: name.trim(),
+          nameEn: nameEn.trim() || undefined,
+          spec: spec.trim() || undefined,
+          purchasePrice: effectivePrice ?? undefined,
+          purchaseCurrency,
+          unit: unit.trim() || undefined,
+          parts: cleanParts,
+          costItems: cleanCosts,
+        });
+        if (pendingImage) await uploadSupplierProductImage(ref.id, pendingImage);
+      } else if (entry!.kind === "client") {
+        await setClientProductInternal(entry!.id, entry!.clientId!, {
+          supplierName: supplierName.trim(),
+          purchasePrice: effectivePrice,
+          purchaseCurrency,
+          nameEn: nameEn.trim(),
+          costItems: cleanCosts,
+          parts: cleanParts,
+        });
+      } else {
+        await updateSupplierProduct(entry!.id, {
+          supplierName: supplierName.trim(),
+          name: name.trim(),
+          nameEn: nameEn.trim() || undefined,
+          spec: spec.trim() || undefined,
+          purchasePrice: effectivePrice ?? undefined,
+          purchaseCurrency,
+          unit: unit.trim() || undefined,
+          parts: cleanParts,
+          costItems: cleanCosts,
+        });
+      }
       onDone();
     } finally {
       setSaving(false);
     }
   }
 
+  // 고객 제품은 품명·사양·단위를 제품 카탈로그에서 관리하므로 여기서는 안 건드린다 —
+  // 매입 전용 품목만 여기서 전부 입력한다.
+  const editableIdentity = isNew || entry!.kind === "supplier";
+
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-[#86868b]">{product.name} — 매입 정보</p>
+      <p className="text-xs font-semibold text-[#86868b]">
+        {isNew ? "새 구매 품목 (금형·부자재 등 — 고객에게는 보이지 않습니다)" : `${entry!.name} — 매입 정보`}
+      </p>
       <datalist id="supplier-name-options">
         {supplierNames.map((n) => (
           <option key={n} value={n} />
         ))}
       </datalist>
+
+      {editableIdentity && (
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="품명 *"
+            className="min-w-[9rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+          <input
+            value={spec}
+            onChange={(e) => setSpec(e.target.value)}
+            placeholder="사양 (재질·캐비티 등)"
+            className="min-w-[9rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+          <input
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="단위(SET)"
+            className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <input
@@ -402,13 +568,12 @@ function PurchaseInfoEditor({
         />
       </div>
 
-      {/* 사진 — 고객 제품 카탈로그와 같은 이미지를 쓴다(같은 제품이므로 따로 관리할 이유가 없다).
-          발주서에도 함께 실려서 공장이 어떤 물건인지 바로 알아본다. */}
+      {/* 사진 — 발주서에도 함께 실려서 공장이 어떤 물건인지 바로 알아본다. */}
       <label className="flex cursor-pointer items-center gap-3">
         <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] text-[10px] text-[#d1d1d6]">
-          {product.imageUrl ? (
+          {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
           ) : (
             "사진"
           )}
@@ -509,7 +674,7 @@ function PurchaseInfoEditor({
       <div className="flex gap-2 pt-1">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || (isNew && !name.trim())}
           className="rounded-full bg-[#1d1d1f] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
         >
           {saving ? "저장 중..." : "저장"}
@@ -521,6 +686,17 @@ function PurchaseInfoEditor({
         >
           취소
         </button>
+        {/* 매입 전용 품목만 삭제할 수 있다 — 고객 제품은 제품 카탈로그에서 관리한다. */}
+        {!isNew && entry!.kind === "supplier" && (
+          <button
+            onClick={async () => { await deleteSupplierProduct(entry!.id); onDone(); }}
+            disabled={saving}
+            className="ml-auto rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+            title="품목 삭제"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -536,7 +712,7 @@ function SupplierOrderComposer({
   onCreated,
   createdBy,
 }: {
-  grouped: [string, { product: ClientProduct; internal: ClientProductInternal }[]][];
+  grouped: [string, CatalogEntry[]][];
   clientNameById: Record<string, string>;
   clientOrders: PurchaseOrder[];
   onClose: () => void;
@@ -579,27 +755,28 @@ function SupplierOrderComposer({
 
   usePrintFileName([supplierName, "구매발주서", items.map((it) => it.name).filter(Boolean).join(",")], previewOpen);
 
-  function addProduct(product: ClientProduct, internal: ClientProductInternal) {
+  function addEntry(e: CatalogEntry) {
     setItems((prev) => [
       ...prev,
       {
-        key: `${product.id}-${Date.now()}`,
-        name: product.name,
-        nameEn: internal.nameEn || undefined,
-        unitPrice: internal.purchasePrice ?? 0,
+        key: `${e.id}-${Date.now()}`,
+        name: e.name,
+        nameEn: e.nameEn,
+        spec: e.spec,
+        unitPrice: e.purchasePrice ?? 0,
         quantity: 1,
-        unit: product.unit || "PCS",
-        sourceProductId: product.id,
-        // 부품 내역과 사진은 값을 복사해 둔다 — 나중에 제품 쪽이 바뀌어도 이미 나간 발주서는
+        unit: e.unit || "PCS",
+        sourceProductId: e.id,
+        // 부품 내역과 사진은 값을 복사해 둔다 — 나중에 품목 쪽이 바뀌어도 이미 나간 발주서는
         // 그대로여야 한다(부대비용을 복사해 담는 것과 같은 이유).
-        parts: internal.parts?.map((pt) => ({ ...pt })),
-        imageUrl: product.imageUrl,
-        costOptions: (internal.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
+        parts: e.parts?.map((pt) => ({ ...pt })),
+        imageUrl: e.imageUrl,
+        costOptions: (e.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
       },
     ]);
-    // 제품에 저장된 통화를 발주 통화로 따라간다 — 첫 품목을 담을 때만 맞춰주고, 이후엔
+    // 품목에 저장된 통화를 발주 통화로 따라간다 — 첫 품목을 담을 때만 맞춰주고, 이후엔
     // 관리자가 고른 값을 존중한다(한 발주서 안에서 통화를 섞을 수는 없다).
-    if (items.length === 0 && internal.purchaseCurrency) setCurrency(internal.purchaseCurrency);
+    if (items.length === 0) setCurrency(e.currency);
   }
 
   // 금형비처럼 고객에게 파는 제품이 아니라 카탈로그에 없는 일회성 품목도 발주에 담아야 한다 —
@@ -691,19 +868,23 @@ function SupplierOrderComposer({
         <div className="overflow-hidden rounded-3xl bg-white">
           <p className="border-b border-[#f0f0f0] px-5 py-3 text-xs font-semibold text-[#86868b]">제품을 눌러 발주에 담기</p>
           {rows.length === 0 && <p className="px-5 py-6 text-center text-sm text-[#86868b]">이 업체의 제품이 없습니다.</p>}
-          {rows.map(({ product, internal }) => (
+          {rows.map((e) => (
             <button
-              key={product.id}
-              onClick={() => addProduct(product, internal)}
+              key={`${e.kind}-${e.id}`}
+              onClick={() => addEntry(e)}
               className="flex w-full items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3 text-left transition last:border-b-0 hover:bg-[#f5f5f7]"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#1d1d1f]">{product.name}</p>
-                <p className="mt-0.5 truncate text-xs text-[#86868b]">{clientNameById[product.clientId] ?? "-"}</p>
+              {e.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={e.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
+                <p className="mt-0.5 truncate text-xs text-[#86868b]">{e.subtitle}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="text-sm text-[#86868b]">
-                  {internal.purchasePrice != null ? formatSupplierMoney(internal.purchasePrice, internal.purchaseCurrency ?? "USD") : "-"}
+                  {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "-"}
                 </span>
                 <Plus size={14} className="text-[#d1d1d6]" />
               </div>

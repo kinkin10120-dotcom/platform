@@ -587,6 +587,26 @@ export interface SupplierOrderItem {
   sourceProductId?: string;
 }
 
+// 금형·부자재처럼 고객에게 팔지는 않고 사오기만 하는 품목. 고객 제품(clientProducts)에
+// 얹어두면 고객 발주 카탈로그가 지저분해지고, 무엇보다 그 컬렉션은 고객이 읽을 수 있어서
+// 매입 단가를 함께 둘 수도 없다 — 그래서 관리자 전용 컬렉션을 따로 둔다.
+// supplierOrders와 마찬가지로 clientId 필드를 두지 않는다(고객에게 열어줄 근거를 안 만든다).
+export interface SupplierProduct {
+  id: string;
+  supplierName: string;
+  name: string;
+  nameEn?: string;
+  spec?: string;
+  imageUrl?: string;
+  purchasePrice?: number;
+  purchaseCurrency?: SupplierCurrency;
+  unit?: string;
+  parts?: SupplierPartItem[];
+  costItems?: SupplierCostItem[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type SupplierOrderStatus = "draft" | "issued" | "confirmed" | "closed";
 
 export const SUPPLIER_ORDER_STATUS_LABEL: Record<SupplierOrderStatus, string> = {

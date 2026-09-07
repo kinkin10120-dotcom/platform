@@ -1643,22 +1643,25 @@ function SupplierOrderDetail({
         {/* 발행 처리 버튼은 두지 않는다 — 발주서를 실제로 뽑는 시점이 곧 보내는 시점이라,
             인쇄 페이지를 열면 자동으로 "발행됨"이 된다. 버튼을 따로 누르게 하면 누르는 걸
             잊어버려서 상태가 실제와 어긋난다. */}
-        {deleteConfirm ? (
-          <button
-            onClick={async () => { await deleteSupplierOrder(order.id); onClose(); }}
-            className="ml-auto rounded-full bg-red-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-red-600"
-          >
-            정말 삭제
-          </button>
-        ) : (
-          <button
-            onClick={() => setDeleteConfirm(true)}
-            className="ml-auto rounded-full p-2 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
-            title="삭제"
-          >
-            <Trash2 size={15} />
-          </button>
-        )}
+        {/* 이미 공장에 나간 발주서는 지울 수 없다 — 서명 완료된 계약서를 못 지우는 것과 같은
+            이유로, 실제로 주고받은 문서가 기록에서 사라지면 안 된다. 작성만 해둔 건은 지운다. */}
+        {order.status === "draft" &&
+          (deleteConfirm ? (
+            <button
+              onClick={async () => { await deleteSupplierOrder(order.id); onClose(); }}
+              className="ml-auto rounded-full bg-red-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-red-600"
+            >
+              정말 삭제
+            </button>
+          ) : (
+            <button
+              onClick={() => setDeleteConfirm(true)}
+              className="ml-auto rounded-full p-2 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+              title="삭제"
+            >
+              <Trash2 size={15} />
+            </button>
+          ))}
       </div>
     </div>
   );

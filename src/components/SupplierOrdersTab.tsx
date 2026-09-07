@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
@@ -902,7 +902,7 @@ function SupplierOrderComposer({
 
   if (previewOpen) {
     return (
-      <PrintablePreview onClose={() => setPreviewOpen(false)} label="발행 전 미리보기 — 실제 발주서와 동일합니다.">
+      <PrintablePreview onClose={() => setPreviewOpen(false)} label="구매발주서 미리보기 — 인쇄 시 A4 크기로 저장됩니다.">
         <SupplierOrderDocument
           data={{
             supplierName,
@@ -1327,7 +1327,7 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
 
   if (previewOpen) {
     return (
-      <PrintablePreview onClose={() => setPreviewOpen(false)} label={`${order.soNumber} — 인쇄해서 공장에 보내세요.`}>
+      <PrintablePreview onClose={() => setPreviewOpen(false)} label={`${order.soNumber} — 인쇄 시 A4 크기로 저장됩니다.`}>
         <SupplierOrderDocument data={{ ...order, createdAt: order.createdAt }} />
       </PrintablePreview>
     );
@@ -1464,14 +1464,28 @@ function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrd
 
 // 견적서 미리보기와 같은 구조 — 화면에 보이는 것을 그대로 인쇄한다(인쇄용 사본을 따로 두면
 // 페이지 나눔이 어긋난다는 걸 계약서 쪽에서 이미 겪었다).
+// 계약서 미리보기(ContractPreviewModal)와 똑같은 틀 — 상단에 고정된 바 + 그 아래 A4 문서.
+// 화면에 보이는 것을 그대로 인쇄한다(인쇄용 사본을 따로 두면 페이지 나눔이 어긋난다는 걸
+// 계약서 쪽에서 이미 겪었다). position:fixed로 문서 전체를 덮는 방식도 인쇄 엔진이 여러
+// 페이지로 못 나누는 문제가 있어서, 고정하는 건 상단 바 하나뿐이다.
 function PrintablePreview({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  // 바 높이는 화면 폭에 따라 줄바꿈되며 달라지므로 고정값 대신 실제로 잰다.
+  useLayoutEffect(() => {
+    function measure() {
+      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight);
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   return (
-    // (app) 레이아웃 <main>의 좌우·상하 패딩을 음수 마진으로 상쇄해서 화면을 꽉 채운다 —
-    // 계약서 미리보기가 쓰는 방식과 같다. position:fixed로 덮는 방식은 인쇄 엔진이 여러
-    // 페이지로 못 나누고 한 장으로 뭉개는 문제가 있어서 쓰지 않는다.
     <div
       id="supplier-order-print-root"
-      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] py-10 md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))] print:m-0 print:bg-white print:py-0"
+      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))] print:m-0 print:mt-0 print:bg-white"
     >
       <style>{`
         @page { size: 210mm 297mm; margin: 0; }
@@ -1483,14 +1497,22 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }
+          /* 헤더 높이만큼 준 인라인 padding-top은 인쇄 시 필요 없다(헤더 자체가 안 보인다) —
+             인라인 style은 !important 없이는 못 이겨서 명시한다. */
+          .supplier-preview-body { padding-top: 0 !important; }
         }
       `}</style>
-      <div className="mx-auto mb-6 w-full max-w-[210mm] px-4 print:hidden">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+
+      {/* 앱 상단바(h-14, fixed) 바로 아래에 이어붙인다 — 덮지 않고 그 밑에 붙어야 한다. */}
+      <div
+        ref={headerRef}
+        className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-10 border-b border-[#e5e5e5] bg-white/90 px-4 py-3 backdrop-blur-xl print:hidden md:left-56"
+      >
+        <div className="mx-auto flex w-full max-w-[210mm] flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] bg-white text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
               title="닫기"
             >
               <X size={16} />
@@ -1505,7 +1527,10 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           </button>
         </div>
       </div>
-      <PdfPageScaler>{children}</PdfPageScaler>
+
+      <div className="supplier-preview-body px-4 pb-10 print:p-0" style={{ paddingTop: 56 + headerHeight }}>
+        <PdfPageScaler>{children}</PdfPageScaler>
+      </div>
     </div>
   );
 }

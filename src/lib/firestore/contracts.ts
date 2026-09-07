@@ -10,7 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Contract, ContractStatus, Currency } from "@/lib/types";
+import { Contract, ContractAttachment, ContractStatus, Currency } from "@/lib/types";
 
 const colRef = collection(db, "contracts");
 
@@ -110,6 +110,9 @@ export interface CreateContractInput {
   // 견적서 수락 시 고객이 이미 사업자등록증을 첨부했다면 그대로 이어받는다 — 계약 서명
   // 페이지의 첨부 박스는 이 값이 이미 있으면 자동으로 숨겨져서, 중복으로 다시 요구하지 않는다.
   bizRegCertUrl?: string;
+  // 복제로 만든 계약은 원본의 별첨을 그대로 이어받는다(같은 Storage 파일을 가리키는 URL 배열을
+  // 복사할 뿐이다 — deleteContract는 Storage 파일을 지우지 않으므로 원본을 지워도 안전하다).
+  attachments?: ContractAttachment[];
 }
 
 export async function createContract(input: CreateContractInput) {
@@ -134,7 +137,7 @@ export async function createContract(input: CreateContractInput) {
     ...(input.linkedClientId ? { linkedClientId: input.linkedClientId } : {}),
     ...(input.bizRegCertUrl ? { bizRegCertUrl: input.bizRegCertUrl } : {}),
     bodyText: input.bodyText,
-    attachments: [],
+    attachments: input.attachments ?? [],
     version: 1,
     history: [],
     status: "draft" as ContractStatus,
@@ -171,6 +174,39 @@ export type ContractDraftPatch = Partial<
     | "memo"
   >
 >;
+
+// 같은 거래처와 계약을 한 건 더 맺는 경우(이중 계약)를 위해, 기존 계약의 입력값과 본문을 그대로
+// 가진 새 "작성중" 계약을 만든다. 서명·발송에 관한 흔적(status/서명 이미지/서명자/발송·열람 시각/
+// signedBodyText/history/version)은 절대 따라오면 안 되므로, 문서를 통째로 복사하지 않고
+// createContract가 받는 입력 필드만 골라 넘긴다 — 새로 추가되는 서명 관련 필드가 실수로
+// 딸려오는 일이 구조적으로 불가능하다.
+export async function duplicateContract(source: Contract, createdBy: string) {
+  return createContract({
+    title: `${source.title} (사본)`,
+    companyName: source.companyName,
+    productName: source.productName,
+    bizRegNumber: source.bizRegNumber,
+    bizCeoName: source.bizCeoName,
+    bizAddress: source.bizAddress,
+    contactName: source.contactName,
+    contactEmail: source.contactEmail,
+    contactPhone: source.contactPhone,
+    amount: source.amount,
+    currency: source.currency,
+    vatApplicable: source.vatApplicable,
+    periodStart: source.periodStart,
+    periodEnd: source.periodEnd,
+    paymentTerms: source.paymentTerms,
+    handyhandIsGap: source.handyhandIsGap,
+    // 서명 완료본(signedBodyText)이 아니라 편집 원본을 복사한다 — 서명본은 토큰이 이미 값으로
+    // 치환·동결된 상태라, 이걸 물려받으면 새 계약에서 금액·기간을 고쳐도 본문이 안 따라온다.
+    bodyText: source.bodyText,
+    attachments: source.attachments,
+    linkedClientId: source.linkedClientId,
+    bizRegCertUrl: source.bizRegCertUrl,
+    createdBy,
+  });
+}
 
 export async function updateContractDraft(id: string, patch: ContractDraftPatch) {
   // Firestore는 필드값으로 undefined를 허용하지 않는다 — 선택 필드가 비어있을 때(사업자번호,

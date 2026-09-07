@@ -17,6 +17,7 @@ import {
   createContract,
   updateContractDraft,
   deleteContract,
+  duplicateContract,
   linkContractToClient,
   ContractDraftPatch,
 } from "@/lib/firestore/contracts";
@@ -43,6 +44,8 @@ export default function ContractsPage() {
   const [selected, setSelected] = useState<Contract | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // 복제 중인 계약 id — 같은 카드를 연타해서 사본이 여러 개 생기는 걸 막는다.
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [prefill, setPrefill] = useState<{ companyName?: string; contactName?: string; contactEmail?: string; bizRegCertUrl?: string } | null>(null);
 
@@ -73,6 +76,21 @@ export default function ContractsPage() {
     const fresh = contracts.find((c) => c.id === selected.id);
     if (fresh) setSelected(fresh);
   }, [contracts]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 같은 거래처와 두 번째 계약을 맺을 때, 매번 처음부터 다시 쓰지 않도록 기존 건을 그대로 복사한다.
+  // 복제본은 항상 "작성중"이라 실수로 발송되지 않고, 만든 직후 바로 선택해 편집으로 이어지게 한다.
+  async function handleDuplicate(source: Contract) {
+    if (!appUser || duplicatingId) return;
+    setDuplicatingId(source.id);
+    try {
+      const ref = await duplicateContract(source, appUser.uid);
+      // 구독(listenAllContracts)이 새 문서를 실어올 때까지 목록엔 아직 없다 — 도착하면 위쪽
+      // useEffect가 selected를 최신 문서로 교체해주므로, 여기서는 id만 맞춰 심어두면 된다.
+      setSelected({ ...source, id: ref.id, title: `${source.title} (사본)`, status: "draft" } as Contract);
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
 
   async function handleConfirmDelete() {
     if (!selected || deleteConfirmText !== DELETE_KEYWORD) return;
@@ -121,6 +139,7 @@ export default function ContractsPage() {
               selected={selected?.id === c.id}
               onClick={() => setSelected(c)}
               onDelete={() => { setSelected(c); setDeleteConfirmOpen(true); }}
+              onDuplicate={() => handleDuplicate(c)}
             />
           ))}
         </div>
@@ -238,11 +257,13 @@ function ContractCard({
   selected,
   onClick,
   onDelete,
+  onDuplicate,
 }: {
   contract: Contract;
   selected: boolean;
   onClick: () => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const canDelete = c.status !== "signed" && c.status !== "linked";
   return (
@@ -264,6 +285,15 @@ function ContractCard({
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[c.status]}`}>
             {CONTRACT_STATUS_LABEL[c.status]}
           </span>
+          {/* 서명이 끝난 계약도 복제는 할 수 있어야 한다 — 오히려 "지난번과 같은 조건으로 한 건 더"가
+              가장 흔한 경우다(삭제와 달리 원본을 건드리지 않으므로 상태와 무관하게 허용한다). */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+            title="복제하기"
+            className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+          >
+            <Copy size={13} />
+          </button>
           {canDelete && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); }}
@@ -379,7 +409,7 @@ function ContractEditForm({ contract }: { contract: Contract }) {
     // 포커스를 해제해서 "지금은 진짜 외부 변화"임을 알려준다.
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     const f = { ...contract, ...form, amount: Number(form.amount) || 0 };
-    const nextBody = resolveContractTokens(form.bodyText, f);
+    const nextBody = resolveContractTokens(form.bodyText, f, { keepContractDateToken: true });
     setForm((prev) => ({ ...prev, bodyText: nextBody }));
     setBodyTextDirty(true);
     setBodyTextVersion((v) => v + 1);

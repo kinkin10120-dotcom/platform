@@ -118,6 +118,30 @@ function formatKoreanDateTime(v: unknown): string {
   return "";
 }
 
+// {{contractDate}}용 — src/lib/contractTemplate.ts의 formatContractDate와 동일하게 유지한다.
+// 계약 체결일은 곧 전자서명 완료일이라(템플릿 제5조와 같은 기준), 서명 전에는 확정된 날짜가
+// 없으므로 그 사실을 그대로 적는다. 서명 시점에 submitContractSignature가 signedAt을 채워
+// 다시 치환하므로, 동결되는 signedBodyText에는 실제 서명일이 박힌다.
+function formatContractDate(v: unknown): string {
+  let d: Date | null = null;
+  if (v instanceof Timestamp) d = v.toDate();
+  else if (v instanceof Date) d = v;
+  else if (typeof v === "number") d = new Date(v);
+  if (!d) return "전자서명 완료 시 자동 기입";
+  // 서명 시각은 한국 시간 기준으로 읽어야 자정 근처에서 날짜가 하루 어긋나지 않는다.
+  const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  return `${kst.getFullYear()}년 ${kst.getMonth() + 1}월 ${kst.getDate()}일`;
+}
+
+// {{periodDays}}용 — src/lib/contractTemplate.ts의 diffDays와 동일하게 유지한다.
+function diffDays(start?: string, end?: string): number | null {
+  if (!start || !end) return null;
+  const s = new Date(start).getTime();
+  const e = new Date(end).getTime();
+  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
+  return Math.round((e - s) / 86400000);
+}
+
 // src/lib/tiptapSignatureBlock.ts의 buildSignatureBlockHtml과 동일한 마크업을 만든다(별도
 // 프로젝트라 모듈을 공유할 수 없어 손으로 맞춰 유지) — "크게 편집"(Tiptap 에디터)의
 // signatureBlock 노드가 이 div[data-signature-block] 구조를 그대로 알아보고 파싱하므로,
@@ -224,6 +248,11 @@ function resolveContractTokens(bodyText: string, f: FirebaseFirestore.DocumentDa
     amount: f.amount ? `${formatMoneySimple(f.amount, f.currency ?? "KRW")}${f.vatApplicable ? " (VAT별도)" : ""}` : blank,
     periodStart: f.periodStart || blank,
     periodEnd: f.periodEnd || blank,
+    periodDays: (() => {
+      const d = diffDays(f.periodStart, f.periodEnd);
+      return d === null ? blank : `${d}일`;
+    })(),
+    contractDate: formatContractDate(f.signedAt),
     paymentTerms: f.paymentTerms || blank,
     gapSignature: buildGapSignatureHtml(f),
     eulSignature: buildEulSignatureHtml(f),
@@ -327,6 +356,9 @@ const BRACKET_LABEL_TOKENS: Record<string, string> = {
   "담당자연락처": "contactPhone",
   "용역기간시작": "periodStart",
   "용역기간종료": "periodEnd",
+  "용역기간": "periodDays",
+  "계약일자": "contractDate",
+  "계약체결일": "contractDate",
   "계약금액": "amount",
   "대금지급방식": "paymentTerms",
 };

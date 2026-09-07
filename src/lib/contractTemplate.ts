@@ -21,7 +21,7 @@ export const DEFAULT_CONTRACT_BODY_TEMPLATE = `<p>[ 계약 당사자 ]</p>
 <ul><li><p></p></li></ul>
 <p></p>
 <p><strong>제 3 조 (용역기간)</strong></p>
-<p>용역기간: {{periodStart}}부터 {{periodEnd}}까지 (개발 진행에 따라 연장할 수 있다.)</p>
+<p>용역기간: 계약 체결일로부터 {{periodDays}} (개발 진행에 따라 연장할 수 있다.)</p>
 <p></p>
 <p><strong>제 4 조 (계약금 및 대금지급)</strong></p>
 <p>① 총 계약금액: {{amount}}</p>
@@ -60,6 +60,8 @@ export const DEFAULT_CONTRACT_BODY_TEMPLATE = `<p>[ 계약 당사자 ]</p>
 <p>② 제1항의 합의가 이루어지지 아니한 경우, 이 계약으로부터 발생되는 모든 분쟁은 대한상사중재원에서 국내 중재규칙에 따라 중재로 해결한다.</p>
 <p></p>
 <p>본 계약서는 양 당사자가 전자서명 방식으로 체결하며, 전자문서 및 전자거래 기본법에 따라 서면 계약과 동일한 법적 효력을 가진다.</p>
+<p></p>
+<p>계약일자: {{contractDate}}</p>
 <p></p>
 <p>갑</p>
 <p>상호명: {{companyName}}</p>
@@ -103,6 +105,27 @@ export interface ContractTokenFields {
 
 function formatKoreanDateTime(millis?: number): string {
   return millis ? new Date(millis).toLocaleString("ko-KR") : "";
+}
+
+// {{contractDate}}용 — 계약 체결일은 곧 전자서명 완료일이다(템플릿 제5조와 동일한 기준).
+// 아직 서명 전이면 확정된 날짜가 없으므로 그 사실을 그대로 적어, 고객이 보는 문서와
+// 서명 시점에 동결되는 문서가 어긋나지 않게 한다.
+function formatContractDate(millis?: number): string {
+  if (!millis) return "전자서명 완료 시 자동 기입";
+  const d = new Date(millis);
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+// {{periodDays}}용 — 시작일·종료일로 잡아둔 기간을 "일수"로 환산한다. 용역기간을 고정
+// 날짜가 아니라 "체결일로부터 N일"로 쓰면, 서명이 늦어져도 문구가 저절로 맞고 서명 순간에
+// 내용이 바뀌지 않는다(고정 날짜로 자동 이동시키면 고객이 본 문서와 서명한 문서가 달라질 수
+// 있어 해시로 동결하는 지금 구조와 충돌한다).
+function diffDays(start?: string, end?: string): number | null {
+  if (!start || !end) return null;
+  const s = new Date(start).getTime();
+  const e = new Date(end).getTime();
+  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
+  return Math.round((e - s) / 86400000);
 }
 
 // 서명/직인 영역은 커스텀 Tiptap 노드(signatureBlock)로 관리한다 — 여기서는 그 노드가
@@ -155,6 +178,11 @@ export function buildContractTokenValues(f: ContractTokenFields): Record<string,
     amount: f.amount ? `${formatMoney(f.amount, f.currency)}${f.vatApplicable ? " (VAT별도)" : ""}` : blank,
     periodStart: f.periodStart || blank,
     periodEnd: f.periodEnd || blank,
+    periodDays: (() => {
+      const d = diffDays(f.periodStart, f.periodEnd);
+      return d === null ? blank : `${d}일`;
+    })(),
+    contractDate: formatContractDate(f.signedAt),
     paymentTerms: f.paymentTerms || blank,
     gapSignature: buildGapSignatureHtml(f),
     eulSignature: buildEulSignatureHtml(f),
@@ -198,8 +226,18 @@ function replaceTopLevelParens(text: string, replacer: (match: string, label: st
 // 계약서 본문에 남아있는 {{토큰}}을 위쪽 입력 필드 값으로 치환한다. 아직 안 채워진 필드는
 // "[미입력]"으로 표시해, 발송 전 관리자가 빠진 항목을 한눈에 알아챌 수 있게 한다.
 // bodyText가 HTML이어도 토큰은 태그 밖 텍스트로 타이핑되므로 문자열 치환이 그대로 동작한다.
-export function resolveContractTokens(bodyText: string, f: ContractTokenFields): string {
+// keepContractDateToken: "본문에 적용" 버튼 전용. 이 버튼은 치환 결과를 실제 저장값으로
+// 굳히는데, 서명 전에 {{contractDate}}까지 굳혀버리면 자리표시 문구("전자서명 완료 시 자동
+// 기입")가 본문에 박혀서 정작 서명 시점에 실제 날짜로 바뀔 토큰이 사라진다. 화면에 보여주기만
+// 하는 경로(미리보기·서명 페이지)에서는 자리표시 문구를 그대로 보여주는 게 맞으므로, 굳히는
+// 경로에서만 이 옵션으로 토큰을 남겨둔다.
+export function resolveContractTokens(
+  bodyText: string,
+  f: ContractTokenFields,
+  opts?: { keepContractDateToken?: boolean }
+): string {
   const tokens = buildContractTokenValues(f);
+  if (opts?.keepContractDateToken && !f.signedAt) tokens.contractDate = "{{contractDate}}";
   const resolved = bodyText.replace(/\{\{(\w+)\}\}/g, (match, key) => (key in tokens ? tokens[key] : match));
   // 관리자가 {{토큰}} 대신 "(제품/서비스명)"이나 "(상호명 (갑))"처럼 자연어 괄호 표기로 직접
   // 본문을 쓰는 경우도 있어, 알려진 라벨과 일치하는 괄호 텍스트만(화이트리스트) 같은 값으로
@@ -306,6 +344,9 @@ const BRACKET_LABEL_TOKENS: Record<string, string> = {
   "담당자연락처": "contactPhone",
   "용역기간시작": "periodStart",
   "용역기간종료": "periodEnd",
+  "용역기간": "periodDays",
+  "계약일자": "contractDate",
+  "계약체결일": "contractDate",
   "계약금액": "amount",
   "대금지급방식": "paymentTerms",
 };

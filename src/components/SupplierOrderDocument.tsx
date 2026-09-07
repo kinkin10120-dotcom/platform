@@ -183,8 +183,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           </div>
         </div>
 
-        <div className="mt-3 flex items-end justify-between border-t border-[#e5e5e5] pt-3">
-          <p>본 발주서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
+        {/* 견적서·청구서와 달리 "HANDYWORKS 플랫폼에서 생성되었습니다" 문구는 넣지 않는다 —
+            받는 쪽이 우리 고객이 아니라 해외 공장이라 우리 플랫폼 안내가 의미가 없다. */}
+        <div className="mt-3 flex items-end justify-end border-t border-[#e5e5e5] pt-3">
           <p>{isHk ? HK_COMPANY.nameEn : "HANDYHAND"}</p>
         </div>
       </div>

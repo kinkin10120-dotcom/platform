@@ -88,7 +88,7 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
             <th className="w-8 py-2.5 pr-2 text-left font-semibold">No</th>
             <th className="py-2.5 pr-2 text-left font-semibold">品名 / Description</th>
             <th className="w-20 py-2.5 pr-2 text-right font-semibold">单价 / Price</th>
-            <th className="w-16 py-2.5 pr-2 text-right font-semibold">数量 / Qty</th>
+            <th className="w-20 py-2.5 pr-2 text-right font-semibold">数量 / Qty</th>
             <th className="w-24 py-2.5 pl-2 text-right font-semibold">金额 / Amount</th>
           </tr>
         </thead>
@@ -137,9 +137,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                   </div>
                 </div>
               </td>
-              <td className="py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : formatSupplierMoney(it.unitPrice, data.currency)}</td>
-              <td className="py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : `${it.quantity} ${it.unit || "PCS"}`}</td>
-              <td className="py-3 pl-2 text-right font-medium">{formatSupplierMoney(calcSupplierItemTotal(it), data.currency)}</td>
+              <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : formatSupplierMoney(it.unitPrice, data.currency)}</td>
+              <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : `${it.quantity} ${it.unit || "PCS"}`}</td>
+              <td className="whitespace-nowrap py-3 pl-2 text-right font-medium">{formatSupplierMoney(calcSupplierItemTotal(it), data.currency)}</td>
             </tr>
             );
           })}

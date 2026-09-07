@@ -1156,24 +1156,26 @@ function SupplierOrderComposer({
                 )}
               </div>
               {(it.parts ?? []).map((pt, pi) => (
-                <div key={pi} className="flex flex-wrap items-center gap-1.5">
+                /* 줄바꿈을 허용하면 삭제 버튼만 다음 줄로 밀린다 — 한 줄에 고정하고, 대신
+                   이름 칸이 좁은 화면에서 줄어들도록 최소 폭을 두지 않는다. */
+                <div key={pi} className="flex items-center gap-1.5">
                   <input
                     value={pt.name}
                     onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, name: e.target.value } : x)))}
                     placeholder="부품명"
-                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <input
                     value={pt.nameEn ?? ""}
                     onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, nameEn: e.target.value } : x)))}
                     placeholder="영문/중문"
-                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <NumberInput
                     value={pt.unitPrice}
                     onChange={(n) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, unitPrice: n } : x)))}
                     placeholder="단가"
-                    className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="w-20 shrink-0 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <NumberInput
                     value={pt.quantity}
@@ -1183,7 +1185,7 @@ function SupplierOrderComposer({
                     decimal={false}
                     placeholder="수량"
                     title={it.partsOverridden[pi] ? "직접 지정한 수량 — 발주 수량을 바꿔도 그대로 유지됩니다." : "발주 수량을 따라갑니다."}
-                    className={`w-16 rounded-lg border bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] ${
+                    className={`w-16 shrink-0 rounded-lg border bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] ${
                       it.partsOverridden[pi] ? "border-[#1d1d1f]" : "border-[#d1d1d6]"
                     }`}
                   />
@@ -1192,7 +1194,7 @@ function SupplierOrderComposer({
                   </span>
                   <button
                     onClick={() => patchParts(it.key, (it.parts ?? []).filter((_, xi) => xi !== pi))}
-                    className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+                    className="shrink-0 rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
                     title="삭제"
                   >
                     <Trash2 size={12} />
@@ -1212,7 +1214,7 @@ function SupplierOrderComposer({
               <p className="text-xs font-semibold text-[#86868b]">이번 로트 부대비용</p>
               {it.costOptions.length === 0 && <p className="text-xs text-[#d1d1d6]">등록된 부대비용이 없습니다. 아래에서 직접 추가할 수 있습니다.</p>}
               {it.costOptions.map((opt, ci) => (
-                <div key={ci} className="flex flex-wrap items-center gap-1.5">
+                <div key={ci} className="flex items-center gap-1.5">
                   <input
                     type="checkbox"
                     checked={opt.checked}
@@ -1230,7 +1232,7 @@ function SupplierOrderComposer({
                       })
                     }
                     placeholder="항목명"
-                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <input
                     value={opt.cost.nameEn ?? ""}
@@ -1240,7 +1242,7 @@ function SupplierOrderComposer({
                       })
                     }
                     placeholder="영문/중문"
-                    className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <NumberInput
                     value={opt.cost.amount}
@@ -1250,7 +1252,7 @@ function SupplierOrderComposer({
                       })
                     }
                     placeholder="금액"
-                    className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="w-20 shrink-0 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <NumberInput
                     value={opt.cost.quantity ?? 1}
@@ -1261,11 +1263,11 @@ function SupplierOrderComposer({
                     }
                     decimal={false}
                     placeholder="개수"
-                    className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                    className="w-14 shrink-0 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
                   <button
                     onClick={() => patchItem(it.key, { costOptions: it.costOptions.filter((_, idx) => idx !== ci) })}
-                    className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+                    className="shrink-0 rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
                     title="삭제"
                   >
                     <Trash2 size={12} />

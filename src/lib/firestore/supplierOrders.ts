@@ -7,7 +7,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import { ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { SupplierCurrency, SupplierOrder, SupplierOrderItem, SupplierOrderStatus } from "@/lib/types";
 
@@ -39,7 +39,7 @@ function fromDoc(d: any): SupplierOrder {
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     status: data.status ?? "draft",
     issuedAt: data.issuedAt?.toMillis ? data.issuedAt.toMillis() : data.issuedAt,
-    confirmationFileUrl: data.confirmationFileUrl || undefined,
+    confirmationFilePath: data.confirmationFilePath || undefined,
     confirmationFileName: data.confirmationFileName || undefined,
     confirmedAt: data.confirmedAt?.toMillis ? data.confirmedAt.toMillis() : data.confirmedAt,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
@@ -166,17 +166,19 @@ export async function setSupplierOrderStatus(id: string, status: SupplierOrderSt
 // 공장이 도장(公章)을 찍어 회신한 스캔본. 이게 올라오면 상태를 "공장 확인"으로 올린다 —
 // 전자서명 루프를 만들지 않고 실제 거래 방식(위챗·메일로 주고받고 스캔본 회신)을 그대로 기록한다.
 export async function uploadSupplierOrderConfirmation(orderId: string, file: File) {
-  const fileRef = storageRef(storage, `supplierOrders/${orderId}/confirmation-${Date.now()}-${file.name}`);
-  await uploadBytes(fileRef, file);
-  const url = await getDownloadURL(fileRef);
+  const path = `supplierOrders/${orderId}/confirmation-${Date.now()}-${file.name}`;
+  await uploadBytes(storageRef(storage, path), file);
+  // 여기서 getDownloadURL을 부르면 안 된다 — 한 번 부르는 순간 영구적으로 유효한 공개 토큰
+  // URL이 발급되고, 나중에 규칙을 아무리 조여도 이미 나간 토큰은 되돌릴 수 없다. 경로만
+  // 저장해두고 열어볼 때 임시 URL을 받는다.
   await updateDoc(doc(db, "supplierOrders", orderId), {
-    confirmationFileUrl: url,
+    confirmationFilePath: path,
     confirmationFileName: file.name,
     confirmedAt: serverTimestamp(),
     status: "confirmed" as SupplierOrderStatus,
     updatedAt: serverTimestamp(),
   });
-  return url;
+  return path;
 }
 
 export async function deleteSupplierOrder(id: string) {

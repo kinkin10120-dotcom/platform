@@ -20,6 +20,7 @@ import {
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import { usePrintFileName } from "@/lib/usePrintFileName";
+import { fetchSupplierOrderFile } from "@/lib/functions";
 import {
   Client,
   ClientProduct,
@@ -618,9 +619,33 @@ function SupplierOrderComposer({
 function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose: () => void }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [fileError, setFileError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   usePrintFileName([order.supplierName, "구매발주서", order.soNumber], previewOpen);
+
+  // 저장된 건 경로뿐이라, 열 때마다 관리자 확인을 거쳐 5분짜리 URL을 새로 받아온다.
+  async function handleOpenConfirmation() {
+    if (!order.confirmationFilePath || opening) return;
+    setOpening(true);
+    setFileError("");
+    // URL을 받아오는 동안(비동기) window.open을 부르면 사파리가 팝업으로 보고 막는다 —
+    // 클릭 직후 동기적으로 빈 탭을 먼저 열어두고, 주소만 나중에 채운다.
+    const tab = window.open("", "_blank");
+    try {
+      const url = await fetchSupplierOrderFile(order.confirmationFilePath);
+      if (tab) tab.location.href = url;
+      else window.location.href = url; // 팝업이 막힌 환경에서는 현재 탭에서 연다
+      // blob: 주소는 이 탭이 살아있는 동안만 유효하다 — 넉넉히 두고 정리한다.
+      setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    } catch {
+      tab?.close();
+      setFileError("파일을 여는 데 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setOpening(false);
+    }
+  }
 
   async function handleUpload(file: File | null) {
     if (!file) return;
@@ -703,21 +728,21 @@ function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose
       {/* 공장 회신본 */}
       <div className="space-y-2 border-t border-[#f0f0f0] pt-4">
         <p className="text-xs font-semibold text-[#86868b]">공장 회신본 (도장 스캔본)</p>
-        {order.confirmationFileUrl ? (
-          <a
-            href={order.confirmationFileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100"
+        {order.confirmationFilePath ? (
+          <button
+            onClick={handleOpenConfirmation}
+            disabled={opening}
+            className="flex w-full items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5 text-xs font-medium text-green-700 transition hover:bg-green-100 disabled:opacity-60"
           >
-            <Check size={14} /> {order.confirmationFileName || "회신본"} 열기
-          </a>
+            <Check size={14} /> {order.confirmationFileName || "회신본"} {opening ? "여는 중..." : "열기"}
+          </button>
         ) : (
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-[#d1d1d6] px-4 py-2.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
             <Upload size={14} /> {uploading ? "업로드 중..." : "회신본 업로드"}
             <input type="file" className="hidden" onChange={(e) => handleUpload(e.target.files?.[0] ?? null)} disabled={uploading} />
           </label>
         )}
+        {fileError && <p className="text-xs text-red-500">{fileError}</p>}
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-[#f0f0f0] pt-4">

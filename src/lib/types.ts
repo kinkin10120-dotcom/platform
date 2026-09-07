@@ -610,7 +610,10 @@ export interface SupplierOrder {
   status: SupplierOrderStatus;
   issuedAt?: number;
   // 공장이 회신한 도장(公章) 찍힌 스캔본 — 이게 올라오면 "공장 확인"으로 본다.
-  confirmationFileUrl?: string;
+  // URL이 아니라 Storage 경로만 저장한다. getDownloadURL()로 만든 링크는 영구적으로 살아있는
+  // 공개 토큰이라, 매입 원가가 찍힌 문서에 그런 링크를 남겨두지 않는다 — 열어볼 때마다
+  // Cloud Function(getSupplierOrderFileUrl)이 관리자 확인 후 5분짜리 임시 URL을 새로 만든다.
+  confirmationFilePath?: string;
   confirmationFileName?: string;
   confirmedAt?: number;
   createdAt: number;

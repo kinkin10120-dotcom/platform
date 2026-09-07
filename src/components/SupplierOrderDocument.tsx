@@ -93,7 +93,14 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           </tr>
         </thead>
         <tbody>
-          {data.items.map((it, i) => (
+          {data.items.map((it, i) => {
+            // 부품마다 발주 수량이 다르면 "완제품 몇 개"라는 게 성립하지 않는다 — 그때 표시되는
+            // 단가는 부품 합계를 완제품 수량으로 나눈 평균값이라 실제로 협의한 단가가 아니고,
+            // 수량도 부품별 수량과 어긋나 보여서 공장이 오해한다. 그런 경우엔 단가·수량 칸을
+            // 비우고 금액만 남긴다(부품 줄에 이미 부품별 단가 × 수량 = 합계가 다 적혀 있다).
+            const partQtys = (it.parts ?? []).map((pt) => pt.quantity);
+            const mixedPartQty = partQtys.length > 0 && new Set(partQtys).size > 1;
+            return (
             <tr key={i} className="border-b border-[#e5e5e5] align-top">
               <td className="py-3 pr-2 text-[#86868b]">{i + 1}</td>
               <td className="py-3 pr-2">
@@ -130,11 +137,12 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                   </div>
                 </div>
               </td>
-              <td className="py-3 pr-2 text-right text-[#86868b]">{formatSupplierMoney(it.unitPrice, data.currency)}</td>
-              <td className="py-3 pr-2 text-right text-[#86868b]">{it.quantity} {it.unit || "PCS"}</td>
+              <td className="py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : formatSupplierMoney(it.unitPrice, data.currency)}</td>
+              <td className="py-3 pr-2 text-right text-[#86868b]">{mixedPartQty ? "" : `${it.quantity} ${it.unit || "PCS"}`}</td>
               <td className="py-3 pl-2 text-right font-medium">{formatSupplierMoney(calcSupplierItemTotal(it), data.currency)}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 

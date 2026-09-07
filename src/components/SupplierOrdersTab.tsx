@@ -559,7 +559,7 @@ function PurchaseInfoEditor({
           <input
             value={spec}
             onChange={(e) => setSpec(e.target.value)}
-            placeholder="사양 (재질·캐비티 등)"
+            placeholder="사양 (선택 — 재질·캐비티 등)"
             className="min-w-[9rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
           />
           <input
@@ -574,7 +574,7 @@ function PurchaseInfoEditor({
             value={clientName}
             onChange={(e) => setClientName(e.target.value)}
             list="client-name-options"
-            placeholder="고객명 (발주서에 표기)"
+            placeholder="고객명 (선택 — 발주서에 표기)"
             className="min-w-[9rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
           />
         </div>
@@ -1138,7 +1138,7 @@ function SupplierOrderComposer({
                 <input
                   value={it.spec ?? ""}
                   onChange={(e) => patchItem(it.key, { spec: e.target.value })}
-                  placeholder="사양 (재질·캐비티·치수 등)"
+                  placeholder="사양 (선택 — 재질·캐비티·치수 등)"
                   className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                 />
                 {/* 고객 제품에서 담으면 자동으로 채워지고, 매입 전용·직접 입력 품목은 여기서
@@ -1146,7 +1146,7 @@ function SupplierOrderComposer({
                 <input
                   value={it.clientName ?? ""}
                   onChange={(e) => patchItem(it.key, { clientName: e.target.value })}
-                  placeholder="고객명 (발주서에 표기)"
+                  placeholder="고객명 (선택 — 발주서에 표기)"
                   className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                 />
               </div>
@@ -1681,7 +1681,11 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
              바깥 컨테이너의 min-h-screen(=100vh)도 인쇄에서는 A4 한 장을 통째로 차지해 같은
              문제를 만들므로 함께 없앤다. */
           #supplier-order-print-root { min-height: 0 !important; }
-          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; min-height: 0 !important; }
+          /* min-height를 그대로 두면 안 되지만(위 설명), 아예 0으로만 두면 이번엔 문서가 내용
+             높이만큼만 차지해서 하단 직인·푸터가 총계 바로 밑에 붙어버린다 — mt-auto가 밀어낼
+             여백 자체가 없어지기 때문이다. A4 한 장보다 1mm 낮은 확정 높이를 주면, 경계
+             반올림으로 다음 장이 생기지 않으면서도 푸터는 페이지 맨 아래에 남는다. */
+          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; min-height: 0 !important; height: 296mm !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }
           /* 헤더 높이만큼 준 인라인 padding-top은 인쇄 시 필요 없다(헤더 자체가 안 보인다) —

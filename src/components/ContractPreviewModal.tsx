@@ -39,6 +39,26 @@ export default function ContractPreviewModal({
     setStandalone(isInAppBrowser() || (isIosDevice() && isStandaloneMode()));
   }, []);
 
+  // 인쇄/PDF 저장 대화상자가 제안하는 파일 이름은 document.title을 그대로 따른다 — 그냥 두면
+  // 사이트 기본 제목("HANDYWORKS _ 제조 파트너와 진짜로 연결되는 방법")이 파일명으로 나와서
+  // 저장해두고도 어느 거래처의 무슨 계약서인지 알 수 없다. 업체명_제목_품목 순으로 바꿔둔다.
+  // 발주서·견적서는 인쇄 전용 라우트라 복원이 필요 없지만 이건 관리자 화면 위에 겹쳐 뜨는
+  // 모달이라, 닫은 뒤에도 제목이 남지 않도록 원래 값으로 되돌린다.
+  useEffect(() => {
+    const previous = document.title;
+    const parts = [data.companyName, data.title, data.productName].filter(Boolean);
+    document.title = parts
+      .join("_")
+      // 저장 대화상자가 경로 구분자 등으로 해석하는 문자는 빼준다(품목명에 "1 X 1 X 2"처럼
+      // 자유 텍스트가 들어오므로 실제로 걸릴 수 있다).
+      .replace(/[\\/:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return () => {
+      document.title = previous;
+    };
+  }, [data.companyName, data.title, data.productName]);
+
   // position:sticky는 (app) 레이아웃의 <main>이 위쪽에 자체 여백을 갖고 있어서 스크롤 중에
   // "완전히 뷰포트 상단에 붙어있는" 상태를 보장하지 못했다(스크롤하면 그 여백만큼 본문이
   // 헤더 바 위로 비쳐 보였다) — 대신 앱 자체 상단바(z-20)와 똑같이 position:fixed로 뷰포트에

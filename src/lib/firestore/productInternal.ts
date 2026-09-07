@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ClientProductInternal, PurchaseType, ShippingTerm } from "@/lib/types";
+import { ClientProductInternal, PurchaseType, ShippingTerm, SupplierCostItem, SupplierCurrency } from "@/lib/types";
 
 const colRef = collection(db, "clientProductInternal");
 
@@ -12,6 +12,11 @@ function fromDoc(d: any): ClientProductInternal {
     purchaseType: data.purchaseType,
     shippingTerm: data.shippingTerm,
     customsNote: data.customsNote,
+    supplierName: data.supplierName || undefined,
+    purchasePrice: typeof data.purchasePrice === "number" ? data.purchasePrice : undefined,
+    purchaseCurrency: data.purchaseCurrency || undefined,
+    nameEn: data.nameEn || undefined,
+    costItems: Array.isArray(data.costItems) ? data.costItems : undefined,
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
 }
@@ -26,18 +31,44 @@ export function listenClientProductInternals(clientId: string, cb: (map: Record<
   });
 }
 
+// 구매 카탈로그(업체별 매입 단가 목록)용 — 클라이언트를 가리지 않고 전부 읽는다. 이 컬렉션의
+// list 규칙은 isAdmin() 하나뿐이라 쿼리에 제약이 없어도 통과한다(제약을 요구하는 규칙이면
+// where 절 없는 쿼리는 통째로 거부된다 — tasks에서 실제로 겪었던 함정이다).
+export function listenAllClientProductInternals(cb: (map: Record<string, ClientProductInternal>) => void) {
+  return onSnapshot(colRef, (snap) => {
+    const map: Record<string, ClientProductInternal> = {};
+    snap.docs.forEach((d) => { map[d.id] = fromDoc(d); });
+    cb(map);
+  });
+}
+
+// 통관 정보 화면과 매입 정보 화면이 같은 문서의 서로 다른 필드를 따로 저장하므로, 넘어온 키만
+// 골라 merge로 쓴다 — 예전처럼 문서를 통째로 덮어쓰면 통관 메모만 고쳐도 매입 단가·부대비용이
+// 조용히 지워진다.
 export async function setClientProductInternal(
   productId: string,
   clientId: string,
-  input: { purchaseType?: PurchaseType; shippingTerm?: ShippingTerm; customsNote?: string }
+  input: {
+    purchaseType?: PurchaseType;
+    shippingTerm?: ShippingTerm;
+    customsNote?: string;
+    supplierName?: string;
+    purchasePrice?: number | null;
+    purchaseCurrency?: SupplierCurrency;
+    nameEn?: string;
+    costItems?: SupplierCostItem[];
+  }
 ) {
-  return setDoc(doc(db, "clientProductInternal", productId), {
-    clientId,
-    purchaseType: input.purchaseType ?? null,
-    shippingTerm: input.shippingTerm ?? null,
-    customsNote: input.customsNote ?? "",
-    updatedAt: serverTimestamp(),
-  });
+  const payload: Record<string, unknown> = { clientId, updatedAt: serverTimestamp() };
+  if ("purchaseType" in input) payload.purchaseType = input.purchaseType ?? null;
+  if ("shippingTerm" in input) payload.shippingTerm = input.shippingTerm ?? null;
+  if ("customsNote" in input) payload.customsNote = input.customsNote ?? "";
+  if ("supplierName" in input) payload.supplierName = input.supplierName ?? "";
+  if ("purchasePrice" in input) payload.purchasePrice = typeof input.purchasePrice === "number" ? input.purchasePrice : null;
+  if ("purchaseCurrency" in input) payload.purchaseCurrency = input.purchaseCurrency ?? null;
+  if ("nameEn" in input) payload.nameEn = input.nameEn ?? "";
+  if ("costItems" in input) payload.costItems = input.costItems ?? [];
+  return setDoc(doc(db, "clientProductInternal", productId), payload, { merge: true });
 }
 
 export async function deleteClientProductInternal(productId: string) {

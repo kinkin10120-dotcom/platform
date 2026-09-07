@@ -40,6 +40,15 @@ export function listenClientProducts(clientId: string, cb: (products: ClientProd
   });
 }
 
+// 구매 카탈로그용 — 모든 클라이언트의 제품을 한 번에 읽는다. clientProducts의 list 규칙은
+// "isAdmin() || belongsToClient(...)"라 관리자면 앞쪽에서 정적으로 참이 되어, 제약 없는 쿼리도
+// 통과한다(관리자가 아닌 계정은 이 함수를 쓰면 안 된다 — 뒤쪽 분기는 where 제약을 요구한다).
+export function listenAllClientProducts(cb: (products: ClientProduct[]) => void) {
+  return onSnapshot(colRef, (snap) => {
+    cb(snap.docs.map(fromDoc).sort((a, b) => a.name.localeCompare(b.name, "ko")));
+  });
+}
+
 export async function createClientProduct(input: {
   clientId: string;
   name: string;

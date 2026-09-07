@@ -348,12 +348,31 @@ export const SHIPPING_TERM_LABEL: Record<ShippingTerm, string> = {
   CIF: "CIF (운임보험료포함인도)",
 };
 
+// 제품 하나에 딸려오는 부대비용(조립비·포장비·도금비 등). 제품에는 "보통 이런 비용이 붙는다"는
+// 기본 목록으로 저장해두고, 실제 발주(로트)마다 그중 이번에 넣을 것만 골라 담는다 — 로트에 따라
+// 조립을 우리가 하기도 하고 공장이 하기도 해서, 매번 같은 항목이 붙지는 않기 때문이다.
+export interface SupplierCostItem {
+  name: string;
+  amount: number;
+}
+
 export interface ClientProductInternal {
   id: string; // ClientProduct.id 와 동일
   clientId: string;
   purchaseType?: PurchaseType; // 단가 통화(currency)와 짝을 이룸: 해외결제 → USD, 국내결제 → KRW
   shippingTerm?: ShippingTerm; // 해외결제 제품의 인코텀즈 선적조건
   customsNote?: string; // 수입통관 메모: HS코드, 관세율, 통관 수수료 등 자유 기재
+  // 어느 공장에서 사오는지 + 그 매입 단가. 구매발주(SupplierOrder)를 만들 때 이 값이 그대로
+  // 발주 품목으로 들어가고, 구매 카탈로그도 이 이름으로 업체별 묶음을 만든다. 공급사를 별도
+  // 컬렉션으로 두지 않고 여기 문자열로 둔 이유는, 거래처가 사실상 소수라 관리 화면을 하나 더
+  // 만드는 비용이 이득보다 크기 때문이다(입력은 기존에 쓴 이름 자동완성으로 받는다).
+  supplierName?: string;
+  purchasePrice?: number;
+  purchaseCurrency?: SupplierCurrency;
+  // 이 제품에 통상 붙는 부대비용 기본 목록 — 발주 담을 때 체크박스로 뜬다.
+  costItems?: SupplierCostItem[];
+  // 발주서에 찍힐 영문/중문 품명 — 공장은 한글 품명을 못 읽는다. 비워두면 한글 품명이 그대로 간다.
+  nameEn?: string;
   updatedAt: number;
 }
 
@@ -515,6 +534,85 @@ export interface ContractTemplate {
   id: string;
   name: string;
   bodyHtml: string;
+  createdAt: number;
+  updatedAt: number;
+  createdBy: string;
+}
+
+// ---- 구매발주 (핸디핸드 → 해외 공급사, 관리자 전용) ----
+//
+// 위쪽 PurchaseOrder와 이름은 비슷하지만 방향이 정반대다. PurchaseOrder는 "고객 → 핸디핸드"로
+// 들어오는 발주(매출)라 clientId·받을 돈(payment.installments)·고객 서명을 갖고 있고, 이쪽은
+// "핸디핸드 → 공장"으로 나가는 발주(매입/원가)다. 한 타입에 합치면 매출과 매입이 섞여서
+// 프로젝트 수익성을 볼 수 없게 되므로 처음부터 분리한다.
+//
+// 여기에는 clientId를 절대 두지 않는다. 필드가 없으면 firestore.rules에서 "고객은 자기 것만"
+// 식으로 규칙을 열 근거 자체가 생기지 않아, 원가가 고객에게 노출될 경로가 구조적으로 막힌다.
+
+// 무역 대금은 보통 USD, 중국 공장 직거래는 CNY로 결제한다. 매출 쪽 Currency(KRW|USD)를
+// 넓히면 calcOrderTotals·formatMoney를 쓰는 견적서·청구서·발주서가 전부 영향을 받으므로,
+// 매입 전용 통화를 따로 둔다.
+export type SupplierCurrency = "USD" | "CNY" | "KRW";
+
+export interface SupplierOrderItem {
+  name: string; // 내부용 한글 품명 (목록·검색에 쓰인다)
+  nameEn?: string; // 발주서에 실제로 찍히는 영문/중문 품명
+  spec?: string; // 재질·캐비티·치수 등 사양
+  unitPrice: number;
+  quantity: number;
+  unit?: string; // SET / PCS / EA
+  // 이번 로트에 실제로 포함시킨 부대비용만 담긴다(제품의 기본 목록에서 골라 담거나 즉석에서
+  // 추가한 것). 제품 쪽 기본 목록을 참조만 하지 않고 값을 복사해 넣는 이유는, 나중에 제품의
+  // 기본 단가가 바뀌어도 이미 나간 발주서 금액이 따라 변하면 안 되기 때문이다.
+  costs?: SupplierCostItem[];
+  // 어느 제품에서 담았는지 — 구매 카탈로그와 이어보기 위한 참조일 뿐, 금액 계산에는 안 쓴다.
+  sourceProductId?: string;
+}
+
+export type SupplierOrderStatus = "draft" | "issued" | "confirmed" | "closed";
+
+export const SUPPLIER_ORDER_STATUS_LABEL: Record<SupplierOrderStatus, string> = {
+  draft: "작성중",
+  issued: "발행됨",
+  confirmed: "공장 확인",
+  closed: "종료",
+};
+
+export interface SupplierOrder {
+  id: string;
+  soNumber: string;
+  // 발행 시점의 공급사명을 그대로 박아둔다 — 상수(SUPPLIER)가 나중에 바뀌어도 과거 발주서는
+  // 당시 상호 그대로 남아야 한다.
+  supplierName: string;
+  items: SupplierOrderItem[];
+  currency: SupplierCurrency;
+  totalAmount: number;
+  // 발주 시점 환율(외화 1단위 = N원). 나중에 환율이 움직여도 이 건의 원가가 흔들리지 않도록
+  // 그때 값을 박아둔다.
+  exchangeRate?: number;
+  incoterms?: string; // EXW / FOB / DDP
+  portOfLoading?: string;
+  paymentTerms?: string;
+  // 공장은 납기를 "계약일"이 아니라 "선금 입금일로부터 N일"로 센다.
+  leadTimeDays?: number;
+  packingNote?: string;
+  memo?: string;
+  linkedProjectId?: string;
+  linkedProjectName?: string;
+  // 같은 제품을 여러 차례 나눠 발주할 때 공장과 맞추는 로트 번호(자유 텍스트).
+  lotNo?: string;
+  // "이 고객 발주가 들어와서 이 구매발주를 냈다"를 잇는 참조. 반드시 이쪽(매입 문서)에만 둔다 —
+  // 반대로 purchaseOrders에 "이 발주로 낸 구매발주" 필드를 달면 그 컬렉션은 고객도 읽을 수 있어
+  // 원가 문서의 존재와 번호가 그대로 새어나간다. supplierOrders는 관리자 전용이라 여기서
+  // 거꾸로 걸어두면 관리자 화면에서만 조회된다.
+  linkedPurchaseOrderId?: string;
+  linkedPurchaseOrderNo?: string;
+  status: SupplierOrderStatus;
+  issuedAt?: number;
+  // 공장이 회신한 도장(公章) 찍힌 스캔본 — 이게 올라오면 "공장 확인"으로 본다.
+  confirmationFileUrl?: string;
+  confirmationFileName?: string;
+  confirmedAt?: number;
   createdAt: number;
   updatedAt: number;
   createdBy: string;

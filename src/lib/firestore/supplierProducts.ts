@@ -23,6 +23,7 @@ function fromDoc(d: any): SupplierProduct {
     id: d.id,
     supplierName: data.supplierName ?? "",
     name: data.name ?? "",
+    clientName: data.clientName || undefined,
     nameEn: data.nameEn || undefined,
     spec: data.spec || undefined,
     imageUrl: data.imageUrl || undefined,
@@ -49,6 +50,7 @@ export async function createSupplierProduct(input: SupplierProductInput) {
   await setDoc(ref, {
     supplierName: input.supplierName,
     name: input.name,
+    clientName: input.clientName ?? "",
     nameEn: input.nameEn ?? "",
     spec: input.spec ?? "",
     purchasePrice: input.purchasePrice ?? null,

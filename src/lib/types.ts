@@ -598,6 +598,10 @@ export interface SupplierProduct {
   id: string;
   supplierName: string;
   name: string;
+  // 이 품목이 어느 고객 건인지 — 발주서에 표기된다. 고객 제품과 달리 clientProducts에 매여
+  // 있지 않아 고객을 알 수 없으므로 여기에 직접 적어둔다(이름만 쓰고 clientId는 두지 않는다 —
+  // 이 컬렉션에 clientId가 생기면 고객에게 규칙을 열어줄 근거가 만들어진다).
+  clientName?: string;
   nameEn?: string;
   spec?: string;
   imageUrl?: string;

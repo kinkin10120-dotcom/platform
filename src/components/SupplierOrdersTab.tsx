@@ -157,7 +157,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         unit: sp.unit,
         parts: sp.parts,
         costItems: sp.costItems,
-        subtitle: "매입 전용",
+        clientName: sp.clientName,
+        subtitle: sp.clientName ? `매입 전용 · ${sp.clientName}` : "매입 전용",
       });
     }
     return list;
@@ -171,6 +172,11 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "ko"));
   }, [entries]);
+
+  const clientNameOptions = useMemo(
+    () => Array.from(new Set([...clients.map((c) => c.name), ...supplierProducts.map((p) => p.clientName).filter((n): n is string => !!n)])).sort((a, b) => a.localeCompare(b, "ko")),
+    [clients, supplierProducts]
+  );
 
   const supplierNames = useMemo(
     () => Array.from(new Set(entries.map((e) => e.supplierName).filter((n) => n !== NO_SUPPLIER))).sort((a, b) => a.localeCompare(b, "ko")),
@@ -266,6 +272,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             <PurchaseInfoEditor
               entry={null}
               supplierNames={supplierNames}
+              clientNameOptions={clientNameOptions}
               onDone={() => setCreatingNew(false)}
             />
           </div>
@@ -286,6 +293,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                 clientId: products.find((p) => p.id === editingId)!.clientId,
               }}
               supplierNames={supplierNames}
+              clientNameOptions={clientNameOptions}
               onDone={() => setEditingId(null)}
             />
           </div>
@@ -344,7 +352,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                   </div>
                   {editingId === e.id && (
                     <div className="mt-3 border-t border-[#f0f0f0] pt-3">
-                      <PurchaseInfoEditor entry={e} supplierNames={supplierNames} onDone={() => setEditingId(null)} />
+                      <PurchaseInfoEditor entry={e} supplierNames={supplierNames} clientNameOptions={clientNameOptions} onDone={() => setEditingId(null)} />
                     </div>
                   )}
                 </div>
@@ -400,11 +408,13 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
 function PurchaseInfoEditor({
   entry,
   supplierNames,
+  clientNameOptions,
   onDone,
 }: {
   // null이면 "매입 전용 품목 새로 만들기" — 고객 제품과 무관하게 supplierProducts에 저장한다.
   entry: CatalogEntry | null;
   supplierNames: string[];
+  clientNameOptions: string[];
   onDone: () => void;
 }) {
   const isNew = entry === null;
@@ -415,6 +425,7 @@ function PurchaseInfoEditor({
   const [nameEn, setNameEn] = useState(entry?.nameEn ?? "");
   const [spec, setSpec] = useState(entry?.spec ?? "");
   const [unit, setUnit] = useState(entry?.unit ?? "");
+  const [clientName, setClientName] = useState(entry?.clientName ?? "");
   const [costItems, setCostItems] = useState<SupplierCostItem[]>(entry?.costItems ?? []);
   const [parts, setParts] = useState<SupplierPartItem[]>(entry?.parts ?? []);
   const [imageUrl, setImageUrl] = useState(entry?.imageUrl);
@@ -458,6 +469,7 @@ function PurchaseInfoEditor({
         const ref = await createSupplierProduct({
           supplierName: supplierName.trim(),
           name: name.trim(),
+          clientName: clientName.trim() || undefined,
           nameEn: nameEn.trim() || undefined,
           spec: spec.trim() || undefined,
           purchasePrice: effectivePrice ?? undefined,
@@ -480,6 +492,7 @@ function PurchaseInfoEditor({
         await updateSupplierProduct(entry!.id, {
           supplierName: supplierName.trim(),
           name: name.trim(),
+          clientName: clientName.trim() || undefined,
           nameEn: nameEn.trim() || undefined,
           spec: spec.trim() || undefined,
           purchasePrice: effectivePrice ?? undefined,
@@ -509,6 +522,11 @@ function PurchaseInfoEditor({
           <option key={n} value={n} />
         ))}
       </datalist>
+      <datalist id="client-name-options">
+        {clientNameOptions.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
 
       {editableIdentity && (
         <div className="flex flex-wrap gap-2">
@@ -529,6 +547,15 @@ function PurchaseInfoEditor({
             onChange={(e) => setUnit(e.target.value)}
             placeholder="단위(SET)"
             className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+          {/* 고객 제품은 어느 고객 건인지 자동으로 알지만, 매입 전용 품목은 알 길이 없어서
+              여기서 적어둔다 — 발주에 담을 때 이 값이 그대로 따라가 발주서에 찍힌다. */}
+          <input
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            list="client-name-options"
+            placeholder="고객명 (발주서에 표기)"
+            className="min-w-[9rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
           />
         </div>
       )}

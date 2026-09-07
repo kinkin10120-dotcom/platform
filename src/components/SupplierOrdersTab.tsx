@@ -457,12 +457,22 @@ function PurchaseInfoEditor({
   const hasParts = parts.length > 0;
   const effectivePrice = hasParts ? partsTotal : purchasePrice.trim() ? Number(purchasePrice) : null;
 
-  const cleanParts = parts
+  // 여기서도 undefined를 넣으면 Firestore가 저장을 거부한다(위 finalItems와 같은 이유) —
+  // 영문명을 비워두면 그 키를 아예 빼서 보낸다.
+  const cleanParts: SupplierPartItem[] = parts
     .filter((p) => p.name.trim())
-    .map((p) => ({ name: p.name.trim(), nameEn: p.nameEn?.trim() || undefined, unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 }));
-  const cleanCosts = costItems
+    .map((p) => {
+      const part: SupplierPartItem = { name: p.name.trim(), unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 };
+      if (p.nameEn?.trim()) part.nameEn = p.nameEn.trim();
+      return part;
+    });
+  const cleanCosts: SupplierCostItem[] = costItems
     .filter((c) => c.name.trim())
-    .map((c) => ({ name: c.name.trim(), nameEn: c.nameEn?.trim() || undefined, amount: Number(c.amount) || 0, quantity: c.quantity ?? 1 }));
+    .map((c) => {
+      const cost: SupplierCostItem = { name: c.name.trim(), amount: Number(c.amount) || 0, quantity: c.quantity ?? 1 };
+      if (c.nameEn?.trim()) cost.nameEn = c.nameEn.trim();
+      return cost;
+    });
 
   async function handleImageChange(file: File | null) {
     if (!file) return;
@@ -871,18 +881,37 @@ function SupplierOrderComposer({
   }, [currency, fetchRate, editing]);
 
   // 저장할 때 넘기는 최종 품목 — 체크된 부대비용만 담는다.
-  const finalItems: SupplierOrderItem[] = items.map((it) => ({
-    name: it.name,
-    nameEn: it.nameEn,
-    spec: it.spec,
-    unitPrice: it.unitPrice,
-    quantity: it.quantity,
-    unit: it.unit,
-    sourceProductId: it.sourceProductId,
-    parts: it.parts,
-    imageUrl: it.imageUrl,
-    costs: it.costOptions.filter((c) => c.checked).map((c) => c.cost),
-  }));
+  // Firestore는 undefined를 값으로 받지 않고 예외를 던진다 — 배열 안에 든 객체도 마찬가지다.
+  // 그래서 사양처럼 선택 항목을 비워두면(spec: undefined) 저장이 통째로 실패했다. 값이 없는
+  // 키는 아예 빼서 보낸다.
+  const finalItems: SupplierOrderItem[] = items.map((it) => {
+    const item: SupplierOrderItem = {
+      name: it.name,
+      unitPrice: it.unitPrice,
+      quantity: it.quantity,
+      costs: it.costOptions
+        .filter((c) => c.checked)
+        .map((c) => {
+          const cost: SupplierCostItem = { name: c.cost.name, amount: c.cost.amount, quantity: c.cost.quantity ?? 1 };
+          if (c.cost.nameEn) cost.nameEn = c.cost.nameEn;
+          return cost;
+        }),
+    };
+    if (it.nameEn) item.nameEn = it.nameEn;
+    if (it.spec) item.spec = it.spec;
+    if (it.unit) item.unit = it.unit;
+    if (it.sourceProductId) item.sourceProductId = it.sourceProductId;
+    if (it.imageUrl) item.imageUrl = it.imageUrl;
+    if (it.clientName) item.clientName = it.clientName;
+    if (it.parts && it.parts.length > 0) {
+      item.parts = it.parts.map((p) => {
+        const part: SupplierPartItem = { name: p.name, unitPrice: p.unitPrice, quantity: p.quantity };
+        if (p.nameEn) part.nameEn = p.nameEn;
+        return part;
+      });
+    }
+    return item;
+  });
 
   const total = calcSupplierOrderTotal(finalItems);
   const linkedPo = clientOrders.find((o) => o.id === linkedPoId);
@@ -1674,18 +1703,13 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           body * { visibility: hidden; }
           #supplier-order-print-root, #supplier-order-print-root * { visibility: visible; }
           #supplier-order-print-root { position: absolute; top: 0; left: 0; width: 210mm; }
-          /* min-height:0이 핵심이다 — .po-page는 화면용으로 min-height 297mm(A4 한 장)를 갖고
-             있는데, 인쇄 시 이걸 그대로 두면 실제 콘텐츠 높이가 반올림 오차 등으로 297mm 경계에
-             정확히 걸려서 인쇄 엔진이 페이지를 한 번 더 쪼갠다(그 몫은 사실상 빈 페이지다).
-             계약서 미리보기에서 똑같은 증상을 겪고 확인한 원인이라, 여기도 같은 방식으로 푼다.
-             바깥 컨테이너의 min-h-screen(=100vh)도 인쇄에서는 A4 한 장을 통째로 차지해 같은
-             문제를 만들므로 함께 없앤다. */
+          /* 바깥 컨테이너의 min-h-screen(=100vh)은 인쇄에서 A4 한 장을 통째로 차지해버려서,
+             문서 뒤에 빈 페이지가 한 장 더 생긴다 — 인쇄에서는 없앤다. 문서 자체의 높이는
+             SupplierOrderDocument가 화면과 공통으로 갖고 있으므로 여기서 손대지 않는다. */
           #supplier-order-print-root { min-height: 0 !important; }
-          /* min-height를 그대로 두면 안 되지만(위 설명), 아예 0으로만 두면 이번엔 문서가 내용
-             높이만큼만 차지해서 하단 직인·푸터가 총계 바로 밑에 붙어버린다 — mt-auto가 밀어낼
-             여백 자체가 없어지기 때문이다. A4 한 장보다 1mm 낮은 확정 높이를 주면, 경계
-             반올림으로 다음 장이 생기지 않으면서도 푸터는 페이지 맨 아래에 남는다. */
-          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; min-height: 0 !important; height: 296mm !important; }
+          /* 높이는 건드리지 않는다 — SupplierOrderDocument가 화면·인쇄 공통으로 296mm를 갖고
+             있어서, 여기서 또 바꾸면 그 순간 미리보기와 인쇄가 어긋난다. */
+          .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }
           /* 헤더 높이만큼 준 인라인 padding-top은 인쇄 시 필요 없다(헤더 자체가 안 보인다) —

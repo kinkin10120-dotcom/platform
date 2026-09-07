@@ -78,7 +78,7 @@ interface DraftItem extends SupplierOrderItem {
   costOptions: { cost: SupplierCostItem; checked: boolean }[];
 }
 
-export default function SupplierOrdersTab() {
+export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boolean) => void }) {
   const { appUser } = useAuth();
   const [products, setProducts] = useState<ClientProduct[]>([]);
   const [internals, setInternals] = useState<Record<string, ClientProductInternal>>({});
@@ -193,12 +193,13 @@ export default function SupplierOrdersTab() {
         onClose={() => setComposing(false)}
         onCreated={() => setComposing(false)}
         createdBy={appUser?.uid ?? ""}
+        onPreview={onPreview}
       />
     );
   }
 
   if (selected) {
-    return <SupplierOrderDetail order={selected} onClose={() => setSelected(null)} />;
+    return <SupplierOrderDetail order={selected} onClose={() => setSelected(null)} onPreview={onPreview} />;
   }
 
   return (
@@ -713,6 +714,7 @@ function SupplierOrderComposer({
   onClose,
   onCreated,
   createdBy,
+  onPreview,
 }: {
   grouped: [string, CatalogEntry[]][];
   clientNameById: Record<string, string>;
@@ -721,6 +723,7 @@ function SupplierOrderComposer({
   onClose: () => void;
   onCreated: () => void;
   createdBy: string;
+  onPreview: (open: boolean) => void;
 }) {
   const [supplierName, setSupplierName] = useState(grouped[0]?.[0] ?? "");
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -767,6 +770,11 @@ function SupplierOrderComposer({
   const linkedPo = clientOrders.find((o) => o.id === linkedPoId);
 
   usePrintFileName([supplierName, "구매발주서", items.map((it) => it.name).filter(Boolean).join(",")], previewOpen);
+  // 미리보기 중에는 위쪽 "발주 관리" 헤더·탭을 감춰서 문서만 꽉 차게 보이게 한다.
+  useEffect(() => {
+    onPreview(previewOpen);
+    return () => onPreview(false);
+  }, [previewOpen, onPreview]);
 
   function addEntry(e: CatalogEntry) {
     setItems((prev) => [
@@ -1186,7 +1194,7 @@ function SupplierOrderComposer({
 
 // ---- 발행된 구매발주 상세 ----
 
-function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose: () => void }) {
+function SupplierOrderDetail({ order, onClose, onPreview }: { order: SupplierOrder; onClose: () => void; onPreview: (open: boolean) => void }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [opening, setOpening] = useState(false);
@@ -1194,6 +1202,10 @@ function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   usePrintFileName([order.supplierName, "구매발주서", order.soNumber], previewOpen);
+  useEffect(() => {
+    onPreview(previewOpen);
+    return () => onPreview(false);
+  }, [previewOpen, onPreview]);
 
   // 저장된 건 경로뿐이라, 열 때마다 관리자 확인을 거쳐 5분짜리 URL을 새로 받아온다.
   async function handleOpenConfirmation() {
@@ -1368,10 +1380,20 @@ function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose
 // 페이지 나눔이 어긋난다는 걸 계약서 쪽에서 이미 겪었다).
 function PrintablePreview({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
   return (
-    <div className="-mx-4 -my-4 bg-[#e5e5e5] py-6 print:m-0 print:bg-white print:py-0">
+    // (app) 레이아웃 <main>의 좌우·상하 패딩을 음수 마진으로 상쇄해서 화면을 꽉 채운다 —
+    // 계약서 미리보기가 쓰는 방식과 같다. position:fixed로 덮는 방식은 인쇄 엔진이 여러
+    // 페이지로 못 나누고 한 장으로 뭉개는 문제가 있어서 쓰지 않는다.
+    <div
+      id="supplier-order-print-root"
+      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] py-10 md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))] print:m-0 print:bg-white print:py-0"
+    >
       <style>{`
         @page { size: 210mm 297mm; margin: 0; }
         @media print {
+          /* 사이드바·상단바 등 나머지 화면은 인쇄에서 빼고 이 문서만 남긴다. */
+          body * { visibility: hidden; }
+          #supplier-order-print-root, #supplier-order-print-root * { visibility: visible; }
+          #supplier-order-print-root { position: absolute; top: 0; left: 0; width: 210mm; }
           .po-page { box-shadow: none !important; margin: 0 !important; width: 100% !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: auto !important; }
@@ -1382,7 +1404,7 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] bg-white text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
               title="닫기"
             >
               <X size={16} />
@@ -1391,9 +1413,9 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           </div>
           <button
             onClick={() => window.print()}
-            className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
+            className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
           >
-            인쇄 / PDF 저장
+            <Printer size={15} /> 인쇄 / PDF 저장
           </button>
         </div>
       </div>

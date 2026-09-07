@@ -69,6 +69,8 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 export default function OrdersPage() {
   const { appUser } = useAuth();
   const [tab, setTab] = useState<"orders" | "catalog" | "supplier">("orders");
+  // 구매발주서 미리보기 중에는 아래 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
+  const [supplierPreviewing, setSupplierPreviewing] = useState(false);
 
   if (appUser?.role !== "admin") {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
@@ -76,7 +78,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className={`flex flex-wrap items-center justify-between gap-3 ${supplierPreviewing ? "hidden" : ""}`}>
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
@@ -108,7 +110,7 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {tab === "orders" ? <OrdersTab /> : tab === "catalog" ? <CatalogTab /> : <SupplierOrdersTab />}
+      {tab === "orders" ? <OrdersTab /> : tab === "catalog" ? <CatalogTab /> : <SupplierOrdersTab onPreview={setSupplierPreviewing} />}
     </div>
   );
 }

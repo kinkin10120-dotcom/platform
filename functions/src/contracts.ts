@@ -356,7 +356,9 @@ const BRACKET_LABEL_TOKENS: Record<string, string> = {
   "담당자연락처": "contactPhone",
   "용역기간시작": "periodStart",
   "용역기간종료": "periodEnd",
-  "용역기간": "periodDays",
+  // "용역기간"은 여기 넣으면 안 된다 — 기본 템플릿의 조 제목이 "제 3 조 (용역기간)"이라,
+  // 괄호 라벨 치환이 그 제목까지 잡아서 "제 3 조 112일"로 바꿔버린다. 조 제목과 겹치는
+  // 라벨은 화이트리스트에 넣지 않는다.
   "계약일자": "contractDate",
   "계약체결일": "contractDate",
   "계약금액": "amount",

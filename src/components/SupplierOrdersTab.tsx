@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw } from "lucide-react";
+import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw, Download } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 import PdfPageScaler from "@/components/PdfPageScaler";
+import { downloadCsv } from "@/lib/csvExport";
 import NumberInput from "@/components/NumberInput";
 import { usePrintFileName } from "@/lib/usePrintFileName";
 import {
@@ -208,6 +209,51 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
     }),
     [products, internals]
   );
+
+  // 고객 발주 쪽 CSV 내보내기와 같은 방식. 다만 행은 발주가 아니라 "품목" 단위로 뽑는다 —
+  // 한 발주에 품목이 셋이면 세 줄이 되어, 엑셀에서 발주처·구분·고객사 어느 기준으로든 묶을 수
+  // 있다. 원화 환산은 발주 시점에 박아둔 환율로 계산하므로, 오늘 환율이 움직여도 과거 발주의
+  // 원가는 그대로다.
+  function handleExportCsv() {
+    const rows: (string | number)[][] = [];
+    for (const o of orders) {
+      for (const it of o.items) {
+        const costTotal = calcCostsTotal(it.costs);
+        const lineTotal = calcSupplierItemTotal(it);
+        rows.push([
+          new Date(o.createdAt).toLocaleDateString("ko-KR"),
+          o.soNumber,
+          o.lotNo ?? "",
+          o.supplierName,
+          SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"],
+          it.clientName ?? "",
+          it.name,
+          it.nameEn ?? "",
+          it.spec ?? "",
+          it.unitPrice,
+          it.quantity,
+          it.unit ?? "",
+          costTotal,
+          lineTotal,
+          o.currency,
+          o.exchangeRate ?? "",
+          o.exchangeRate ? Math.round(lineTotal * o.exchangeRate) : "",
+          SUPPLIER_ORDER_STATUS_LABEL[o.status],
+          o.linkedPurchaseOrderNo ?? "",
+        ]);
+      }
+    }
+    downloadCsv(
+      `구매발주내역_${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        "발주일", "발주번호", "로트번호", "발주처", "구분", "고객사",
+        "품목명", "영문품명", "사양", "단가", "수량", "단위",
+        "부대비용", "금액", "통화", "발주시환율", "원화환산",
+        "상태", "연결 고객발주",
+      ],
+      rows
+    );
+  }
 
   if (composing || editingOrder) {
     return (
@@ -397,6 +443,14 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
 
       {/* 오른쪽 — 발행한 구매발주 목록 */}
       <div className="space-y-2">
+        {orders.length > 0 && (
+          <button
+            onClick={handleExportCsv}
+            className="mb-1 flex w-full items-center justify-center gap-1.5 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+          >
+            <Download size={12} /> 전체 구매발주 내역 CSV 다운로드
+          </button>
+        )}
         {orders.length === 0 && (
           <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
             발행한 구매발주가 없습니다.

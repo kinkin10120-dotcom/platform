@@ -20,7 +20,15 @@ export interface SupplierOrderDocumentData {
   createdAt: number;
 }
 
-const OUR_COMPANY = {
+// 외화(USD/CNY) 결제는 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의로 발행한다 — 견적서·청구서와
+// 같은 기준이다. 해외송금 계좌가 홍콩 법인 앞으로 되어 있어 원화 문서와 발행 주체를 분리한다.
+const HK_COMPANY = {
+  nameEn: "AIM TECHNOLOGY (HK) COMPANY",
+  address: "11/F, CNT House, 120 Johnston Rd., Wanchai, Hong Kong",
+  ceo: "CHOI HYUNGJUN",
+};
+
+const KR_COMPANY = {
   nameEn: "HANDYHAND CO., LTD.",
   nameKo: "주식회사 핸디핸드",
   address: "F804, Goyang Arc-Biz, 63 Samwon-ro, Deogyang-gu, Goyang-si, Gyeonggi-do, Korea",
@@ -31,6 +39,8 @@ const OUR_COMPANY = {
 export default function SupplierOrderDocument({ data }: { data: SupplierOrderDocumentData }) {
   const issuedDate = new Date(data.createdAt).toLocaleDateString("en-CA"); // YYYY-MM-DD
   const total = calcSupplierOrderTotal(data.items);
+  const isHk = data.currency !== "KRW";
+  const buyer = isHk ? HK_COMPANY : KR_COMPANY;
 
   return (
     <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -40,8 +50,14 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <p className="mt-1 text-xs tracking-wide text-[#86868b]">PURCHASE ORDER</p>
         </div>
         <div className="text-right text-sm">
-          <p className="font-semibold">{OUR_COMPANY.nameEn}</p>
-          <p className="mt-0.5 max-w-[80mm] text-xs leading-relaxed text-[#86868b]">{OUR_COMPANY.address}</p>
+          {isHk ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/logo-aim-technology-hk.png" alt={HK_COMPANY.nameEn} className="ml-auto h-[30px] object-contain" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+          )}
+          <p className="mt-1.5 max-w-[80mm] text-xs leading-relaxed text-[#86868b]">{buyer.address}</p>
         </div>
       </div>
 
@@ -53,9 +69,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <Row label="日期 / Date" value={issuedDate} />
         </div>
         <div className="space-y-1.5">
-          <Row label="买方 / Buyer" value={OUR_COMPANY.nameEn} />
-          <Row label="联系人 / Contact" value={OUR_COMPANY.ceo} />
-          <Row label="税号 / Biz No." value={OUR_COMPANY.bizNo} />
+          <Row label="买方 / Buyer" value={buyer.nameEn} />
+          <Row label="联系人 / Contact" value={buyer.ceo} />
+          {!isHk && <Row label="税号 / Biz No." value={KR_COMPANY.bizNo} />}
           <Row label="币种 / Currency" value={data.currency} />
         </div>
       </div>
@@ -140,24 +156,35 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
         </div>
       )}
 
-      <div className="mt-auto pt-10 text-xs text-[#86868b]">
-        <div className="grid grid-cols-2 gap-10">
-          <div className="text-center">
-            <p className="mb-1.5 text-xs font-semibold text-[#86868b]">买方 / Buyer</p>
-            <div className="h-20" />
-            <p className="border-t border-[#d1d1d6] pt-1.5">{OUR_COMPANY.nameEn}</p>
-          </div>
-          {/* 공장은 여기에 공장 도장(公章)을 찍어 스캔본으로 회신한다. */}
-          <div className="text-center">
-            <p className="mb-1.5 text-xs font-semibold text-[#86868b]">供应商盖章 / Supplier Stamp</p>
-            <div className="h-20" />
-            <p className="border-t border-[#d1d1d6] pt-1.5">{data.supplierName || "-"}</p>
+      <div className="mt-auto text-xs text-[#86868b]">
+        {/* 발행 주체 직인 — 견적서·청구서와 같은 위치·같은 크기다. 공급사(공장) 직인란은 두지
+            않는다: 도장은 공장이 회신본에 자기 양식대로 찍어 보내오므로 우리 문서에 빈 칸을
+            만들어 둘 이유가 없다. */}
+        <div className="flex justify-end">
+          <div className="w-40 shrink-0 text-center">
+            {isHk ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/stamp-aim-technology-hk.png" alt={`${HK_COMPANY.nameEn} 직인`} className="mx-auto h-[65px] object-contain" />
+                <p className="mt-1.5 text-xs leading-relaxed text-[#86868b]">{HK_COMPANY.nameEn}</p>
+              </>
+            ) : (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
+                <p className="mt-1 text-xs leading-relaxed text-[#86868b]">
+                  주식회사 핸디핸드
+                  <br />
+                  대표 최형준
+                </p>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="mt-6 flex items-end justify-between border-t border-[#e5e5e5] pt-3 text-[10px] text-[#d1d1d6]">
-          <p>Please sign, stamp and return this purchase order.</p>
-          <p>{OUR_COMPANY.nameKo}</p>
+        <div className="mt-3 flex items-end justify-between border-t border-[#e5e5e5] pt-3">
+          <p>본 발주서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
+          <p>{isHk ? HK_COMPANY.nameEn : "HANDYHAND"}</p>
         </div>
       </div>
     </div>

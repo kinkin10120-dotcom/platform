@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, X, Printer, Upload, Check, FileText, Pencil } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenAllClientProducts } from "@/lib/firestore/products";
+import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
@@ -31,6 +31,7 @@ import {
   SupplierCurrency,
   SupplierOrder,
   SupplierOrderItem,
+  SupplierPartItem,
 } from "@/lib/types";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -205,7 +206,11 @@ export default function SupplierOrdersTab() {
               return (
                 <div key={product.id} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    {product.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={product.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-[#1d1d1f]">{product.name}</p>
                       <p className="mt-0.5 truncate text-xs text-[#86868b]">
                         {clientNameById[product.clientId] ?? "-"}
@@ -309,17 +314,38 @@ function PurchaseInfoEditor({
   const [purchaseCurrency, setPurchaseCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
   const [nameEn, setNameEn] = useState(internal?.nameEn ?? "");
   const [costItems, setCostItems] = useState<SupplierCostItem[]>(internal?.costItems ?? []);
+  const [parts, setParts] = useState<SupplierPartItem[]>(internal?.parts ?? []);
+  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // 부품이 하나라도 있으면 완제품 단가는 부품 합계로 고정한다 — 두 값을 따로 관리하면
+  // 언젠가 반드시 어긋나고, 어느 쪽이 진짜인지 알 수 없게 된다.
+  const partsTotal = parts.reduce((sum, p) => sum + (p.unitPrice || 0) * (p.quantity || 0), 0);
+  const hasParts = parts.length > 0;
+  const effectivePrice = hasParts ? partsTotal : purchasePrice.trim() ? Number(purchasePrice) : null;
+
+  async function handleImageChange(file: File | null) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await uploadClientProductImage(product.id, file);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
     try {
       await setClientProductInternal(product.id, product.clientId, {
         supplierName: supplierName.trim(),
-        purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : null,
+        purchasePrice: effectivePrice,
         purchaseCurrency,
         nameEn: nameEn.trim(),
         costItems: costItems.filter((c) => c.name.trim()).map((c) => ({ name: c.name.trim(), amount: Number(c.amount) || 0 })),
+        parts: parts
+          .filter((p) => p.name.trim())
+          .map((p) => ({ name: p.name.trim(), nameEn: p.nameEn?.trim() || undefined, unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 })),
       });
       onDone();
     } finally {
@@ -353,19 +379,97 @@ function PurchaseInfoEditor({
           <option value="CNY">CNY ¥</option>
           <option value="KRW">KRW 원</option>
         </select>
-        <input
-          value={purchasePrice}
-          onChange={(e) => setPurchasePrice(e.target.value.replace(/[^0-9.]/g, ""))}
-          inputMode="decimal"
-          placeholder="매입 단가"
-          className="w-28 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
-        />
+        {hasParts ? (
+          <div className="flex w-40 items-center gap-1.5 rounded-xl bg-[#f5f5f7] px-3 py-1.5 text-xs text-[#86868b]">
+            <span className="shrink-0">단가</span>
+            <span className="truncate font-semibold text-[#1d1d1f]">{formatSupplierMoney(partsTotal, purchaseCurrency)}</span>
+            <span className="shrink-0 text-[10px] text-[#d1d1d6]">부품 합계</span>
+          </div>
+        ) : (
+          <input
+            value={purchasePrice}
+            onChange={(e) => setPurchasePrice(e.target.value.replace(/[^0-9.]/g, ""))}
+            inputMode="decimal"
+            placeholder="매입 단가"
+            className="w-28 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+          />
+        )}
         <input
           value={nameEn}
           onChange={(e) => setNameEn(e.target.value)}
           placeholder="영문/중문 품명 (발주서용)"
           className="min-w-[10rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
         />
+      </div>
+
+      {/* 사진 — 고객 제품 카탈로그와 같은 이미지를 쓴다(같은 제품이므로 따로 관리할 이유가 없다).
+          발주서에도 함께 실려서 공장이 어떤 물건인지 바로 알아본다. */}
+      <label className="flex cursor-pointer items-center gap-3">
+        <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e5e5e5] bg-[#f5f5f7] text-[10px] text-[#d1d1d6]">
+          {product.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            "사진"
+          )}
+        </span>
+        <span className="text-xs text-[#86868b]">{uploading ? "올리는 중..." : "눌러서 사진 등록/변경"}</span>
+        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageChange(e.target.files?.[0] ?? null)} disabled={uploading} />
+      </label>
+
+      {/* 조립품 구성 부품 — 부품별 단가로 공장과 이야기하므로 그 내역을 그대로 들고 있는다. */}
+      <div className="space-y-1.5">
+        <p className="text-xs text-[#86868b]">구성 부품 (조립품이면 부품별 단가를 넣으세요 — 합계가 매입 단가가 됩니다)</p>
+        {parts.map((pt, i) => (
+          <div key={i} className="flex flex-wrap gap-2">
+            <input
+              value={pt.name}
+              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: e.target.value } : it)))}
+              placeholder="부품명"
+              className="min-w-[7rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <input
+              value={pt.nameEn ?? ""}
+              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, nameEn: e.target.value } : it)))}
+              placeholder="영문/중문"
+              className="min-w-[7rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <input
+              value={pt.unitPrice || ""}
+              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : it)))}
+              inputMode="decimal"
+              placeholder="단가"
+              className="w-20 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <input
+              value={pt.quantity || ""}
+              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 } : it)))}
+              inputMode="numeric"
+              placeholder="수량"
+              className="w-16 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <button
+              onClick={() => setParts((prev) => prev.filter((_, idx) => idx !== i))}
+              className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+              title="삭제"
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setParts((prev) => [...prev, { name: "", unitPrice: 0, quantity: 1 }])}
+            className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+          >
+            <Plus size={13} /> 부품 추가
+          </button>
+          {hasParts && (
+            <span className="text-xs text-[#86868b]">
+              부품 합계 <span className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(partsTotal, purchaseCurrency)}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1.5">
@@ -465,6 +569,8 @@ function SupplierOrderComposer({
     quantity: it.quantity,
     unit: it.unit,
     sourceProductId: it.sourceProductId,
+    parts: it.parts,
+    imageUrl: it.imageUrl,
     costs: it.costOptions.filter((c) => c.checked).map((c) => c.cost),
   }));
 
@@ -484,6 +590,10 @@ function SupplierOrderComposer({
         quantity: 1,
         unit: product.unit || "PCS",
         sourceProductId: product.id,
+        // 부품 내역과 사진은 값을 복사해 둔다 — 나중에 제품 쪽이 바뀌어도 이미 나간 발주서는
+        // 그대로여야 한다(부대비용을 복사해 담는 것과 같은 이유).
+        parts: internal.parts?.map((pt) => ({ ...pt })),
+        imageUrl: product.imageUrl,
         costOptions: (internal.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
       },
     ]);
@@ -624,7 +734,11 @@ function SupplierOrderComposer({
         {items.map((it) => (
           <div key={it.key} className="space-y-2 rounded-2xl bg-[#f5f5f7] p-3">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
+              {it.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={it.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
+              )}
+              <div className="min-w-0 flex-1">
                 <input
                   value={it.name}
                   onChange={(e) => patchItem(it.key, { name: e.target.value })}
@@ -678,6 +792,17 @@ function SupplierOrderComposer({
                 {formatSupplierMoney(calcSupplierItemTotal({ ...it, costs: it.costOptions.filter((c) => c.checked).map((c) => c.cost) }), currency)}
               </span>
             </div>
+
+            {(it.parts ?? []).length > 0 && (
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold text-[#86868b]">구성 부품</p>
+                {it.parts!.map((pt, pi) => (
+                  <p key={pi} className="pl-3 text-xs text-[#86868b]">
+                    {pt.name} {formatSupplierMoney(pt.unitPrice, currency)} × {pt.quantity}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/* 로트별 부대비용 — 체크한 것만 이번 발주에 들어간다. */}
             <div className="space-y-1">
@@ -952,6 +1077,11 @@ function SupplierOrderDetail({ order, onClose }: { order: SupplierOrder; onClose
                 <p className="mt-0.5 text-xs text-[#86868b]">
                   {formatSupplierMoney(it.unitPrice, order.currency)} × {it.quantity} {it.unit || "PCS"}
                 </p>
+                {(it.parts ?? []).map((pt, pi) => (
+                  <p key={pi} className="mt-0.5 pl-3 text-xs text-[#86868b]">
+                    · {pt.name} {formatSupplierMoney(pt.unitPrice, order.currency)} × {pt.quantity}
+                  </p>
+                ))}
                 {(it.costs ?? []).map((c, ci) => (
                   <p key={ci} className="mt-0.5 pl-3 text-xs text-[#86868b]">
                     + {c.name} {formatSupplierMoney(c.amount, order.currency)}

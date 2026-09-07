@@ -75,15 +75,30 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
             <tr key={i} className="border-b border-[#e5e5e5] align-top">
               <td className="py-3 pr-2 text-[#86868b]">{i + 1}</td>
               <td className="py-3 pr-2">
-                <p className="font-medium">{it.nameEn || it.name}</p>
-                {it.spec && <p className="mt-0.5 text-xs text-[#86868b]">{it.spec}</p>}
-                {/* 이번 로트에 담은 부대비용은 품목 아래에 들여쓰기로 나열한다 — 공장이 어떤
-                    항목까지 포함된 금액인지 바로 확인할 수 있어야 나중에 말이 안 나온다. */}
-                {(it.costs ?? []).map((c, ci) => (
-                  <p key={ci} className="mt-0.5 pl-3 text-xs text-[#86868b]">
-                    + {c.name} : {formatSupplierMoney(c.amount, data.currency)}
-                  </p>
-                ))}
+                <div className="flex items-start gap-2.5">
+                  {/* 사진이 있으면 함께 싣는다 — 공장이 품명만 보고 헷갈리는 걸 줄인다.
+                      제품 이미지는 공개 읽기가 열린 경로라 인쇄 시에도 그대로 나온다. */}
+                  {it.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded border border-[#e5e5e5] object-cover" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-medium">{it.nameEn || it.name}</p>
+                    {it.spec && <p className="mt-0.5 text-xs text-[#86868b]">{it.spec}</p>}
+                    {/* 조립품은 부품별 단가로 협의하므로 그 내역을 그대로 보여준다. 합계는 이미
+                        오른쪽 단가에 반영되어 있어 따로 더하지 않는다. */}
+                    {(it.parts ?? []).map((pt, pi) => (
+                      <p key={pi} className="mt-0.5 pl-2 text-xs text-[#86868b]">
+                        · {pt.nameEn || pt.name} {formatSupplierMoney(pt.unitPrice, data.currency)} × {pt.quantity}
+                      </p>
+                    ))}
+                    {(it.costs ?? []).map((c, ci) => (
+                      <p key={ci} className="mt-0.5 pl-2 text-xs text-[#86868b]">
+                        + {c.name} : {formatSupplierMoney(c.amount, data.currency)}
+                      </p>
+                    ))}
+                  </div>
+                </div>
               </td>
               <td className="py-3 pr-2 text-right text-[#86868b]">{formatSupplierMoney(it.unitPrice, data.currency)}</td>
               <td className="py-3 pr-2 text-right text-[#86868b]">{it.quantity} {it.unit || "PCS"}</td>

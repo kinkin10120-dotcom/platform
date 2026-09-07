@@ -356,6 +356,17 @@ export interface SupplierCostItem {
   amount: number;
 }
 
+// 조립품은 완제품 하나에 여러 부품이 들어가고, 공장과는 부품별 단가로 이야기한다 — 발주서에도
+// 그 내역이 그대로 보여야 나중에 단가 조정 협의를 할 수 있다. 이 목록의 합계가 곧 완제품
+// 1개의 매입 단가이고(입력할 때 자동으로 채워진다), 금액 계산 자체는 완제품 단가 하나로만
+// 한다 — 부품 합계와 완제품 단가를 각각 더하면 이중 계산이 된다.
+export interface SupplierPartItem {
+  name: string;
+  nameEn?: string;
+  unitPrice: number;
+  quantity: number;
+}
+
 export interface ClientProductInternal {
   id: string; // ClientProduct.id 와 동일
   clientId: string;
@@ -371,6 +382,8 @@ export interface ClientProductInternal {
   purchaseCurrency?: SupplierCurrency;
   // 이 제품에 통상 붙는 부대비용 기본 목록 — 발주 담을 때 체크박스로 뜬다.
   costItems?: SupplierCostItem[];
+  // 조립품의 구성 부품별 단가. 합계가 purchasePrice가 된다.
+  parts?: SupplierPartItem[];
   // 발주서에 찍힐 영문/중문 품명 — 공장은 한글 품명을 못 읽는다. 비워두면 한글 품명이 그대로 간다.
   nameEn?: string;
   updatedAt: number;
@@ -565,6 +578,11 @@ export interface SupplierOrderItem {
   // 추가한 것). 제품 쪽 기본 목록을 참조만 하지 않고 값을 복사해 넣는 이유는, 나중에 제품의
   // 기본 단가가 바뀌어도 이미 나간 발주서 금액이 따라 변하면 안 되기 때문이다.
   costs?: SupplierCostItem[];
+  // 조립품 구성 부품 내역 — 발주서에 부품별 단가를 그대로 보여주기 위한 것이고, 합계는 이미
+  // unitPrice에 반영되어 있으므로 금액 계산에는 쓰지 않는다.
+  parts?: SupplierPartItem[];
+  // 제품 사진 — 공장이 어떤 물건인지 바로 알아보게 발주서에 함께 실린다.
+  imageUrl?: string;
   // 어느 제품에서 담았는지 — 구매 카탈로그와 이어보기 위한 참조일 뿐, 금액 계산에는 안 쓴다.
   sourceProductId?: string;
 }

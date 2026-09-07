@@ -389,6 +389,8 @@ export interface ClientProductInternal {
   costItems?: SupplierCostItem[];
   // 조립품의 구성 부품별 단가. 합계가 purchasePrice가 된다.
   parts?: SupplierPartItem[];
+  // 생산(양산) 발주인지 개발(금형·시제품) 발주인지.
+  orderKind?: SupplierOrderKind;
   // 발주서에 찍힐 영문/중문 품명 — 공장은 한글 품명을 못 읽는다. 비워두면 한글 품명이 그대로 간다.
   nameEn?: string;
   updatedAt: number;
@@ -572,6 +574,21 @@ export interface ContractTemplate {
 // 매입 전용 통화를 따로 둔다.
 export type SupplierCurrency = "USD" | "CNY" | "KRW";
 
+// 같은 공장에 내는 발주라도 성격이 다르다 — 금형·시제품처럼 개발 단계에서 한 번 나가는
+// 발주와, 양산 부품처럼 반복해서 나가는 발주는 원가를 볼 때 섞으면 안 된다.
+export type SupplierOrderKind = "production" | "development";
+
+export const SUPPLIER_ORDER_KIND_LABEL: Record<SupplierOrderKind, string> = {
+  production: "생산",
+  development: "개발",
+};
+
+// 발주서에 찍히는 표기(중문/영문 병기용).
+export const SUPPLIER_ORDER_KIND_CN: Record<SupplierOrderKind, string> = {
+  production: "量产 / Production",
+  development: "开发 / Development",
+};
+
 export interface SupplierOrderItem {
   name: string; // 내부용 한글 품명 (목록·검색에 쓰인다)
   nameEn?: string; // 발주서에 실제로 찍히는 영문/중문 품명
@@ -588,6 +605,7 @@ export interface SupplierOrderItem {
   parts?: SupplierPartItem[];
   // 제품 사진 — 공장이 어떤 물건인지 바로 알아보게 발주서에 함께 실린다.
   imageUrl?: string;
+  orderKind?: SupplierOrderKind;
   // 이 품목이 어느 고객 건인지 — 발주서에 표기해서 라벨·포장·구분에 쓴다. 담는 시점의
   // 이름을 복사해 둔다(고객사명이 나중에 바뀌어도 이미 나간 발주서는 그대로여야 한다).
   clientName?: string;
@@ -603,6 +621,7 @@ export interface SupplierProduct {
   id: string;
   supplierName: string;
   name: string;
+  orderKind?: SupplierOrderKind;
   // 이 품목이 어느 고객 건인지 — 발주서에 표기된다. 고객 제품과 달리 clientProducts에 매여
   // 있지 않아 고객을 알 수 없으므로 여기에 직접 적어둔다(이름만 쓰고 clientId는 두지 않는다 —
   // 이 컬렉션에 clientId가 생기면 고객에게 규칙을 열어줄 근거가 만들어진다).

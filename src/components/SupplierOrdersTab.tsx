@@ -39,6 +39,8 @@ import {
   SupplierCurrency,
   SupplierOrder,
   SupplierOrderItem,
+  SupplierOrderKind,
+  SUPPLIER_ORDER_KIND_LABEL,
   SupplierPartItem,
   SupplierProduct,
 } from "@/lib/types";
@@ -72,6 +74,7 @@ export interface CatalogEntry {
   subtitle: string;
   // 고객 제품일 때의 고객사명 — 발주서에 표기한다(매입 전용 품목은 없다).
   clientName?: string;
+  orderKind?: SupplierOrderKind;
   // kind === "client"일 때만 — 매입 정보를 clientProductInternal에 저장할 때 필요하다.
   clientId?: string;
 }
@@ -151,6 +154,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         costItems: internal.costItems,
         subtitle: clientNameById[p.clientId] ?? "-",
         clientName: clientNameById[p.clientId],
+        orderKind: internal.orderKind,
         clientId: p.clientId,
       });
     }
@@ -170,6 +174,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         parts: sp.parts,
         costItems: sp.costItems,
         clientName: sp.clientName,
+        orderKind: sp.orderKind,
         subtitle: sp.clientName ? `매입 전용 · ${sp.clientName}` : "매입 전용",
       });
     }
@@ -342,7 +347,16 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                       <img src={e.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                            e.orderKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
+                          }`}
+                        >
+                          {SUPPLIER_ORDER_KIND_LABEL[e.orderKind ?? "production"]}
+                        </span>
+                        <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
+                      </div>
                       <p className="mt-0.5 truncate text-xs text-[#86868b]">
                         {e.subtitle}
                         {e.nameEn ? ` · ${e.nameEn}` : ""}
@@ -407,6 +421,12 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             </div>
             {/* 눌러보지 않고도 어느 건인지 알 수 있게 품목명과 고객사를 나란히 둔다. */}
             <p className="mt-0.5 truncate text-sm text-[#1d1d1f]">
+              {(() => {
+                const kinds = Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
+                return kinds.length === 1 ? (
+                  <span className="mr-1 text-[#86868b]">[{SUPPLIER_ORDER_KIND_LABEL[kinds[0]]}]</span>
+                ) : null;
+              })()}
               {o.items.map((it) => it.name).filter(Boolean).join(", ") || "품목 없음"}
               {(() => {
                 const clients = Array.from(new Set(o.items.map((it) => it.clientName).filter(Boolean)));
@@ -455,6 +475,7 @@ function PurchaseInfoEditor({
   const [spec, setSpec] = useState(entry?.spec ?? "");
   const [unit, setUnit] = useState(entry?.unit ?? "");
   const [clientName, setClientName] = useState(entry?.clientName ?? "");
+  const [orderKind, setOrderKind] = useState<SupplierOrderKind>(entry?.orderKind ?? "production");
   const [costItems, setCostItems] = useState<SupplierCostItem[]>(entry?.costItems ?? []);
   const [parts, setParts] = useState<SupplierPartItem[]>(entry?.parts ?? []);
   const [imageUrl, setImageUrl] = useState(entry?.imageUrl);
@@ -511,6 +532,7 @@ function PurchaseInfoEditor({
           supplierName: supplierName.trim(),
           name: name.trim(),
           clientName: clientName.trim() || undefined,
+          orderKind,
           nameEn: nameEn.trim() || undefined,
           spec: spec.trim() || undefined,
           purchasePrice: effectivePrice ?? undefined,
@@ -528,12 +550,14 @@ function PurchaseInfoEditor({
           nameEn: nameEn.trim(),
           costItems: cleanCosts,
           parts: cleanParts,
+          orderKind,
         });
       } else {
         await updateSupplierProduct(entry!.id, {
           supplierName: supplierName.trim(),
           name: name.trim(),
           clientName: clientName.trim() || undefined,
+          orderKind,
           nameEn: nameEn.trim() || undefined,
           spec: spec.trim() || undefined,
           purchasePrice: effectivePrice ?? undefined,
@@ -602,6 +626,16 @@ function PurchaseInfoEditor({
       )}
 
       <div className="flex flex-wrap gap-2">
+        {/* 금형·시제품처럼 개발 단계에서 한 번 나가는 발주와 양산 부품 발주는 원가를 볼 때
+            섞으면 안 되므로 품목에 미리 표시해둔다. */}
+        <select
+          value={orderKind}
+          onChange={(e) => setOrderKind(e.target.value as SupplierOrderKind)}
+          className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+        >
+          <option value="production">생산 발주</option>
+          <option value="development">개발 발주</option>
+        </select>
         <input
           value={supplierName}
           onChange={(e) => setSupplierName(e.target.value)}
@@ -923,6 +957,7 @@ function SupplierOrderComposer({
     if (it.sourceProductId) item.sourceProductId = it.sourceProductId;
     if (it.imageUrl) item.imageUrl = it.imageUrl;
     if (it.clientName) item.clientName = it.clientName;
+    if (it.orderKind) item.orderKind = it.orderKind;
     if (it.parts && it.parts.length > 0) {
       item.parts = it.parts.map((p) => {
         const part: SupplierPartItem = { name: p.name, unitPrice: p.unitPrice, quantity: p.quantity };
@@ -962,6 +997,7 @@ function SupplierOrderComposer({
         partsOverridden: (e.parts ?? []).map(() => false),
         imageUrl: e.imageUrl,
         clientName: e.clientName,
+        orderKind: e.orderKind ?? "production",
         costOptions: (e.costItems ?? []).map((cost) => ({ cost: { ...cost }, checked: false })),
       },
     ]);
@@ -1582,7 +1618,10 @@ function SupplierOrderDetail({
           <div key={i} className="rounded-2xl bg-[#f5f5f7] p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#1d1d1f]">{it.name}</p>
+                <p className="truncate text-sm font-medium text-[#1d1d1f]">
+                  <span className="mr-1 text-xs text-[#86868b]">[{SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"]}]</span>
+                  {it.name}
+                </p>
                 {it.nameEn && <p className="mt-0.5 truncate text-xs text-[#86868b]">{it.nameEn}</p>}
                 <p className="mt-0.5 text-xs text-[#86868b]">
                   {formatSupplierMoney(it.unitPrice, order.currency)} × {it.quantity} {it.unit || "PCS"}

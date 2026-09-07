@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { ClientProductInternal, PurchaseType, ShippingTerm, SupplierCostItem, SupplierCurrency, SupplierPartItem } from "@/lib/types";
+import { ClientProductInternal, PurchaseType, ShippingTerm, SupplierCostItem, SupplierCurrency, SupplierOrderKind, SupplierPartItem } from "@/lib/types";
 
 const colRef = collection(db, "clientProductInternal");
 
@@ -18,6 +18,7 @@ function fromDoc(d: any): ClientProductInternal {
     nameEn: data.nameEn || undefined,
     costItems: Array.isArray(data.costItems) ? data.costItems : undefined,
     parts: Array.isArray(data.parts) ? data.parts : undefined,
+    orderKind: data.orderKind || undefined,
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
 }
@@ -59,6 +60,7 @@ export async function setClientProductInternal(
     nameEn?: string;
     costItems?: SupplierCostItem[];
     parts?: SupplierPartItem[];
+    orderKind?: SupplierOrderKind;
   }
 ) {
   const payload: Record<string, unknown> = { clientId, updatedAt: serverTimestamp() };
@@ -71,6 +73,7 @@ export async function setClientProductInternal(
   if ("nameEn" in input) payload.nameEn = input.nameEn ?? "";
   if ("costItems" in input) payload.costItems = input.costItems ?? [];
   if ("parts" in input) payload.parts = input.parts ?? [];
+  if ("orderKind" in input) payload.orderKind = input.orderKind ?? null;
   return setDoc(doc(db, "clientProductInternal", productId), payload, { merge: true });
 }
 

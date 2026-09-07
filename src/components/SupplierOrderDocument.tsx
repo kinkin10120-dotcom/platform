@@ -1,4 +1,4 @@
-import { SupplierCurrency, SupplierOrderItem } from "@/lib/types";
+import { SUPPLIER_ORDER_KIND_CN, SUPPLIER_ORDER_KIND_LABEL, SupplierCurrency, SupplierOrderItem } from "@/lib/types";
 import { calcSupplierItemTotal, calcSupplierOrderTotal, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 
 // 발주서를 받는 쪽이 중국 공장이라 라벨을 전부 중문/영문 병기로 쓴다. 우리 쪽 발주서(매출)는
@@ -47,6 +47,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
   // 보여주고 품목마다 반복하지 않는다. 여러 고객이 섞였을 때만 품목별로 따로 적는다.
   const clientNames = Array.from(new Set(data.items.map((it) => it.clientName).filter((n): n is string => !!n)));
   const singleClient = clientNames.length === 1 ? clientNames[0] : null;
+  // 발주 성격(양산/개발)도 한 발주서 안에서는 대체로 하나다 — 같으면 상단에 한 줄로 적는다.
+  const kinds = Array.from(new Set(data.items.map((it) => it.orderKind ?? "production")));
+  const singleKind = kinds.length === 1 ? kinds[0] : null;
 
   return (
 <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -76,6 +79,12 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <Row label={L("订单号 / PO No.", "발주번호")} value={data.soNumber ?? "발행 시 자동 발급"} />
           {data.lotNo && <Row label={L("批次 / Lot", "로트번호")} value={data.lotNo} />}
           {singleClient && <Row label={L("客户 / Client", "고객사")} value={singleClient} />}
+          {singleKind && (
+            <Row
+              label={L("类别 / Type", "발주 구분")}
+              value={ko ? `${SUPPLIER_ORDER_KIND_LABEL[singleKind]} 발주` : SUPPLIER_ORDER_KIND_CN[singleKind]}
+            />
+          )}
           <Row label={L("日期 / Date", "발주일")} value={issuedDate} />
         </div>
         <div className="space-y-1.5">
@@ -116,7 +125,14 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                     <img src={it.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded border border-[#e5e5e5] object-cover" />
                   )}
                   <div className="min-w-0">
-                    <p className="font-medium">{ko ? it.name : it.nameEn || it.name}</p>
+                    <p className="font-medium">
+                      {!singleKind && (
+                        <span className="mr-1 text-xs text-[#86868b]">
+                          [{ko ? SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"] : SUPPLIER_ORDER_KIND_CN[it.orderKind ?? "production"]}]
+                        </span>
+                      )}
+                      {ko ? it.name : it.nameEn || it.name}
+                    </p>
                     {it.spec && <p className="mt-0.5 text-xs text-[#86868b]">{it.spec}</p>}
                     {!singleClient && it.clientName && (
                       <p className="mt-0.5 text-xs text-[#86868b]">{L("客户 / Client", "고객사")}: {it.clientName}</p>

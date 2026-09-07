@@ -82,16 +82,23 @@ export interface CatalogEntry {
 
 // 카탈로그에서 제품을 담을 때 만들어지는 발주 품목. 제품의 기본 부대비용은 전부 담되 체크는
 // 꺼둔 상태로 시작한다 — 로트마다 붙는 항목이 달라서, 기본으로 켜두면 실수로 딸려 들어간다.
-interface DraftItem extends SupplierOrderItem {
+// 부품 수량은 "실제로 발주할 개수"다. 보통은 발주 수량을 따라가므로(2000세트면 부품도 2000개),
+// 카탈로그에 등록된 "완제품 1개당 수량"(perUnit)을 곱해서 다시 맞춘다 — 세트당 자석이 2개면
+// 2000세트에서 4000개가 되어야 하기 때문이다. 사용자가 직접 고친 부품(overridden)은 더는
+// 자동으로 건드리지 않는다(어떤 부품만 여유분을 더 발주하는 경우가 있다).
+//
+// 이 두 값은 부품과 나란한 별도 배열로 들고 있었는데, 부품을 하나 지우면 인덱스가 한 칸씩
+// 밀려서 남은 부품의 세트당 수량이 뒤바뀌었다(케이스를 지우면 자석의 세트당 2개가 1개가 되어
+// 발주 수량을 바꾸는 순간 금액이 절반이 됐다). 부품 객체 안에 같이 담아 그 문제를 없앤다.
+interface DraftPart extends SupplierPartItem {
+  perUnit: number;
+  overridden: boolean;
+}
+
+interface DraftItem extends Omit<SupplierOrderItem, "parts"> {
   key: string;
+  parts?: DraftPart[];
   costOptions: { cost: SupplierCostItem; checked: boolean }[];
-  // 부품 수량은 "실제로 발주할 개수"다. 보통은 발주 수량을 따라가므로(2000세트면 부품도 2000개),
-  // 카탈로그에 등록된 "완제품 1개당 수량"을 여기 들고 있다가 발주 수량이 바뀔 때마다 곱해서
-  // 다시 맞춘다 — 세트당 자석이 2개면 2000세트에서 4000개가 되어야 하기 때문이다.
-  partsPerUnit: number[];
-  // 사용자가 그 부품 수량을 직접 고쳤으면 더는 자동으로 건드리지 않는다 — 어떤 부품만 여유분을
-  // 더 발주하는 경우가 있어서다.
-  partsOverridden: boolean[];
 }
 
 export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boolean) => void }) {
@@ -384,7 +391,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               <span className="text-xs text-[#86868b]">{rows.length}개 품목</span>
             </div>
             {rows.map((e) => {
-              const costTotal = (e.costItems ?? []).reduce((sum, c) => sum + (c.amount || 0), 0);
+              // 부대비용은 금액 × 개수다 — calcCostsTotal과 같은 기준으로 계산해야 다른 화면과 안 어긋난다.
+              const costTotal = calcCostsTotal(e.costItems);
               return (
                 <div key={`${e.kind}-${e.id}`} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
@@ -549,12 +557,21 @@ function PurchaseInfoEditor({
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   // 부품이 하나라도 있으면 완제품 단가는 부품 합계로 고정한다 — 두 값을 따로 관리하면
   // 언젠가 반드시 어긋나고, 어느 쪽이 진짜인지 알 수 없게 된다.
-  const partsTotal = parts.reduce((sum, p) => sum + (p.unitPrice || 0) * (p.quantity || 0), 0);
-  const hasParts = parts.length > 0;
-  const effectivePrice = hasParts ? partsTotal : purchasePrice.trim() ? Number(purchasePrice) : null;
+  // 합계는 "실제로 저장될 부품"만 더한다 — 이름을 안 적은 행은 저장에서 빠지는데 금액에는
+  // 들어가면, 저장된 매입 단가와 부품 목록이 어긋난 채로 발주서에 나간다.
+  const namedParts = parts.filter((p) => p.name.trim());
+  const partsTotal = namedParts.reduce((sum, p) => sum + (p.unitPrice || 0) * (p.quantity || 0), 0);
+  const hasParts = namedParts.length > 0;
+  const parsedPrice = Number(purchasePrice);
+  const effectivePrice = hasParts
+    ? partsTotal
+    : purchasePrice.trim() && Number.isFinite(parsedPrice)
+    ? parsedPrice
+    : null;
 
   // 여기서도 undefined를 넣으면 Firestore가 저장을 거부한다(위 finalItems와 같은 이유) —
   // 영문명을 비워두면 그 키를 아예 빼서 보낸다.
@@ -593,6 +610,7 @@ function PurchaseInfoEditor({
   async function handleSave() {
     if (isNew && !name.trim()) return;
     setSaving(true);
+    setSaveError("");
     try {
       if (isNew) {
         const ref = await createSupplierProduct({
@@ -635,6 +653,10 @@ function PurchaseInfoEditor({
         });
       }
       onDone();
+    } catch (e) {
+      // 저장 실패가 조용히 묻히면 "눌렀는데 아무 일도 안 일어남"으로 보인다.
+      console.error("[매입 정보 저장 실패]", e);
+      setSaveError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSaving(false);
     }
@@ -863,6 +885,8 @@ function PurchaseInfoEditor({
         </div>
       </div>
 
+      {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+
       <div className="flex gap-2 pt-1">
         <button
           onClick={handleSave}
@@ -926,8 +950,15 @@ function SupplierOrderComposer({
       ...it,
       key: `edit-${i}`,
       costOptions: (it.costs ?? []).map((c) => ({ cost: { ...c }, checked: true })),
-      partsPerUnit: (it.parts ?? []).map((p) => (it.quantity > 0 ? p.quantity / it.quantity : p.quantity || 1)),
-      partsOverridden: (it.parts ?? []).map(() => false),
+      // "직접 지정한 수량"인지 여부는 저장하지 않으므로 되살릴 때 추정한다 — 발주 수량으로
+      // 나누어떨어지면 자동으로 맞춰진 값(세트당 N개)이고, 안 떨어지면 사람이 직접 넣은
+      // 수량으로 본다. 전부 자동으로 취급하면 발주 수량을 바꿀 때 여유분까지 비율대로
+      // 늘어나 엉뚱한 개수가 된다.
+      parts: (it.parts ?? []).map((p) => {
+        const ratio = it.quantity > 0 ? p.quantity / it.quantity : 0;
+        const auto = ratio > 0 && Number.isInteger(ratio);
+        return { ...p, perUnit: auto ? ratio : p.quantity || 1, overridden: !auto };
+      }),
     }))
   );
   const [currency, setCurrency] = useState<SupplierCurrency>(editing?.currency ?? "USD");
@@ -950,9 +981,12 @@ function SupplierOrderComposer({
     const todayCount = existingOrders.filter((o) => o.lotNo?.startsWith(prefix)).length;
     return `${prefix}-${String(todayCount + 1).padStart(2, "0")}`;
   }, [existingOrders]);
-  const effectiveLotNo = lotNo.trim() || autoLotNo;
+  // 새로 만들 때만 자동 로트번호를 쓴다 — 로트번호 없이 저장됐던 발주를 수정하다 오늘 날짜의
+  // 새 번호가 붙으면, 이미 공장에 나간 발주서와 번호가 달라진다.
+  const effectiveLotNo = lotNo.trim() || (editing ? "" : autoLotNo);
   const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const rows = grouped.find(([s]) => s === supplierName)?.[1] ?? [];
@@ -1059,9 +1093,7 @@ function SupplierOrderComposer({
         sourceProductId: e.id,
         // 부품 내역과 사진은 값을 복사해 둔다 — 나중에 품목 쪽이 바뀌어도 이미 나간 발주서는
         // 그대로여야 한다(부대비용을 복사해 담는 것과 같은 이유).
-        parts: e.parts?.map((pt) => ({ ...pt })),
-        partsPerUnit: (e.parts ?? []).map((pt) => pt.quantity || 1),
-        partsOverridden: (e.parts ?? []).map(() => false),
+        parts: e.parts?.map((pt) => ({ ...pt, perUnit: pt.quantity || 1, overridden: false })),
         imageUrl: e.imageUrl,
         clientName: e.clientName,
         orderKind: e.orderKind ?? "production",
@@ -1078,7 +1110,7 @@ function SupplierOrderComposer({
   function addBlankItem() {
     setItems((prev) => [
       ...prev,
-      { key: `blank-${Date.now()}`, name: "직접 입력 품목", unitPrice: 0, quantity: 1, unit: "SET", costOptions: [], partsPerUnit: [], partsOverridden: [] },
+      { key: `blank-${Date.now()}`, name: "직접 입력 품목", unitPrice: 0, quantity: 1, unit: "SET", costOptions: [] },
     ]);
   }
 
@@ -1086,27 +1118,20 @@ function SupplierOrderComposer({
   // unitPrice × quantity를 쓰므로, 부품 합계를 발주 수량으로 나눈 값을 unitPrice에 넣어두면
   // 다시 곱해졌을 때 정확히 부품 합계가 된다 — 화면에 보이는 단가도 "세트당 얼마"가 되어 맞다.
   function syncedUnitPrice(parts: SupplierPartItem[], quantity: number, fallback: number) {
-    if (parts.length === 0) return fallback;
+    // 부품을 전부 지우면 단가를 0으로 되돌린다 — 예전 부품 합계가 근거 없이 남아 있으면
+    // 그대로 발주서에 찍힌다. 단가 칸이 다시 입력 가능해지므로 직접 넣으면 된다.
+    if (parts.length === 0) return 0;
     const sum = parts.reduce((acc, p) => acc + (p.unitPrice || 0) * (p.quantity || 0), 0);
-    return quantity > 0 ? sum / quantity : sum;
+    // 수량이 0이면(입력 중 잠깐 거치는 상태 포함) 나눌 수 없다 — 직전 단가를 유지해서
+    // 로트 전체 합계가 세트당 단가 칸에 튀어 들어가는 걸 막는다.
+    return quantity > 0 ? sum / quantity : fallback;
   }
 
-  function patchParts(key: string, nextParts: SupplierPartItem[], opts?: { overriddenIndex?: number }) {
+  function patchParts(key: string, nextParts: DraftPart[]) {
     setItems((prev) =>
-      prev.map((it) => {
-        if (it.key !== key) return it;
-        const partsOverridden = [...it.partsOverridden];
-        if (opts?.overriddenIndex != null) partsOverridden[opts.overriddenIndex] = true;
-        // 부품이 새로 추가·삭제되면 보조 배열 길이도 맞춰준다.
-        const partsPerUnit = nextParts.map((p, i) => it.partsPerUnit[i] ?? (it.quantity > 0 ? (p.quantity || 0) / it.quantity : p.quantity || 1));
-        return {
-          ...it,
-          parts: nextParts,
-          partsPerUnit,
-          partsOverridden: nextParts.map((_, i) => partsOverridden[i] ?? false),
-          unitPrice: syncedUnitPrice(nextParts, it.quantity, it.unitPrice),
-        };
-      })
+      prev.map((it) =>
+        it.key === key ? { ...it, parts: nextParts, unitPrice: syncedUnitPrice(nextParts, it.quantity, it.unitPrice) } : it
+      )
     );
   }
 
@@ -1115,8 +1140,8 @@ function SupplierOrderComposer({
     setItems((prev) =>
       prev.map((it) => {
         if (it.key !== key) return it;
-        const parts = (it.parts ?? []).map((p, i) =>
-          it.partsOverridden[i] ? p : { ...p, quantity: Math.round((it.partsPerUnit[i] ?? 1) * quantity) }
+        const parts = (it.parts ?? []).map((p) =>
+          p.overridden ? p : { ...p, quantity: Math.round(p.perUnit * quantity) }
         );
         return { ...it, quantity, parts, unitPrice: syncedUnitPrice(parts, quantity, it.unitPrice) };
       })
@@ -1127,9 +1152,13 @@ function SupplierOrderComposer({
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
   }
 
+  // 수량이 0인 품목은 금액이 성립하지 않는다(단가 × 0). 저장·발행을 막는다.
+  const hasInvalidQuantity = items.some((it) => !it.quantity || it.quantity < 1);
+
   async function handleSave() {
-    if (!supplierName.trim() || finalItems.length === 0) return;
+    if (!supplierName.trim() || finalItems.length === 0 || hasInvalidQuantity) return;
     setSaving(true);
+    setSaveError("");
     try {
       if (editing) {
         // 발주번호·상태·회신본은 그대로 두고 내용만 갱신한다.
@@ -1145,8 +1174,10 @@ function SupplierOrderComposer({
           packingNote: packingNote.trim() || undefined,
           memo: memo.trim() || undefined,
           lotNo: effectiveLotNo,
-          linkedPurchaseOrderId: linkedPo?.id,
-          linkedPurchaseOrderNo: linkedPo?.poNumber,
+          // 고객 발주 목록이 아직 안 왔거나 연결된 발주가 지워진 경우, 사용자가 건드리지도
+          // 않은 연결이 조용히 끊기면 안 된다 — 선택값이 그대로면 원래 값을 유지한다.
+          linkedPurchaseOrderId: linkedPoId ? linkedPo?.id ?? editing.linkedPurchaseOrderId : undefined,
+          linkedPurchaseOrderNo: linkedPoId ? linkedPo?.poNumber ?? editing.linkedPurchaseOrderNo : undefined,
         });
         onCreated();
         return;
@@ -1168,6 +1199,10 @@ function SupplierOrderComposer({
         createdBy,
       });
       onCreated();
+    } catch (e) {
+      // 예전에는 여기서 예외가 조용히 사라져서 "저장을 눌렀는데 아무 일도 안 일어남"으로 보였다.
+      console.error("[구매발주 저장 실패]", e);
+      setSaveError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSaving(false);
     }
@@ -1189,7 +1224,8 @@ function SupplierOrderComposer({
             packingNote,
             memo,
             lotNo: effectiveLotNo,
-            createdAt: Date.now(),
+            // 수정 중이면 원래 발주일을 그대로 보여준다 — 오늘 날짜로 보이면 실제 인쇄물과 달라진다.
+            createdAt: editing?.createdAt ?? Date.now(),
           }}
         />
       </PrintablePreview>
@@ -1380,14 +1416,18 @@ function SupplierOrderComposer({
                   />
                   <NumberInput
                     value={pt.quantity}
+                    // 수량을 직접 고치면 그 부품은 이후 발주 수량이 바뀌어도 그대로 유지된다.
                     onChange={(n) =>
-                      patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: n } : x)), { overriddenIndex: pi })
+                      patchParts(
+                        it.key,
+                        (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: n, overridden: true } : x))
+                      )
                     }
                     decimal={false}
                     placeholder="수량"
-                    title={it.partsOverridden[pi] ? "직접 지정한 수량 — 발주 수량을 바꿔도 그대로 유지됩니다." : "발주 수량을 따라갑니다."}
+                    title={pt.overridden ? "직접 지정한 수량 — 발주 수량을 바꿔도 그대로 유지됩니다." : "발주 수량을 따라갑니다."}
                     className={`w-16 shrink-0 rounded-lg border bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] ${
-                      it.partsOverridden[pi] ? "border-[#1d1d1f]" : "border-[#d1d1d6]"
+                      pt.overridden ? "border-[#1d1d1f]" : "border-[#d1d1d6]"
                     }`}
                   />
                   <span className="w-20 shrink-0 text-right text-xs font-medium text-[#1d1d1f]">
@@ -1403,7 +1443,12 @@ function SupplierOrderComposer({
                 </div>
               ))}
               <button
-                onClick={() => patchParts(it.key, [...(it.parts ?? []), { name: "", unitPrice: 0, quantity: it.quantity || 1 }])}
+                onClick={() =>
+                  patchParts(it.key, [
+                    ...(it.parts ?? []),
+                    { name: "", unitPrice: 0, quantity: it.quantity || 1, perUnit: 1, overridden: false },
+                  ])
+                }
                 className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
               >
                 <Plus size={12} /> 부품 추가
@@ -1628,9 +1673,11 @@ function SupplierOrderComposer({
           >
             미리보기
           </button>
+          {hasInvalidQuantity && <p className="w-full text-xs text-red-500">수량이 0인 품목이 있습니다.</p>}
+          {saveError && <p className="w-full text-xs text-red-500">{saveError}</p>}
           <button
             onClick={handleSave}
-            disabled={saving || finalItems.length === 0 || !supplierName.trim()}
+            disabled={saving || finalItems.length === 0 || !supplierName.trim() || hasInvalidQuantity}
             className="rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
           >
             {saving ? "저장 중..." : editing ? "수정 저장" : "발주서 저장"}

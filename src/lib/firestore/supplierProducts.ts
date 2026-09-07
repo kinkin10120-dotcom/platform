@@ -28,7 +28,7 @@ function fromDoc(d: any): SupplierProduct {
     nameEn: data.nameEn || undefined,
     spec: data.spec || undefined,
     imageUrl: data.imageUrl || undefined,
-    purchasePrice: typeof data.purchasePrice === "number" ? data.purchasePrice : undefined,
+    purchasePrice: typeof data.purchasePrice === "number" && !Number.isNaN(data.purchasePrice) ? data.purchasePrice : undefined,
     purchaseCurrency: data.purchaseCurrency || undefined,
     unit: data.unit || undefined,
     parts: Array.isArray(data.parts) ? data.parts : undefined,
@@ -67,7 +67,14 @@ export async function createSupplierProduct(input: SupplierProductInput) {
 }
 
 export async function updateSupplierProduct(id: string, input: Partial<SupplierProductInput>) {
-  return updateDoc(doc(db, "supplierProducts", id), { ...input, updatedAt: serverTimestamp() });
+  // Firestore는 undefined를 값으로 받지 않고 예외를 던진다 — 영문명·사양·단위·고객명 중
+  // 하나라도 비운 채 저장하면 updateDoc이 통째로 실패했다(생성 쪽은 ?? ""로 막혀 있어서
+  // 새로 만들 때만 멀쩡했다). "비웠다"는 뜻이면 null로 보낸다.
+  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  for (const [key, value] of Object.entries(input)) {
+    payload[key] = value === undefined ? null : value;
+  }
+  return updateDoc(doc(db, "supplierProducts", id), payload);
 }
 
 export async function uploadSupplierProductImage(productId: string, file: File): Promise<string> {

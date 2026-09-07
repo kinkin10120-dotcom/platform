@@ -13,7 +13,7 @@ function fromDoc(d: any): ClientProductInternal {
     shippingTerm: data.shippingTerm,
     customsNote: data.customsNote,
     supplierName: data.supplierName || undefined,
-    purchasePrice: typeof data.purchasePrice === "number" ? data.purchasePrice : undefined,
+    purchasePrice: typeof data.purchasePrice === "number" && !Number.isNaN(data.purchasePrice) ? data.purchasePrice : undefined,
     purchaseCurrency: data.purchaseCurrency || undefined,
     nameEn: data.nameEn || undefined,
     costItems: Array.isArray(data.costItems) ? data.costItems : undefined,

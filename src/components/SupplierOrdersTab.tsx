@@ -604,7 +604,16 @@ function SupplierOrderComposer({
 
       {/* 오른쪽 — 담긴 품목 + 발주 조건 */}
       <div className="space-y-4 self-start rounded-3xl bg-white p-6">
-        <p className="font-semibold text-[#1d1d1f]">구매발주서 작성</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-semibold text-[#1d1d1f]">구매발주서 작성</p>
+          <button
+            onClick={() => setPreviewOpen(true)}
+            disabled={finalItems.length === 0}
+            className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f] disabled:opacity-40"
+          >
+            <Printer size={13} /> 미리보기
+          </button>
+        </div>
 
         {items.length === 0 && (
           <p className="rounded-2xl border border-dashed border-[#d1d1d6] px-4 py-8 text-center text-sm text-[#86868b]">

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierOrder } from "@/lib/firestore/supplierOrders";
+import { listenSupplierOrder, setSupplierOrderStatus } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder } from "@/lib/types";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
@@ -34,6 +34,14 @@ export default function SupplierOrderPrintPage() {
     if (!orderId) return;
     return listenSupplierOrder(orderId, setOrder);
   }, [orderId]);
+
+  // 발주서를 뽑는 시점이 곧 공장에 보내는 시점이라, 이 페이지를 열면 "발행됨"으로 올린다 —
+  // 별도 "발행 처리" 버튼을 두면 누르는 걸 잊어버려 상태가 실제와 어긋난다.
+  useEffect(() => {
+    if (!order || order.status !== "draft") return;
+    if (appUser?.role !== "admin") return;
+    setSupplierOrderStatus(order.id, "issued").catch(() => {});
+  }, [order, appUser?.role]);
 
   // 인쇄/PDF 저장 대화상자가 제안하는 파일명은 document.title을 그대로 따른다.
   useEffect(() => {

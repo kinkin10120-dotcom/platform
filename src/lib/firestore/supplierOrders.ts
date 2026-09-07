@@ -36,7 +36,9 @@ function fromDoc(d: any): SupplierOrder {
     lotNo: data.lotNo || undefined,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
-    status: data.status ?? "draft",
+    // 예전에 쓰던 상태값(공장 확인·종료)이 남아 있는 문서는 "발행됨"으로 본다 — 어차피
+    // 발주서를 이미 내보낸 건들이다.
+    status: data.status === "draft" || !data.status ? "draft" : "issued",
     issuedAt: data.issuedAt?.toMillis ? data.issuedAt.toMillis() : data.issuedAt,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),

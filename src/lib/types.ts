@@ -619,13 +619,14 @@ export interface SupplierProduct {
   updatedAt: number;
 }
 
-export type SupplierOrderStatus = "draft" | "issued" | "confirmed" | "closed";
+// 상태는 "아직 작성만 해둔 건"과 "실제로 공장에 보낸 건"을 가르는 용도 하나뿐이다. 그 외
+// 단계(공장 확인·종료 등)는 걸려 있는 동작이 없어서 눌러도 아무 일이 안 일어나는 라벨이었고,
+// 나중에 보면 무슨 뜻인지 본인도 헷갈려서 없앴다.
+export type SupplierOrderStatus = "draft" | "issued";
 
 export const SUPPLIER_ORDER_STATUS_LABEL: Record<SupplierOrderStatus, string> = {
   draft: "작성중",
   issued: "발행됨",
-  confirmed: "공장 확인",
-  closed: "종료",
 };
 
 export interface SupplierOrder {

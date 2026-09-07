@@ -23,7 +23,6 @@ import {
   deleteSupplierOrder,
   formatSupplierMoney,
   listenSupplierOrders,
-  setSupplierOrderStatus,
   updateSupplierOrder,
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
@@ -46,9 +45,7 @@ import {
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-[#f5f5f7] text-[#86868b]",
-  issued: "bg-amber-50 text-amber-600",
-  confirmed: "bg-green-50 text-green-600",
-  closed: "bg-[#f5f5f7] text-[#86868b]",
+  issued: "bg-green-50 text-green-600",
 };
 
 const NO_SUPPLIER = "미지정";
@@ -1627,22 +1624,9 @@ function SupplierOrderDetail({
         >
           <Pencil size={13} /> 수정
         </button>
-        {order.status === "draft" && (
-          <button
-            onClick={() => setSupplierOrderStatus(order.id, "issued")}
-            className="rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
-          >
-            발행 처리
-          </button>
-        )}
-        {order.status === "issued" && (
-          <button
-            onClick={() => setSupplierOrderStatus(order.id, "closed")}
-            className="rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
-          >
-            종료 처리
-          </button>
-        )}
+        {/* 발행 처리 버튼은 두지 않는다 — 발주서를 실제로 뽑는 시점이 곧 보내는 시점이라,
+            인쇄 페이지를 열면 자동으로 "발행됨"이 된다. 버튼을 따로 누르게 하면 누르는 걸
+            잊어버려서 상태가 실제와 어긋난다. */}
         {deleteConfirm ? (
           <button
             onClick={async () => { await deleteSupplierOrder(order.id); onClose(); }}

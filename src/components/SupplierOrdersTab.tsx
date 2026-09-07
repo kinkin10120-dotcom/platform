@@ -26,6 +26,7 @@ import {
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 import PdfPageScaler from "@/components/PdfPageScaler";
+import NumberInput from "@/components/NumberInput";
 import { usePrintFileName } from "@/lib/usePrintFileName";
 import { fetchSupplierOrderFile } from "@/lib/functions";
 import {
@@ -631,17 +632,16 @@ function PurchaseInfoEditor({
               placeholder="영문/중문"
               className="min-w-[7rem] flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
-            <input
-              value={pt.unitPrice || ""}
-              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : it)))}
-              inputMode="decimal"
+            <NumberInput
+              value={pt.unitPrice}
+              onChange={(n) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, unitPrice: n } : it)))}
               placeholder="단가"
               className="w-20 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
-            <input
-              value={pt.quantity || ""}
-              onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 } : it)))}
-              inputMode="numeric"
+            <NumberInput
+              value={pt.quantity}
+              onChange={(n) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity: n } : it)))}
+              decimal={false}
               placeholder="수량"
               className="w-16 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
@@ -679,10 +679,9 @@ function PurchaseInfoEditor({
               placeholder="항목 (조립비·포장비 등)"
               className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
-            <input
-              value={c.amount || ""}
-              onChange={(e) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, amount: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : it)))}
-              inputMode="decimal"
+            <NumberInput
+              value={c.amount}
+              onChange={(n) => setCostItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, amount: n } : it)))}
               placeholder="금액"
               className="w-24 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
             />
@@ -1053,19 +1052,18 @@ function SupplierOrderComposer({
                   {formatSupplierMoney(it.unitPrice, currency)}
                 </span>
               ) : (
-                <input
-                  value={it.unitPrice || ""}
-                  onChange={(e) => patchItem(it.key, { unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 })}
-                  inputMode="decimal"
+                <NumberInput
+                  value={it.unitPrice}
+                  onChange={(n) => patchItem(it.key, { unitPrice: n })}
                   placeholder="단가"
                   className="w-24 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                 />
               )}
               <span className="text-xs text-[#86868b]">×</span>
-              <input
-                value={it.quantity || ""}
-                onChange={(e) => patchItem(it.key, { quantity: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 })}
-                inputMode="numeric"
+              <NumberInput
+                value={it.quantity}
+                onChange={(n) => patchItem(it.key, { quantity: n })}
+                decimal={false}
                 className="w-16 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
               />
               <input
@@ -1097,17 +1095,16 @@ function SupplierOrderComposer({
                     placeholder="영문/중문"
                     className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
-                  <input
-                    value={pt.unitPrice || ""}
-                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, unitPrice: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } : x)))}
-                    inputMode="decimal"
+                  <NumberInput
+                    value={pt.unitPrice}
+                    onChange={(n) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, unitPrice: n } : x)))}
                     placeholder="단가"
                     className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
-                  <input
-                    value={pt.quantity || ""}
-                    onChange={(e) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: Number(e.target.value.replace(/[^0-9]/g, "")) || 0 } : x)))}
-                    inputMode="numeric"
+                  <NumberInput
+                    value={pt.quantity}
+                    onChange={(n) => patchParts(it.key, (it.parts ?? []).map((x, xi) => (xi === pi ? { ...x, quantity: n } : x)))}
+                    decimal={false}
                     placeholder="수량"
                     className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
@@ -1153,16 +1150,13 @@ function SupplierOrderComposer({
                     placeholder="항목명"
                     className="flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />
-                  <input
-                    value={opt.cost.amount || ""}
-                    onChange={(e) =>
+                  <NumberInput
+                    value={opt.cost.amount}
+                    onChange={(n) =>
                       patchItem(it.key, {
-                        costOptions: it.costOptions.map((o, idx) =>
-                          idx === ci ? { ...o, cost: { ...o.cost, amount: Number(e.target.value.replace(/[^0-9.]/g, "")) || 0 } } : o
-                        ),
+                        costOptions: it.costOptions.map((o, idx) => (idx === ci ? { ...o, cost: { ...o.cost, amount: n } } : o)),
                       })
                     }
-                    inputMode="decimal"
                     placeholder="금액"
                     className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                   />

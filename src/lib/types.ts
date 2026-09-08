@@ -525,7 +525,10 @@ export interface Contract {
   sentUserAgent?: string;
   sentContentHash?: string; // 발송 시점 본문+별첨 SHA-256 — 이후 signedAt의 contentHash와 대조해 위변조 여부를 검증할 수 있다.
   lastSignatureReminderAt?: number; // 서명 대기 리마인더 마지막 발송 시각 — 3일 간격 재발송 기준점
-  viewedAt?: number; // 상대방이 서명 페이지를 최초로 열어본 시각
+  viewedAt?: number; // 상대방이 (현재 버전의) 서명 페이지를 열어본 시각
+  // 그때 열어본 문서의 버전. 수정 후 재발송하면 version이 올라가므로, 이 값과 비교해서
+  // "지금 보낸 수정본을 봤는지"를 구분한다.
+  viewedVersion?: number;
   // 서명 완료 후 채워지는, 이후 절대 수정되지 않는 증빙 스냅샷
   signedAt?: number;
   signerName?: string;

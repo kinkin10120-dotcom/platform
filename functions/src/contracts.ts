@@ -403,9 +403,14 @@ export const getContractForSigning = onCall({ invoker: "public" }, async (reques
   const { contractId, email } = request.data as { contractId?: string; email?: string };
   const { snap, data } = await assertContractEmailMatch(contractId ?? "", email);
 
-  // 고객이 링크를 열어봤는지(최초 1회) — 견적서와 같은 이유로 관리자 목록에 배지로 노출한다.
-  if (!data.viewedAt) {
-    await snap.ref.update({ viewedAt: FieldValue.serverTimestamp() });
+  // 고객이 링크를 열어봤는지 — 관리자 목록에 배지로 노출한다.
+  //
+  // 예전에는 최초 1회만 기록해서, 수정 요청을 받아 고친 뒤 다시 보내도 열람 표시가 처음 값
+  // 그대로 남아 있었다("이 수정본을 봤나?"를 알 수 없었다). 어느 버전을 열어봤는지 함께
+  // 기록해서, 발송할 때마다 올라가는 version과 비교할 수 있게 한다.
+  const currentVersion = (data.version ?? 1) as number;
+  if (!data.viewedAt || data.viewedVersion !== currentVersion) {
+    await snap.ref.update({ viewedAt: FieldValue.serverTimestamp(), viewedVersion: currentVersion });
   }
 
   const isFinal = data.status === "signed" || data.status === "linked";

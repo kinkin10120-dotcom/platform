@@ -53,6 +53,7 @@ function fromDoc(d: any): Contract {
     sentUserAgent: data.sentUserAgent ?? undefined,
     sentContentHash: data.sentContentHash ?? undefined,
     viewedAt: data.viewedAt?.toMillis ? data.viewedAt.toMillis() : data.viewedAt,
+    viewedVersion: data.viewedVersion,
     signedAt: data.signedAt?.toMillis ? data.signedAt.toMillis() : data.signedAt,
     signerName: data.signerName ?? undefined,
     signerTitle: data.signerTitle ?? undefined,

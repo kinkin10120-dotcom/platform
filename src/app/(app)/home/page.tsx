@@ -140,6 +140,7 @@ export default function HomePage() {
   }, [isAdmin, projects, appUser?.clientId]);
 
   const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
+  const clientLogo = (clientId: string) => clients.find((c) => c.id === clientId)?.logoUrl;
 
   const sortedProjects = [...projects].sort((a, b) => {
     const ao = a.sortOrder ?? a.createdAt;
@@ -448,6 +449,16 @@ export default function HomePage() {
                 onClick={(e) => e.stopPropagation()}
                 className="ml-[18px] mr-6 mt-3 flex w-fit items-center rounded-lg px-1.5 py-0.5 transition hover:bg-[#f5f5f7]"
               >
+                {/* 로고가 등록된 고객사는 이름 앞에 함께 보여준다 — 카드가 글자만 있어 프로젝트를
+                    한눈에 알아보기 어려웠다. 좁은 화면에서는 자리만 차지해서 숨긴다. */}
+                {clientLogo(p.clientId) && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={clientLogo(p.clientId)}
+                    alt=""
+                    className="mr-1.5 hidden h-4 w-auto max-w-[72px] shrink-0 object-contain md:block"
+                  />
+                )}
                 <span className="truncate text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">{clientName(p.clientId)}</span>
               </Link>
             )}

@@ -456,7 +456,7 @@ export default function HomePage() {
                   <img
                     src={clientLogo(p.clientId)}
                     alt=""
-                    className="mr-2 hidden h-7 w-auto max-w-[120px] shrink-0 object-contain md:block"
+                    className="mr-2.5 hidden h-11 w-auto max-w-[180px] shrink-0 object-contain md:block"
                   />
                 )}
                 <span className="truncate text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">{clientName(p.clientId)}</span>

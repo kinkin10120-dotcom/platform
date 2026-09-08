@@ -46,8 +46,6 @@ export default function ContractsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   // 복제 중인 계약 id — 같은 카드를 연타해서 사본이 여러 개 생기는 걸 막는다.
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
-  const [titleEditing, setTitleEditing] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [prefill, setPrefill] = useState<{ companyName?: string; contactName?: string; contactEmail?: string; bizRegCertUrl?: string } | null>(null);
 
@@ -92,12 +90,6 @@ export default function ContractsPage() {
     } finally {
       setDuplicatingId(null);
     }
-  }
-
-  async function handleSaveTitle() {
-    if (!selected || !titleDraft.trim()) return;
-    await updateContractDraft(selected.id, { title: titleDraft.trim() });
-    setTitleEditing(false);
   }
 
   async function handleConfirmDelete() {
@@ -157,48 +149,9 @@ export default function ContractsPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-semibold text-[#1d1d1f]">{selected.companyName}</p>
-                {/* 발송한 뒤에는 본문을 못 고치지만 제목은 고칠 수 있어야 한다 — 복제해서 만든
-                    계약의 "(사본)"을 못 지운 채 보내는 일이 실제로 있었다. 제목은 서명 시점에
-                    동결되는 본문(signedBodyText)과 별개라 고쳐도 계약 내용이 달라지지 않는다.
-                    다만 서명이 끝난 계약은 그대로 둔다. */}
-                {titleEditing ? (
-                  <div className="mt-1 flex items-center gap-1.5">
-                    <input
-                      value={titleDraft}
-                      onChange={(e) => setTitleDraft(e.target.value)}
-                      autoFocus
-                      className="w-56 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
-                    />
-                    <button
-                      onClick={handleSaveTitle}
-                      disabled={!titleDraft.trim()}
-                      className="rounded-full bg-[#1d1d1f] px-3 py-1 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
-                    >
-                      저장
-                    </button>
-                    <button
-                      onClick={() => setTitleEditing(false)}
-                      className="rounded-full border border-[#d1d1d6] px-3 py-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
-                    >
-                      취소
-                    </button>
-                  </div>
-                ) : (
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-[#86868b]">
-                    <span>
-                      {selected.title} · {selected.productName || selected.contactName} · {new Date(selected.createdAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
-                    </span>
-                    {selected.status !== "signed" && selected.status !== "linked" && (
-                      <button
-                        onClick={() => { setTitleDraft(selected.title); setTitleEditing(true); }}
-                        title="계약 제목 수정"
-                        className="rounded-full p-0.5 text-[#d1d1d6] transition hover:text-[#1d1d1f]"
-                      >
-                        <Pencil size={11} />
-                      </button>
-                    )}
-                  </p>
-                )}
+                <p className="mt-0.5 text-xs text-[#86868b]">
+                  {selected.title} · {selected.productName || selected.contactName} · {new Date(selected.createdAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
+                </p>
                 {(selected.status === "sent" || selected.status === "revision_requested") && (
                   <p className="mt-1 text-xs text-[#86868b]">
                     {selected.viewedAt

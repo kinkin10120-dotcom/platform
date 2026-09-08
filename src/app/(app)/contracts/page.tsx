@@ -188,11 +188,11 @@ export default function ContractsPage() {
               </div>
             )}
 
+            {/* ContractEditForm에 key로 계약 id를 주는 게 핵심이다 — 이게 없으면 다른 계약을
+                눌러도 React가 같은 폼 컴포넌트를 재사용해서, 처음 열었던 계약의 입력값이 그대로
+                남는다(useState 초기값은 마운트할 때 한 번만 읽힌다). 복제한 계약처럼 본문까지
+                똑같으면 아래 동기화 effect도 안 걸려서 아무것도 안 바뀐 것처럼 보였다. */}
             {selected.status === "draft" || selected.status === "revision_requested" ? (
-              {/* key로 계약 id를 주는 게 핵심이다 — 이게 없으면 다른 계약을 눌러도 React가
-                  같은 폼 컴포넌트를 재사용해서, 처음 열었던 계약의 입력값이 그대로 남는다
-                  (useState 초기값은 마운트할 때 한 번만 읽힌다). 복제한 계약처럼 본문까지
-                  똑같으면 아래 동기화 effect도 안 걸려서 아무것도 안 바뀐 것처럼 보였다. */}
               <ContractEditForm key={selected.id} contract={selected} />
             ) : (
               <ContractReadOnlyView contract={selected} />

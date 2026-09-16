@@ -78,15 +78,13 @@ export default function ContractPreviewModal({
           body * { visibility: hidden; }
           #contract-print-root, #contract-print-root * { visibility: visible; }
           #contract-print-root { position: absolute; top: 0; left: 0; width: 210mm; }
-          /* min-height:0이 핵심이다 — .po-page는 화면용으로 인라인 style min-height:297mm를
-             갖고 있는데(짧은 페이지도 항상 A4 한 장 높이로 보이게), 인쇄 시 이걸 그대로 두면
-             실제 콘텐츠 높이가 반올림 오차 등으로 297mm 경계에 정확히 걸려서, 인쇄 엔진이
-             그 미세한 초과분만으로 페이지를 한 번 더 쪼갠 뒤(그 몫이 사실상 빈 페이지),
-             CSS의 break-after까지 또 적용되어 총 2번 넘어가버린다 — 실제로 한 페이지 다음에
-             빈 페이지가 하나 끼고 그다음 내용이 나오는 증상과 정확히 일치했다. 콘텐츠가 항상
-             예산보다 여유 있게 짧다는 게 이미 보장되어 있으므로(SAFETY_BUFFER_PX) min-height
-             강제를 없애고 실제 콘텐츠 높이 그대로 렌더링하면 이 경계 문제 자체가 사라진다. */
-          .po-page { box-shadow: none !important; margin: 0 !important; min-height: 0 !important; }
+          /* .po-page는 이제 화면·인쇄 공통으로 height(고정) + overflow:hidden을 인라인
+             style로 갖는다(ContractPreviewDocument) — 측정 오차로 페이지가 A4보다 몇 px 커도
+             그 몇 px은 안 보이게 잘릴 뿐 물리적으로 다음 장을 침범하지 않으므로, 예전처럼
+             인쇄에서만 min-height를 따로 풀어줄 필요가 없다(실제로 297mm를 살짝 넘는 첨부
+             페이지가 인쇄에서만 문서 해시 한 줄짜리 빈 페이지를 하나 더 만들던 문제가 있었다
+             — height를 못박아 원천적으로 막는다). */
+          .po-page { box-shadow: none !important; margin: 0 !important; }
           .pdf-scale-wrapper { width: auto !important; height: auto !important; }
           .pdf-scale-inner { transform: none !important; width: 210mm !important; }
           /* 헤더 높이만큼 인라인 style로 준 padding-top은 인쇄 시(헤더 자체가 안 보이므로)

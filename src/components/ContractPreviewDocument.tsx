@@ -176,7 +176,15 @@ export default function ContractPreviewDocument({ data }: { data: ContractPrevie
         <div
           key={i}
           className={`po-page relative flex w-[210mm] flex-col bg-white p-[20mm] text-[#1d1d1f] shadow-lg print:w-full print:shadow-none ${i < arr.length - 1 ? "print:break-after-page" : ""}`}
-          style={{ minHeight: PAGE_HEIGHT_PX }}
+          // min-height가 아니라 height + overflow:hidden으로 고정한다. 페이지 나눔은 위에서
+          // 이미 "한 페이지에 들어갈 만큼"으로 계산해서 쪼갠 것이지만, 이미지가 섞인 첨부에서
+          // 측정용 숨은 요소와 실제 렌더링 사이에 몇 px 오차가 생길 수 있다(실제로 한 페이지가
+          // 1132px로 나온 사례가 있었다 — A4 기준 1123px보다 9px 큼). min-height는 그 오차만큼
+          // 박스가 그냥 더 자라버리는데, 화면에서는 티가 안 나도 인쇄에서는 그 몇 px이 물리적
+          // 페이지 경계를 넘겨 문서 해시만 찍힌 빈 페이지를 하나 더 만든다. height를 못박고
+          // 넘치는 부분을 잘라내면(overflow:hidden) 그 몇 px은 안 보이게 잘릴 뿐 새 페이지가
+          // 생기지 않고, 화면 미리보기와 인쇄 결과의 페이지 수가 항상 1:1로 같아진다.
+          style={{ height: PAGE_HEIGHT_PX, overflow: "hidden" }}
         >
           {page.showMainHeader && <PageHeader data={data} />}
           {page.attachmentTitle && (

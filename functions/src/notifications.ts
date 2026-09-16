@@ -29,6 +29,7 @@ const NOTIFICATION_TITLE: Record<string, string> = {
   order_cancel_request: "발주 취소 요청이 접수되었습니다",
   contract_signed: "계약서 서명이 완료되었습니다",
   contract_revision_requested: "계약서 수정 요청이 도착했습니다",
+  contract_expiring: "계약 만료가 임박했습니다",
 };
 
 export const onNotificationCreated = onDocumentCreated(
@@ -84,7 +85,7 @@ export const onNotificationCreated = onDocumentCreated(
       ? `https://handyhand.co.kr/orders/${notif.orderId}/invoice/${notif.invoiceIndex}`
       : notif.type === "order_status_change"
       ? "https://handyhand.co.kr/my-orders"
-      : notif.type === "contract_signed" || notif.type === "contract_revision_requested"
+      : notif.type === "contract_signed" || notif.type === "contract_revision_requested" || notif.type === "contract_expiring"
       ? "https://handyhand.co.kr/contracts"
       : "https://handyhand.co.kr/home";
 
@@ -150,7 +151,7 @@ export const onNotificationCreated = onDocumentCreated(
         ? "발주서 보기"
         : notif.type === "order_status_change" && notif.orderId && notif.invoiceIndex !== undefined
         ? "청구서 보기"
-        : notif.type === "contract_signed" || notif.type === "contract_revision_requested"
+        : notif.type === "contract_signed" || notif.type === "contract_revision_requested" || notif.type === "contract_expiring"
         ? "계약 확인하기"
         : "HANDYWORKS에서 확인하기";
 

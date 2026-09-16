@@ -14,6 +14,7 @@ import {
   uploadSupplierProductImage,
 } from "@/lib/firestore/supplierProducts";
 import { listenClients } from "@/lib/firestore/clients";
+import { listenAllProjects } from "@/lib/firestore/projects";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import {
   calcCostsTotal,
@@ -33,6 +34,7 @@ import { usePrintFileName } from "@/lib/usePrintFileName";
 import {
   Client,
   ClientProduct,
+  Project,
   ClientProductInternal,
   PurchaseOrder,
   SUPPLIER_ORDER_STATUS_LABEL,
@@ -108,6 +110,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   const [clients, setClients] = useState<Client[]>([]);
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [clientOrders, setClientOrders] = useState<PurchaseOrder[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [selected, setSelected] = useState<SupplierOrder | null>(null);
   const [composing, setComposing] = useState(false);
@@ -124,6 +127,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   useEffect(() => listenClients(setClients), []);
   useEffect(() => listenSupplierOrders(setOrders), []);
   useEffect(() => listenAllPurchaseOrders(setClientOrders), []);
+  useEffect(() => listenAllProjects(setProjects), []);
   useEffect(() => listenSupplierProducts(setSupplierProducts), []);
 
   useEffect(() => {
@@ -269,6 +273,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         grouped={grouped}
         clientNameById={clientNameById}
         clientOrders={clientOrders}
+        projects={projects}
         existingOrders={orders}
         onClose={() => { setComposing(false); setEditingOrder(null); }}
         onCreated={() => { setComposing(false); setEditingOrder(null); }}
@@ -289,7 +294,9 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+    <div className="space-y-5">
+      <SupplierOrderSummary orders={orders} />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       {/* 왼쪽 — 발주처별 구매 카탈로그 */}
       <div className="space-y-3">
         <div className="flex gap-2">
@@ -514,11 +521,148 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               {o.soNumber}
               {o.lotNo ? ` · Lot ${o.lotNo}` : ""}
               {o.linkedPurchaseOrderNo ? ` · 고객발주 ${o.linkedPurchaseOrderNo}` : ""}
+              {o.linkedProjectName ? ` · ${o.linkedProjectName}` : ""}
             </p>
           </div>
           );
         })}
       </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- 구매발주 요약 ----
+//
+// 지금까지는 "이번 달에 중국에 얼마 나갔나"를 보려면 CSV를 열어서 직접 합산해야 했다.
+// 여기서 쓰는 값은 전부 이미 쌓이고 있던 데이터다 — 발주 시점 환율(exchangeRate), 생산/개발
+// 구분(orderKind), 연결된 프로젝트(linkedProjectId) 전부 발주를 만들 때 이미 기록해뒀다.
+function SupplierOrderSummary({ orders }: { orders: SupplierOrder[] }) {
+  const [period, setPeriod] = useState<"month" | "year" | "all">("month");
+
+  const { totalKrw, missingRateCount, bySupplier, byKind, byProject, orderCount } = useMemo(() => {
+    const now = new Date();
+    // "작성중"은 아직 실제로 나간 돈이 아니다 — 여기 섞이면 지출 집계가 부풀어 보인다.
+    // 실제 발행 시각(issuedAt) 기준으로 기간을 거른다(작성 시각이 아니라 진짜 나간 시점).
+    const inPeriod = orders.filter((o) => {
+      if (o.status !== "issued" || !o.issuedAt) return false;
+      const d = new Date(o.issuedAt);
+      if (period === "all") return true;
+      if (period === "year") return d.getFullYear() === now.getFullYear();
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+
+    let totalKrw = 0;
+    let missingRateCount = 0;
+    const bySupplier = new Map<string, number>();
+    const byKind: Record<SupplierOrderKind, number> = { production: 0, development: 0 };
+    const byProject = new Map<string, number>();
+
+    for (const o of inPeriod) {
+      const krw = o.currency === "KRW" ? o.totalAmount : o.exchangeRate ? o.totalAmount * o.exchangeRate : null;
+      if (krw === null) {
+        missingRateCount += 1;
+        continue;
+      }
+      totalKrw += krw;
+      bySupplier.set(o.supplierName, (bySupplier.get(o.supplierName) ?? 0) + krw);
+      if (o.linkedProjectName) {
+        byProject.set(o.linkedProjectName, (byProject.get(o.linkedProjectName) ?? 0) + krw);
+      }
+      // 생산/개발은 품목 단위 값이라, 발주 총액을 품목별 비중대로 나눠 더한다 — 한 발주 안에
+      // 생산·개발 품목이 섞인 경우에도 정확히 갈린다.
+      const itemTotal = calcSupplierOrderTotal(o.items) || 1;
+      for (const it of o.items) {
+        const kind = it.orderKind ?? "production";
+        byKind[kind] += (calcSupplierItemTotal(it) / itemTotal) * krw;
+      }
+    }
+
+    return {
+      totalKrw,
+      missingRateCount,
+      orderCount: inPeriod.length,
+      bySupplier: Array.from(bySupplier.entries()).sort((a, b) => b[1] - a[1]),
+      byKind,
+      byProject: Array.from(byProject.entries()).sort((a, b) => b[1] - a[1]),
+    };
+  }, [orders, period]);
+
+  const fmt = (n: number) => `${Math.round(n).toLocaleString("ko-KR")}원`;
+
+  return (
+    <div className="rounded-3xl bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-[#1d1d1f]">구매발주 요약</p>
+        <div className="flex rounded-full bg-[#f5f5f7] p-1">
+          {(["month", "year", "all"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                period === p ? "bg-white text-[#1d1d1f] shadow-sm" : "text-[#86868b]"
+              }`}
+            >
+              {p === "month" ? "이번 달" : p === "year" ? "올해" : "전체"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {orderCount === 0 ? (
+        <p className="mt-4 text-xs text-[#86868b]">이 기간에 발행된 구매발주가 없습니다.</p>
+      ) : (
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div>
+            <p className="text-2xl font-bold text-[#1d1d1f]">{fmt(totalKrw)}</p>
+            <p className="mt-0.5 text-xs text-[#86868b]">
+              발행 {orderCount}건 · 원화 환산 합계
+              {missingRateCount > 0 && ` (환율 미기록 ${missingRateCount}건 제외)`}
+            </p>
+            {/* 생산/개발 비중 — 막대 하나로 바로 감이 오게. */}
+            {totalKrw > 0 && (
+              <div className="mt-3 space-y-1.5">
+                <div className="flex h-2 overflow-hidden rounded-full bg-[#f5f5f7]">
+                  <div className="bg-[#1d1d1f]" style={{ width: `${(byKind.production / totalKrw) * 100}%` }} />
+                  <div className="bg-violet-400" style={{ width: `${(byKind.development / totalKrw) * 100}%` }} />
+                </div>
+                <div className="flex justify-between text-xs text-[#86868b]">
+                  <span>생산 {fmt(byKind.production)}</span>
+                  <span>개발 {fmt(byKind.development)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-[#86868b]">발주처별</p>
+            <div className="mt-1.5 space-y-1">
+              {bySupplier.slice(0, 5).map(([name, krw]) => (
+                <div key={name} className="flex items-center justify-between text-xs">
+                  <span className="truncate text-[#1d1d1f]">{name}</span>
+                  <span className="shrink-0 text-[#86868b]">{fmt(krw)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-[#86868b]">프로젝트별</p>
+            {byProject.length === 0 ? (
+              <p className="mt-1.5 text-xs text-[#d1d1d6]">연결된 프로젝트가 없습니다.</p>
+            ) : (
+              <div className="mt-1.5 space-y-1">
+                {byProject.slice(0, 5).map(([name, krw]) => (
+                  <div key={name} className="flex items-center justify-between text-xs">
+                    <span className="truncate text-[#1d1d1f]">{name}</span>
+                    <span className="shrink-0 text-[#86868b]">{fmt(krw)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -924,6 +1068,7 @@ function SupplierOrderComposer({
   grouped,
   clientNameById,
   clientOrders,
+  projects,
   existingOrders,
   onClose,
   onCreated,
@@ -934,6 +1079,7 @@ function SupplierOrderComposer({
   grouped: [string, CatalogEntry[]][];
   clientNameById: Record<string, string>;
   clientOrders: PurchaseOrder[];
+  projects: Project[];
   existingOrders: SupplierOrder[];
   onClose: () => void;
   onCreated: () => void;
@@ -985,6 +1131,7 @@ function SupplierOrderComposer({
   // 새 번호가 붙으면, 이미 공장에 나간 발주서와 번호가 달라진다.
   const effectiveLotNo = lotNo.trim() || (editing ? "" : autoLotNo);
   const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
+  const [linkedProjectId, setLinkedProjectId] = useState(editing?.linkedProjectId ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1071,6 +1218,7 @@ function SupplierOrderComposer({
 
   const total = calcSupplierOrderTotal(finalItems);
   const linkedPo = clientOrders.find((o) => o.id === linkedPoId);
+  const linkedProject = projects.find((p) => p.id === linkedProjectId);
 
   usePrintFileName([supplierName, "구매발주서", items.map((it) => it.name).filter(Boolean).join(",")], previewOpen);
   // 미리보기 중에는 위쪽 "발주 관리" 헤더·탭을 감춰서 문서만 꽉 차게 보이게 한다.
@@ -1178,6 +1326,8 @@ function SupplierOrderComposer({
           // 않은 연결이 조용히 끊기면 안 된다 — 선택값이 그대로면 원래 값을 유지한다.
           linkedPurchaseOrderId: linkedPoId ? linkedPo?.id ?? editing.linkedPurchaseOrderId : undefined,
           linkedPurchaseOrderNo: linkedPoId ? linkedPo?.poNumber ?? editing.linkedPurchaseOrderNo : undefined,
+          linkedProjectId: linkedProjectId ? linkedProject?.id ?? editing.linkedProjectId : undefined,
+          linkedProjectName: linkedProjectId ? linkedProject?.name ?? editing.linkedProjectName : undefined,
         });
         onCreated();
         return;
@@ -1196,6 +1346,8 @@ function SupplierOrderComposer({
         lotNo: effectiveLotNo,
         linkedPurchaseOrderId: linkedPo?.id,
         linkedPurchaseOrderNo: linkedPo?.poNumber,
+        linkedProjectId: linkedProject?.id,
+        linkedProjectName: linkedProject?.name,
         createdBy,
       });
       onCreated();
@@ -1634,13 +1786,36 @@ function SupplierOrderComposer({
               않는다(고객이 읽을 수 있는 컬렉션이라 원가 문서의 존재가 새면 안 된다). */}
           <select
             value={linkedPoId}
-            onChange={(e) => setLinkedPoId(e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value;
+              setLinkedPoId(id);
+              // 고객 발주에 이미 연결된 프로젝트가 있으면 그대로 따라간다 — 관리자가 직접
+              // 프로젝트를 또 고르지 않아도 되게. 이미 다른 프로젝트를 골라둔 상태면 덮지 않는다.
+              const po = clientOrders.find((o) => o.id === id);
+              if (po?.linkedProjectId && !linkedProjectId) setLinkedProjectId(po.linkedProjectId);
+            }}
             className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
           >
             <option value="">연결할 고객 발주 없음</option>
             {clientOrders.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.poNumber} · {o.clientName}
+              </option>
+            ))}
+          </select>
+
+          {/* 프로젝트 연결 — 나중에 "이 프로젝트에 원가가 얼마 나갔나"를 집계하려면 반드시
+              필요한데, 지금까지는 이 값을 채울 입력칸 자체가 없어서 아무 발주도 프로젝트에
+              연결돼 있지 않았다. 고객 발주와 마찬가지로 이 참조도 구매발주 문서에만 저장된다. */}
+          <select
+            value={linkedProjectId}
+            onChange={(e) => setLinkedProjectId(e.target.value)}
+            className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+          >
+            <option value="">연결할 프로젝트 없음</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · {clientNameById[p.clientId] ?? "-"}
               </option>
             ))}
           </select>
@@ -1734,9 +1909,18 @@ function SupplierOrderDetail({
         </div>
       </div>
 
-      {order.linkedPurchaseOrderNo && (
-        <div className="rounded-2xl bg-[#f5f5f7] px-4 py-3 text-xs text-[#1d1d1f]">
-          고객 발주 <span className="font-semibold">{order.linkedPurchaseOrderNo}</span> 건으로 발행한 구매발주입니다.
+      {(order.linkedPurchaseOrderNo || order.linkedProjectName) && (
+        <div className="space-y-1 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-xs text-[#1d1d1f]">
+          {order.linkedPurchaseOrderNo && (
+            <p>
+              고객 발주 <span className="font-semibold">{order.linkedPurchaseOrderNo}</span> 건으로 발행한 구매발주입니다.
+            </p>
+          )}
+          {order.linkedProjectName && (
+            <p>
+              프로젝트 <span className="font-semibold">{order.linkedProjectName}</span>에 연결됨 — 원가 집계에 포함됩니다.
+            </p>
+          )}
         </div>
       )}
 

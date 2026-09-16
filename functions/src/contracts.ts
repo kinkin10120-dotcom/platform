@@ -752,6 +752,50 @@ export const checkPendingContractSignatures = onSchedule(
   }
 );
 
+// 서명이 끝난 계약의 용역기간(제3조 periodEnd) 만료가 다가오면 관리자에게 미리 알려서,
+// 재계약·연장 논의 타이밍을 놓치지 않게 한다. 이미 서명·연동된(실제로 효력이 발생한) 계약만
+// 대상으로 한다 — 아직 발송 전이거나 초안 단계인 계약은 용역기간이 확정된 게 아니라서 대상이
+// 아니다. 14일 전에 딱 한 번만 보낸다(3일 간격 재알림을 쓰는 서명 리마인더와 달리, 이건
+// 급박한 액션이 필요한 게 아니라 "슬슬 챙겨야 한다"는 참고용 알림이라 반복할 필요가 없다).
+export const checkExpiringContracts = onSchedule(
+  { schedule: "0 9 * * *", timeZone: "Asia/Seoul" },
+  async () => {
+    const snap = await db.collection("contracts").where("status", "in", ["signed", "linked"]).get();
+    const now = new Date();
+    const nowMs = now.setHours(0, 0, 0, 0);
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (data.expiryReminderSentAt) continue;
+      if (!data.periodEnd) continue;
+
+      const endMs = new Date(`${data.periodEnd}T00:00:00`).getTime();
+      if (Number.isNaN(endMs)) continue;
+      const daysLeft = Math.round((endMs - nowMs) / 86400000);
+      // 이미 지난 계약(daysLeft < 0)은 뒤늦게 알려봐야 의미가 없다 — 조용히 건너뛴다.
+      if (daysLeft < 0 || endMs - nowMs > FOURTEEN_DAYS_MS) continue;
+
+      await docSnap.ref.update({ expiryReminderSentAt: FieldValue.serverTimestamp() });
+
+      const adminsSnap = await db.collection("users").where("role", "==", "admin").get();
+      const dDay = daysLeft === 0 ? "오늘" : `${daysLeft}일 후`;
+      await Promise.all(
+        adminsSnap.docs.map((a) =>
+          db.collection("notifications").add({
+            userId: a.id,
+            type: "contract_expiring",
+            contractId: docSnap.id,
+            message: `${data.companyName}과의 계약(${data.title}) 용역기간이 ${dDay}(${data.periodEnd}) 만료됩니다. 재계약·연장 여부를 확인해 주세요.`,
+            read: false,
+            createdAt: FieldValue.serverTimestamp(),
+          })
+        )
+      );
+    }
+  }
+);
+
 // contracts 문서의 status가 "sent"로 바뀌는 순간(최초 발송 + 수정요청 반영 후 재발송 모두
 // 포함)을 감지해 상대방에게 서명 링크 메일을 보낸다. sendContract()는 순수 클라이언트
 // Firestore 쓰기라 이 트리거가 없으면 발송해도 상대방에게 아무 메일도 가지 않는다.

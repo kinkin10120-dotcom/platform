@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download } from "lucide-react";
+import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenUsersByClient } from "@/lib/firestore/users";
@@ -68,7 +68,7 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 
 export default function OrdersPage() {
   const { appUser } = useAuth();
-  const [tab, setTab] = useState<"orders" | "catalog" | "supplier">("orders");
+  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid">("orders");
   // 구매발주서 미리보기 중에는 아래 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
   const [supplierPreviewing, setSupplierPreviewing] = useState(false);
 
@@ -107,10 +107,24 @@ export default function OrdersPage() {
           >
             구매 발주
           </button>
+          <button
+            onClick={() => setTab("unpaid")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "unpaid" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            미수금
+          </button>
         </div>
       </div>
 
-      {tab === "orders" ? <OrdersTab /> : tab === "catalog" ? <CatalogTab /> : <SupplierOrdersTab onPreview={setSupplierPreviewing} />}
+      {tab === "orders" ? (
+        <OrdersTab />
+      ) : tab === "catalog" ? (
+        <CatalogTab />
+      ) : tab === "supplier" ? (
+        <SupplierOrdersTab onPreview={setSupplierPreviewing} />
+      ) : (
+        <UnpaidInstallmentsTab />
+      )}
     </div>
   );
 }
@@ -1120,6 +1134,133 @@ function LinkedTaskPicker({ order }: { order: PurchaseOrder }) {
       <span>연결 업무 (계약금 확인 시 자동 착수 처리)</span>
       <span className="font-semibold text-[#1d1d1f]">{order.linkedTaskName ?? "설정 안 함"}</span>
     </button>
+  );
+}
+
+// ---- 미수금 한눈에 보기 ----
+//
+// 지금까지는 청구서(회차)의 입금 여부를 확인하려면 발주를 하나씩 열어봐야 했다. 여기는
+// 전체 고객을 통틀어 "발행은 됐는데 아직 입금 확인이 안 된 회차"만 모아서 보여준다 —
+// 데이터 자체는 이미 있던 payment.installments를 그대로 훑을 뿐이고, 새로 저장하는 값은 없다.
+interface UnpaidRow {
+  order: PurchaseOrder;
+  index: number;
+  label: string;
+  amount: number;
+  currency: Currency;
+  issuedAt: number;
+  daysSinceIssued: number;
+}
+
+function UnpaidInstallmentsTab() {
+  const { appUser } = useAuth();
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [marking, setMarking] = useState<string | null>(null);
+
+  useEffect(() => listenAllPurchaseOrders(setOrders), []);
+
+  const rows = useMemo(() => {
+    const now = Date.now();
+    const out: UnpaidRow[] = [];
+    for (const order of orders) {
+      if (order.status === "cancelled" || !order.payment) continue;
+      // 발주 품목이 전부 USD면 그 발주는 달러로 청구한다 — 기존 미수금 리마인더
+      // (checkOverdueInvoices)와 같은 판단 기준을 그대로 쓴다.
+      const isUsd = order.items.length > 0 && order.items.every((it) => it.currency === "USD");
+      order.payment.installments.forEach((it, i) => {
+        if (!it.issuedAt || it.paid) return;
+        out.push({
+          order,
+          index: i,
+          label: it.label,
+          amount: it.amount,
+          currency: isUsd ? "USD" : "KRW",
+          issuedAt: it.issuedAt,
+          daysSinceIssued: Math.floor((now - it.issuedAt) / 86400000),
+        });
+      });
+    }
+    // 가장 오래 밀린 것부터 — 놓치기 쉬운 순서대로 위에 오게 한다.
+    return out.sort((a, b) => b.daysSinceIssued - a.daysSinceIssued);
+  }, [orders]);
+
+  const totalsByCurrency = useMemo(() => {
+    const totals: Record<Currency, number> = { KRW: 0, USD: 0 };
+    for (const r of rows) totals[r.currency] += r.amount;
+    return totals;
+  }, [rows]);
+
+  async function handleMarkPaid(row: UnpaidRow) {
+    if (!appUser) return;
+    const key = `${row.order.id}-${row.index}`;
+    setMarking(key);
+    try {
+      await markInstallmentPaid(row.order, row.index, { uid: appUser.uid, name: appUser.name });
+    } finally {
+      setMarking(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {rows.length > 0 && (
+        <div className="flex flex-wrap gap-4 rounded-3xl bg-white p-5">
+          <div>
+            <p className="text-xs text-[#86868b]">미수금 합계</p>
+            <p className="mt-0.5 text-xl font-bold text-[#1d1d1f]">
+              {totalsByCurrency.KRW > 0 && formatMoney(totalsByCurrency.KRW, "KRW")}
+              {totalsByCurrency.KRW > 0 && totalsByCurrency.USD > 0 && " · "}
+              {totalsByCurrency.USD > 0 && formatMoney(totalsByCurrency.USD, "USD")}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-[#86868b]">
+            <AlertTriangle size={13} className="text-amber-500" />
+            미확인 {rows.length}건
+          </div>
+        </div>
+      )}
+
+      {rows.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
+          미확인 청구가 없습니다.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-3xl bg-white">
+          {rows.map((r) => {
+            const key = `${r.order.id}-${r.index}`;
+            const overdue = r.daysSinceIssued >= 7;
+            return (
+              <div
+                key={key}
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3.5 last:border-b-0"
+              >
+                <Link href={`/orders/${r.order.id}/invoice/${r.index}`} className="min-w-0 flex-1 hover:opacity-70">
+                  <p className="truncate text-sm font-medium text-[#1d1d1f]">
+                    {r.order.clientName} · {r.label}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[#86868b]">
+                    {r.order.poNumber} · 발행일 {new Date(r.issuedAt).toLocaleDateString("ko-KR")}
+                  </p>
+                </Link>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${overdue ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-600"}`}>
+                    {r.daysSinceIssued}일 경과
+                  </span>
+                  <span className="text-sm font-semibold text-[#1d1d1f]">{formatMoney(r.amount, r.currency)}</span>
+                  <button
+                    onClick={() => handleMarkPaid(r)}
+                    disabled={marking === key}
+                    className="rounded-full bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+                  >
+                    {marking === key ? "처리 중..." : "입금 확인"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -213,7 +213,8 @@ export type NotificationType =
   | "order_status_change"
   | "order_cancel_request"
   | "contract_signed"
-  | "contract_revision_requested";
+  | "contract_revision_requested"
+  | "contract_expiring";
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   assigned: "업무 배정",
@@ -235,6 +236,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   order_cancel_request: "발주 취소 요청",
   contract_signed: "계약서 서명 완료",
   contract_revision_requested: "계약서 수정 요청",
+  contract_expiring: "계약 만료 임박",
 };
 
 export interface AppNotification {

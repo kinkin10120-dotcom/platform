@@ -103,8 +103,28 @@ export interface ContractTokenFields {
   handyhandIsGap?: boolean;
 }
 
+// functions/src/contracts.ts의 동명 함수와 동일한 이유로 로케일 이름에 기대지 않는다 —
+// 실제로 서버 쪽 Cloud Functions 런타임에서 "ko-KR" 로케일의 오전/오후 표기만 영문
+// "AM"/"PM"으로 새는 사례가 있었다(날짜 자체는 한국어 표기로 정상 출력되면서). 브라우저는
+// 대체로 문제없지만, 서버·클라이언트 두 곳이 항상 같은 문자열을 만들어야 하므로 같은 방식
+// (en-US + 숫자 전용 옵션으로 뽑고 직접 조립)으로 통일한다.
 function formatKoreanDateTime(millis?: number): string {
-  return millis ? new Date(millis).toLocaleString("ko-KR") : "";
+  if (!millis) return "";
+  const date = new Date(millis);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  const hour24 = Number(get("hour"));
+  const period = hour24 < 12 ? "오전" : "오후";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${get("year")}. ${get("month")}. ${get("day")}. ${period} ${hour12}:${get("minute")}:${get("second")}`;
 }
 
 // {{contractDate}}용 — 계약 체결일은 곧 전자서명 완료일이다(템플릿 제5조와 동일한 기준).

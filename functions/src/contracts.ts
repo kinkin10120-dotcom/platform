@@ -105,17 +105,38 @@ async function assertContractEmailMatch(contractId: string, email?: string) {
   return { snap, data };
 }
 
-// 프론트엔드 src/lib/contractTemplate.ts의 resolveContractTokens와 동일한 로직 — 별도 프로젝트라
-// 모듈을 공유할 수 없어 여기서도 동일하게 유지한다. 서명 페이지에 보여주는 내용과 서명 완료 시
-// 영구 저장되는 signedBodyText 모두 이 함수를 거쳐 토큰이 실제 값으로 치환된 최종본이어야 한다.
+// 실제 배포된 Cloud Functions 런타임에서 확인된 문제: `.toLocaleString("ko-KR", {...})`가
+// 날짜(년.월.일)는 한국어 표기로 내놓으면서 오전/오후만 영문 "AM"/"PM"으로 새는 경우가 있다
+// (해당 런타임의 ICU 데이터가 "ko" 로케일의 일부 구성요소만 갖고 있는 것으로 보인다 — 같은
+// 계약서를 관리자 화면(브라우저, 정상 "오후")과 고객이 보는 서명 페이지(이 서버 함수를 거침,
+// "PM")에서 서로 다르게 보여주는 것으로 실제 확인했다). 로케일 이름에 기대는 대신, 항상 존재를
+// 보장할 수 있는 "en-US" + 숫자 전용 옵션으로 그 타임존의 실제 년/월/일/시/분/초만 뽑아내고,
+// "년/월/일" 표기와 "오전/오후" 판정은 우리가 직접 조립한다 — 어떤 Node 런타임에서 돌아가도
+// 결과가 달라지지 않는다.
 // f.signedAt/f.sentAt는 호출 시점에 따라 Firestore Timestamp(읽어온 원본 문서)이거나, 방금
 // 계산한 Timestamp.now()/JS Date(이번 요청에서 직접 만든 값)일 수 있어 둘 다 처리한다.
 function formatKoreanDateTime(v: unknown): string {
-  if (!v) return "";
-  if (v instanceof Timestamp) return v.toDate().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-  if (v instanceof Date) return v.toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-  if (typeof v === "number") return new Date(v).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
-  return "";
+  let date: Date | null = null;
+  if (v instanceof Timestamp) date = v.toDate();
+  else if (v instanceof Date) date = v;
+  else if (typeof v === "number") date = new Date(v);
+  if (!date) return "";
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  const hour24 = Number(get("hour"));
+  const period = hour24 < 12 ? "오전" : "오후";
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${get("year")}. ${get("month")}. ${get("day")}. ${period} ${hour12}:${get("minute")}:${get("second")}`;
 }
 
 // {{contractDate}}용 — src/lib/contractTemplate.ts의 formatContractDate와 동일하게 유지한다.
@@ -594,7 +615,8 @@ async function sendContractSignedConfirmation(
   email: string,
   info: { contractId: string; companyName: string; title: string; signerName: string; contentHash: string }
 ) {
-  const signedAtStr = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" });
+  // 위 formatKoreanDateTime과 동일한 이유로 로케일 이름에 기대지 않는다.
+  const signedAtStr = formatKoreanDateTime(new Date());
   // 서명 완료본은 PDF를 직접 첨부하는 대신(서버에 PDF 생성 기능이 없음), 서명 페이지 링크를
   // 안내한다 — 그 페이지가 이미 서명 완료 상태에서 "계약서 본문" 미리보기·인쇄/PDF 저장 버튼을
   // 그대로 제공하므로, 클릭 한 번으로 동일한 결과(각 페이지에 해시가 찍힌 서명본 PDF)를 얻는다.

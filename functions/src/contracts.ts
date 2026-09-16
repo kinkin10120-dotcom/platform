@@ -50,7 +50,7 @@ export const sendContract = onCall({ invoker: "public" }, async (request) => {
   const resolvedAttachments = ((data.attachments ?? []) as any[]).map((a) => ({
     id: a.id,
     title: a.title,
-    bodyHtml: resolveContractTokens(a.bodyHtml ?? "", enrichedData),
+    bodyHtml: resolveContractTokens(a.bodyHtml ?? "", enrichedData, { skipSignatureBlocks: true }),
   }));
   // 서명 시점 해시(contentHash)와 같은 방식으로, "우리가 실제로 무엇을 보냈는지"도 남겨서
   // 나중에 발송본과 서명본이 정말 같은 내용이었는지 대조 검증할 수 있게 한다.
@@ -235,7 +235,18 @@ function replaceTopLevelParens(text: string, replacer: (match: string, label: st
   return result;
 }
 
-function resolveContractTokens(bodyText: string, f: FirebaseFirestore.DocumentData): string {
+function resolveContractTokens(
+  bodyText: string,
+  f: FirebaseFirestore.DocumentData,
+  opts?: {
+    // 별첨(스펙 문서·도면 등)에는 "갑"/"을" 당사자도, 서명란도 있을 이유가 없다. 그런데 이
+    // 함수를 별첨 bodyHtml에도 그대로 돌리면 아래 placeSignatureBlock이 "갑"/"을" 제목을
+    // 찾지 못해 문서 맨 끝에 서명란을 통째로 하나 더 붙여버린다 — 실제로 그렇게 서명 완료된
+    // 계약의 별첨 끝에 서명란이 중복으로 찍히는 사고가 있었다. 별첨을 처리할 땐 이 옵션으로
+    // 서명란 삽입 단계를 아예 건너뛴다.
+    skipSignatureBlocks?: boolean;
+  }
+): string {
   const blank = "[미입력]";
   const tokens: Record<string, string> = {
     companyName: f.companyName || blank,
@@ -264,6 +275,7 @@ function resolveContractTokens(bodyText: string, f: FirebaseFirestore.DocumentDa
     const key = BRACKET_LABEL_TOKENS[normalizeBracketLabel(label)];
     return key ? tokens[key] : match;
   });
+  if (opts?.skipSignatureBlocks) return withBrackets;
   // 관리자가 기본 템플릿을 안 쓰고 본문을 처음부터 직접 써서 {{gapSignature}}/{{eulSignature}}
   // 토큰 자체가 없는 계약서도 있다 — 그런 경우에도 서명란이 반드시 나오도록, 없으면 자동으로
   // 채워준다. 이미 signatureBlock 노드가 본문에 박혀있다면(관리자가 에디터에서 한 번 손을 대는
@@ -433,7 +445,7 @@ export const getContractForSigning = onCall({ invoker: "public" }, async (reques
     attachments: rawAttachments.map((a: any) => ({
       id: a.id,
       title: a.title,
-      bodyHtml: isFinal ? a.bodyHtml : resolveContractTokens(a.bodyHtml, data),
+      bodyHtml: isFinal ? a.bodyHtml : resolveContractTokens(a.bodyHtml, data, { skipSignatureBlocks: true }),
     })),
     version: data.version ?? 1,
     signedAt: data.signedAt?.toMillis ? data.signedAt.toMillis() : data.signedAt,
@@ -515,7 +527,7 @@ export const submitContractSignature = onCall({ invoker: "public", secrets: [int
   const resolvedAttachments = ((data.attachments ?? []) as any[]).map((a) => ({
     id: a.id,
     title: a.title,
-    bodyHtml: resolveContractTokens(a.bodyHtml ?? "", enrichedData),
+    bodyHtml: resolveContractTokens(a.bodyHtml ?? "", enrichedData, { skipSignatureBlocks: true }),
   }));
   const contentHash = createHash("sha256")
     .update(resolvedBodyText + resolvedAttachments.map((a) => a.bodyHtml).join(""))

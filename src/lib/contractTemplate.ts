@@ -234,7 +234,15 @@ function replaceTopLevelParens(text: string, replacer: (match: string, label: st
 export function resolveContractTokens(
   bodyText: string,
   f: ContractTokenFields,
-  opts?: { keepContractDateToken?: boolean }
+  opts?: {
+    keepContractDateToken?: boolean;
+    // 별첨(스펙 문서·도면 등)에는 "갑"/"을" 당사자도, 서명란도 있을 이유가 없다. 그런데 이
+    // 함수를 별첨 bodyHtml에도 그대로 돌리면(과거 submitContractSignature가 그렇게 했다)
+    // 아래 placeSignatureBlock이 "갑"/"을" 제목을 못 찾고 문서 맨 끝에 서명란을 억지로
+    // 붙여버린다 — 별첨 끝에 계약서 서명란이 통째로 하나 더 나타나던 사고의 원인이었다.
+    // 별첨을 처리할 땐 이 옵션으로 서명란 삽입 단계 자체를 건너뛴다.
+    skipSignatureBlocks?: boolean;
+  }
 ): string {
   const tokens = buildContractTokenValues(f);
   if (opts?.keepContractDateToken && !f.signedAt) tokens.contractDate = "{{contractDate}}";
@@ -246,6 +254,7 @@ export function resolveContractTokens(
     const key = BRACKET_LABEL_TOKENS[normalizeBracketLabel(label)];
     return key ? tokens[key] : match;
   });
+  if (opts?.skipSignatureBlocks) return withBrackets;
   // 관리자가 기본 템플릿을 안 쓰고 본문을 처음부터 직접 써서 {{gapSignature}}/{{eulSignature}}
   // 토큰 자체가 없는 계약서도 있다 — 그런 경우에도 서명란이 반드시 나오도록, 없으면 자동으로
   // 채워준다. 이미 signatureBlock 노드가 본문에 박혀있다면(관리자가 에디터에서 한 번 손을 대는

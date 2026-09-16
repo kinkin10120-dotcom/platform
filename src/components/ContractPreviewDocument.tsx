@@ -5,7 +5,7 @@ import { Currency } from "@/lib/types";
 import { sanitizeContractHtml } from "@/lib/contractSanitize";
 import { plainTextToHtml } from "@/lib/contractTemplate";
 import { PAGE_HEIGHT_PX, CONTENT_WIDTH_PX, CONTENT_HEIGHT_PX, SAFETY_BUFFER_PX, HEADER_BODY_GAP_PX } from "@/lib/a4Layout";
-import { paginateHtml } from "@/lib/contractPagination";
+import { paginateHtml, preloadImages, stripStraySignatureBlocks } from "@/lib/contractPagination";
 
 export interface ContractPreviewAttachment {
   id: string;
@@ -117,7 +117,7 @@ export default function ContractPreviewDocument({ data }: { data: ContractPrevie
 
       for (const attachment of data.attachments ?? []) {
         const attachmentPages = paginateHtml(
-          attachment.bodyHtml,
+          stripStraySignatureBlocks(attachment.bodyHtml),
           { first: CONTENT_HEIGHT_PX - ATTACHMENT_HEADER_HEIGHT_PX - SAFETY_BUFFER_PX, rest: CONTENT_HEIGHT_PX - SAFETY_BUFFER_PX },
           measureEl
         );
@@ -137,10 +137,15 @@ export default function ContractPreviewDocument({ data }: { data: ContractPrevie
     // 커스텀 웹폰트(Pretendard)가 로딩되기 전에 측정하면 임시 대체 폰트 기준으로 줄바꿈 위치가
     // 계산돼서, 실제 폰트가 적용된 뒤(특히 인쇄 시)와 쪽 나눔이 어긋난다(미리보기 4쪽인데 실제
     // 인쇄는 6쪽으로 나오는 식) — 폰트 로딩이 끝난 뒤 한 번 더 계산해서 이 오차를 없앤다.
+    // 첨부 이미지도 같은 문제를 겪는다 — width/height 속성이 없는 이미지는 실제로 받아 디코드
+    // 되기 전까지 브라우저가 크기를 0으로 본다(preloadImages 주석 참고). 캐시된 상태에서만
+    // 우연히 맞아서 간헐적으로만 재현됐다.
     compute();
-    if (typeof document !== "undefined" && "fonts" in document) {
-      document.fonts.ready.then(compute).catch(() => {});
-    }
+    const fontsReady = typeof document !== "undefined" && "fonts" in document ? document.fonts.ready : Promise.resolve();
+    const imagesReady = preloadImages([data.bodyText, ...(data.attachments ?? []).map((a) => a.bodyHtml)]);
+    Promise.all([fontsReady, imagesReady]).then(() => {
+      if (!cancelled) compute();
+    });
     return () => {
       cancelled = true;
     };

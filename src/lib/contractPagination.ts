@@ -116,3 +116,60 @@ export function paginateHtml(html: string, budgets: { first: number; rest: numbe
   if (current.length > 0) pages.push(current.join(""));
   return pages.length > 0 ? pages : [""];
 }
+
+// 첨부에 이미지가 들어간 계약서를 열 때(특히 새 브라우저/캐시가 없는 환경) PDF 페이지 수가
+// 미리보기와 달라지던 원인. width/height 속성이 없는 <img>는 브라우저가 실제 파일을 받아
+// 디코드하기 전까지 크기를 0으로 취급한다 — 그 상태에서 paginateHtml이 곧바로 높이를 재면
+// 그 이미지가 있는 페이지가 실제보다 훨씬 짧게 측정되어, 뒤 블록들이 그 페이지에 잘못
+// 욱여넣어지거나(내용이 실제 종이 밖으로 넘침) 반대로 이후 페이지들이 텅 빈 채로 남는다.
+// 이미지가 캐시돼 있으면 우연히 안 걸려서 간헐적으로만 재현됐다. 측정 직전에 본문·첨부에
+// 나오는 모든 이미지를 먼저 받아 디코드해두면, 그 다음 동기 측정은 항상 실제 크기를 본다
+// (커스텀 웹폰트가 늦게 로드되는 문제를 document.fonts.ready로 잡은 것과 같은 종류의 수정).
+export async function preloadImages(htmlList: string[]): Promise<void> {
+  const srcs = new Set<string>();
+  for (const html of htmlList) {
+    if (!html) continue;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    wrapper.querySelectorAll("img").forEach((img) => {
+      const src = img.getAttribute("src");
+      if (src) srcs.add(src);
+    });
+  }
+  await Promise.all(
+    Array.from(srcs).map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const img = new Image();
+          // 이미 브라우저 캐시에 있으면 로드가 동기적으로 "완료" 상태로 시작해 onload가
+          // 아예 안 불릴 수 있다 — complete를 바로 한 번 확인해야 그 경우도 놓치지 않는다.
+          if (img.complete) {
+            resolve();
+            return;
+          }
+          img.onload = () => resolve();
+          // 깨진 이미지(삭제된 파일 등)여도 나머지 페이지 측정은 계속되어야 하므로 성공/실패
+          // 구분 없이 진행한다 — 여기서 멈추면 이미지 하나 때문에 계약서 전체가 안 열린다.
+          img.onerror = () => resolve();
+          img.src = src;
+        })
+    )
+  );
+}
+
+// 별첨(스펙 문서·도면 등)에 계약서 서명란이 섞여 나오는 걸 막는 마지막 방어선.
+//
+// 원래는 submitContractSignature/sendContract가 별첨까지 resolveContractTokens에 통째로
+// 태워서 생긴 문제였다 — 별첨엔 "갑"/"을" 제목이 없으니 서명란을 꽂을 자리를 못 찾고 문서
+// 맨 끝에 억지로 붙여버렸다(그 서버 함수들은 이제 skipSignatureBlocks로 이 자체를 막는다).
+// 하지만 이미 그렇게 서명이 끝나 signedAttachments가 통째로 얼어붙은(문서 해시로 무결성을
+// 증빙하는) 계약서는 원본 문자열을 지금 와서 고칠 수 없다 — 고치면 그 순간 저장된
+// contentHash와 실제 내용이 달라져 "증빙"으로서의 의미가 깨진다. 그래서 저장값은 그대로
+// 두고, 화면에 그릴 때만 이 얼룩을 걸러낸다.
+export function stripStraySignatureBlocks(html: string): string {
+  if (!html.includes("data-signature-block")) return html;
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  wrapper.querySelectorAll("[data-signature-block]").forEach((el) => el.remove());
+  return wrapper.innerHTML;
+}

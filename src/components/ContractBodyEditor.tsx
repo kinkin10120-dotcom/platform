@@ -11,7 +11,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage
 import { storage } from "@/lib/firebase";
 import { compressImage } from "@/lib/imageCompress";
 import { PAGE_PADDING_PX, CONTENT_WIDTH_PX, CONTENT_HEIGHT_PX, SAFETY_BUFFER_PX, HEADER_BODY_GAP_PX } from "@/lib/a4Layout";
-import { paginateHtml } from "@/lib/contractPagination";
+import { paginateHtml, preloadImages } from "@/lib/contractPagination";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import { PageHeader, ContractHeaderData } from "@/components/ContractPreviewDocument";
 import { PageGaps, pageGapsPluginKey, PageGap } from "@/lib/tiptapPageGaps";
@@ -343,8 +343,12 @@ export default function ContractBodyEditor({
     // (ContractPreviewDocument)는 이미 fonts.ready 후 다시 계산하는데 이 편집기에는 그게
     // 빠져 있어서, 폰트가 캐시되지 않은 상태로 열면 "크게 편집"과 미리보기의 쪽 나눔이
     // 서로 다르게 나왔다(캐시된 상태에선 우연히 맞아서 간헐적으로만 재현됐다).
+    // 본문에 이미지가 있으면 같은 문제를 겪는다 — width/height 속성이 없는 이미지는 실제로
+    // 받아 디코드되기 전까지 크기가 0으로 측정된다(preloadImages 주석 참고).
     if (typeof document !== "undefined" && "fonts" in document) {
-      document.fonts.ready.then(recompute).catch(() => {});
+      Promise.all([document.fonts.ready, preloadImages([editor.getHTML()])]).then(() => {
+        if (!cancelled) recompute();
+      });
     }
     editor.on("update", recompute);
     window.addEventListener("resize", recompute);

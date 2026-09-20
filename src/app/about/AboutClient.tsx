@@ -126,6 +126,7 @@ export default function AboutPage() {
                   </Link>
                 )
               )}
+              <Link href="/en/about" className="whitespace-nowrap text-sm text-white/40 transition hover:text-white">ENG</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="hidden min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 lg:block">
@@ -152,7 +153,7 @@ export default function AboutPage() {
               className="mt-2 overflow-hidden rounded-3xl border border-white/15 bg-black/90 p-2 backdrop-blur-xl lg:hidden"
               style={{ animation: "menuFadeIn 0.2s ease forwards" }}
             >
-              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }].map((item, i, arr) => (
+              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }, { href: "/en/about", label: "ENG" }].map((item, i, arr) => (
                 <Link
                   key={item.href}
                   href={item.href}

@@ -14,5 +14,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${base}/handyworks`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
     { url: `${base}/privacy`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
     { url: `${base}/terms`, lastModified: now, changeFrequency: "yearly", priority: 0.2 },
+    { url: `${base}/en`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
+    { url: `${base}/en/about`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${base}/en/service`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${base}/en/process`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${base}/en/portfolio`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
+    { url: `${base}/en/ai-analysis`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
   ];
 }

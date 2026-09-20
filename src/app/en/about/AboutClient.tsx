@@ -14,9 +14,9 @@ import { ContactModal } from "@/components/ContactModal";
 // 교체할 것.
 const NAV_LINKS = [
   { href: "/en/about", label: "About", isLink: true },
-  { href: "/service", label: "Services", isLink: true },
-  { href: "/process", label: "Process", isLink: true },
-  { href: "/portfolio", label: "Portfolio", isLink: true },
+  { href: "/en/service", label: "Services", isLink: true },
+  { href: "/en/process", label: "Process", isLink: true },
+  { href: "/en/portfolio", label: "Portfolio", isLink: true },
   { href: "/en/ai-analysis", label: "AI Analysis", isLink: true },
 ];
 

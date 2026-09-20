@@ -902,7 +902,7 @@ export default function ServicePage() {
         <p className="mt-4">© 2026 HANDYHAND. All rights reserved.</p>
       </footer>
 
-      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} initialStage={ctaCategory} />}
+      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} initialStage={ctaCategory} lang="en" />}
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} initialType={ctaCategory} lang="en" />}
     </div>
   );

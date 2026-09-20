@@ -399,7 +399,7 @@ export default function ProcessPage() {
         <p className="mt-4">© 2026 HANDYHAND. All rights reserved.</p>
       </footer>
 
-      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} />}
+      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} lang="en" />}
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
     </div>
   );

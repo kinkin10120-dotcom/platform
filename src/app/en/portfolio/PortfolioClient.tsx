@@ -324,7 +324,7 @@ export default function PortfolioPage() {
           onQuote={() => { setSelectedBrand(null); setQuoteOpen(true); }}
         />
       )}
-      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} />}
+      {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} lang="en" />}
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
     </div>
   );

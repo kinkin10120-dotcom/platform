@@ -771,7 +771,7 @@ export default function AiAnalysisPage() {
         <p className="mt-4">© 2026 HANDYHAND. All rights reserved.</p>
       </footer>
 
-      {quoteOpen && <QuoteModal onClose={() => { setQuoteOpen(false); setQuotePrefill(""); }} prefillDescription={quotePrefill} />}
+      {quoteOpen && <QuoteModal onClose={() => { setQuoteOpen(false); setQuotePrefill(""); }} prefillDescription={quotePrefill} lang="en" />}
       {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
       {cadOpen && (
         <CadAnalysisModal

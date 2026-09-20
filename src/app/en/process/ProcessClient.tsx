@@ -16,6 +16,7 @@ import {
   Truck,
   Mail,
   ChevronDown,
+  Languages,
 } from "lucide-react";
 import { QuoteModal } from "@/components/QuoteModal";
 import { ContactModal } from "@/components/ContactModal";
@@ -149,7 +150,6 @@ export default function ProcessPage() {
                   </Link>
                 )
               )}
-              <Link href="/process" className="whitespace-nowrap text-sm text-white/40 transition hover:text-white">KOR</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="hidden min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 lg:block">
@@ -176,7 +176,7 @@ export default function ProcessPage() {
               className="mt-2 overflow-hidden rounded-3xl border border-white/15 bg-black/90 p-2 backdrop-blur-xl lg:hidden"
               style={{ animation: "menuFadeIn 0.2s ease forwards" }}
             >
-              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }, { href: "/process", label: "KOR" }].map((item, i, arr) => (
+              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }].map((item, i, arr) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -202,6 +202,15 @@ export default function ProcessPage() {
           )}
         </div>
       </nav>
+
+      {/* Floating language toggle button */}
+      <Link
+        href="/process"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-white px-4 py-3 text-xs font-semibold text-black shadow-lg transition hover:bg-white/90 hover:shadow-xl"
+      >
+        <Languages size={15} />
+        KOR
+      </Link>
 
       {/* Floating contact button */}
       <button

@@ -10,7 +10,7 @@ import { AiDemoAnimation } from "@/components/AiDemoAnimation";
 import { ScaledAiDemo } from "@/components/ScaledAiDemo";
 import { HandyworksAnimation } from "@/components/HandyworksAnimation";
 import { PortfolioImageSlider } from "@/components/PortfolioImageSlider";
-import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X, Mail } from "lucide-react";
+import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X, Mail, Languages } from "lucide-react";
 
 // 한국어 홈(src/app/page.tsx)의 영문 버전. next-intl 같은 i18n 라이브러리 없이 별도 페이지로
 // 유지하는 "단순 중복" 방식을 택했다 — 마케팅 카피는 자주 안 바뀌는 콘텐츠라 두 버전이
@@ -276,7 +276,6 @@ export default function EnglishRootPage() {
               <Link href="/en/process" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">Process</Link>
               <Link href="/en/portfolio" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">Portfolio</Link>
               <Link href="/ai-analysis" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">AI Analysis</Link>
-              <Link href="/" className="whitespace-nowrap text-sm text-white/40 transition hover:text-white">KOR</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 hidden lg:block">
@@ -310,7 +309,6 @@ export default function EnglishRootPage() {
                 { href: "/en/portfolio", label: "Portfolio", isLink: true },
                 { href: "/ai-analysis", label: "AI Analysis", isLink: true },
                 { href: "/handyworks", label: "HANDYWORKS ↗", isLink: true },
-                { href: "/", label: "KOR", isLink: true },
               ].map((item, i, arr) => {
                 const num = String(i + 1).padStart(2, "0");
                 const className = `flex items-center gap-3 px-4 py-3.5 text-sm text-white/70 transition hover:bg-white/10 hover:text-white ${i < arr.length - 1 ? "border-b border-white/[0.06]" : ""}`;
@@ -347,6 +345,15 @@ export default function EnglishRootPage() {
         <Mail size={15} />
         Contact Us
       </button>
+
+      {/* Floating language toggle button */}
+      <Link
+        href="/"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-white px-4 py-3 text-xs font-semibold text-black shadow-lg transition hover:bg-white/90 hover:shadow-xl"
+      >
+        <Languages size={15} />
+        KOR
+      </Link>
 
       {/* Hero */}
       <section className="relative flex flex-col items-center justify-center bg-black px-5 pt-20 text-center overflow-hidden sm:px-6 sm:pt-24" style={{ minHeight: "100lvh" }}>

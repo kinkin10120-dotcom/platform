@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, LayoutDashboard, Lightbulb, Layers, Globe, Palette, PenTool, Rocket, Landmark, Cpu, Ruler, Menu, X, Mail } from "lucide-react";
+import { ArrowRight, ChevronDown, LayoutDashboard, Lightbulb, Layers, Globe, Palette, PenTool, Rocket, Landmark, Cpu, Ruler, Menu, X, Mail, Languages } from "lucide-react";
 import { QuoteModal } from "@/components/QuoteModal";
 import { ContactModal } from "@/components/ContactModal";
 
@@ -428,7 +428,6 @@ export default function ServicePage() {
                   </Link>
                 )
               )}
-              <Link href="/service" className="whitespace-nowrap text-sm text-white/40 transition hover:text-white">KOR</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="hidden min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 lg:block">
@@ -455,7 +454,7 @@ export default function ServicePage() {
               className="mt-2 overflow-hidden rounded-3xl border border-white/15 bg-black/90 p-2 backdrop-blur-xl lg:hidden"
               style={{ animation: "menuFadeIn 0.2s ease forwards" }}
             >
-              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }, { href: "/service", label: "KOR" }].map((item, i, arr) => (
+              {[...NAV_LINKS, { href: "/handyworks", label: "HANDYWORKS ↗" }].map((item, i, arr) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -481,6 +480,15 @@ export default function ServicePage() {
           )}
         </div>
       </nav>
+
+      {/* Floating language toggle button */}
+      <Link
+        href="/service"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-white px-4 py-3 text-xs font-semibold text-black shadow-lg transition hover:bg-white/90 hover:shadow-xl"
+      >
+        <Languages size={15} />
+        KOR
+      </Link>
 
       {/* Floating contact button */}
       <button

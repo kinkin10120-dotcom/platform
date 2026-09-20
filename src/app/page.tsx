@@ -10,7 +10,7 @@ import { AiDemoAnimation } from "@/components/AiDemoAnimation";
 import { ScaledAiDemo } from "@/components/ScaledAiDemo";
 import { HandyworksAnimation } from "@/components/HandyworksAnimation";
 import { PortfolioImageSlider } from "@/components/PortfolioImageSlider";
-import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X, Mail } from "lucide-react";
+import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X, Mail, Languages } from "lucide-react";
 
 // TODO: 실제 고객사명·제품명·문제/해결/결과 내용을 채운 뒤 true로 변경
 const SHOW_CLIENT_STORIES = false;
@@ -300,7 +300,6 @@ export default function RootPage() {
               <Link href="/process" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">프로세스</Link>
               <Link href="/portfolio" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">개발사례</Link>
               <Link href="/ai-analysis" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">AI 제조분석</Link>
-              <Link href="/en" className="whitespace-nowrap text-sm text-white/40 transition hover:text-white">ENG</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 hidden lg:block">
@@ -334,7 +333,6 @@ export default function RootPage() {
                 { href: "/portfolio", label: "개발사례", isLink: true },
                 { href: "/ai-analysis", label: "AI 제조분석", isLink: true },
                 { href: "/handyworks", label: "HANDYWORKS ↗", isLink: true },
-                { href: "/en", label: "ENG", isLink: true },
               ].map((item, i, arr) => {
                 const num = String(i + 1).padStart(2, "0");
                 const className = `flex items-center gap-3 px-4 py-3.5 text-sm text-white/70 transition hover:bg-white/10 hover:text-white ${i < arr.length - 1 ? "border-b border-white/[0.06]" : ""}`;
@@ -371,6 +369,15 @@ export default function RootPage() {
         <Mail size={15} />
         문의하기
       </button>
+
+      {/* 플로팅 언어 전환 버튼 */}
+      <Link
+        href="/en"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-white px-4 py-3 text-xs font-semibold text-black shadow-lg transition hover:bg-white/90 hover:shadow-xl"
+      >
+        <Languages size={15} />
+        ENG
+      </Link>
 
       {/* 히어로 */}
       <section className="relative flex flex-col items-center justify-center bg-black px-5 pt-20 text-center overflow-hidden sm:px-6 sm:pt-24" style={{ minHeight: "100lvh" }}>

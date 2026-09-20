@@ -11,18 +11,21 @@ export async function POST(req: NextRequest) {
   const phone = formData.get("phone") as string;
   const stage = formData.get("stage") as string;
   const description = formData.get("description") as string;
-  const file = formData.get("file") as File | null;
+  // 프론트(QuoteModal.tsx)는 여러 파일을 전부 "files"(복수) 키로 append한다 — 예전엔 여기서
+  // 단수 "file" 키로 찾고 있어서 이름이 안 맞아 항상 null이었고, 그 결과 고객이 파일을
+  // 첨부해도 관리자 메일엔 첨부파일이 하나도 붙지 않은 채 조용히 누락되고 있었다.
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
 
   if (!name || !company || !email || !phone || !description) {
     return NextResponse.json({ error: "필수 항목 누락" }, { status: 400 });
   }
 
-  const attachments: { filename: string; content: string }[] = [];
-  if (file && file.size > 0) {
-    const buffer = await file.arrayBuffer();
-    const base64 = Buffer.from(buffer).toString("base64");
-    attachments.push({ filename: file.name, content: base64 });
-  }
+  const attachments = await Promise.all(
+    files.map(async (f) => ({
+      filename: f.name,
+      content: Buffer.from(await f.arrayBuffer()).toString("base64"),
+    }))
+  );
 
   const { data, error } = await resend.emails.send({
     from: "HANDYHAND <noreply@handyhand.co.kr>",
@@ -58,7 +61,7 @@ export async function POST(req: NextRequest) {
           <p style="color: #86868b; margin: 0 0 8px; font-size: 12px;">제품 개요</p>
           <p style="margin: 0; color: #1d1d1f; line-height: 1.6; white-space: pre-line;">${description}</p>
         </div>
-        ${attachments.length > 0 ? `<p style="margin-top: 16px; font-size: 13px; color: #86868b;">📎 첨부파일: ${file!.name}</p>` : ""}
+        ${attachments.length > 0 ? `<p style="margin-top: 16px; font-size: 13px; color: #86868b;">📎 첨부파일: ${attachments.map((a) => a.filename).join(", ")}</p>` : ""}
         <p style="margin-top: 24px; font-size: 12px; color: #86868b;">handyhand.co.kr 견적 요청 폼을 통해 접수된 내용입니다.</p>
       </div>
     `,

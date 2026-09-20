@@ -772,7 +772,7 @@ export default function AiAnalysisPage() {
       </footer>
 
       {quoteOpen && <QuoteModal onClose={() => { setQuoteOpen(false); setQuotePrefill(""); }} prefillDescription={quotePrefill} />}
-      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
       {cadOpen && (
         <CadAnalysisModal
           onClose={() => setCadOpen(false)}

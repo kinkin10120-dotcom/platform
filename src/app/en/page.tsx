@@ -17,10 +17,10 @@ import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X,
 // 어긋날 위험이 낮고, 지금 당장은 인프라 도입 비용이 더 크기 때문. 한국어 쪽 본문을 고치면
 // 이 파일도 그에 맞춰 수동으로 반영해야 한다(자동 동기화 없음).
 //
-// AiDemoAnimation/ScaledAiDemo/CadAnalysisModal은 lang="en"을 받아 영문으로 표시한다
-// (CadAnalysisModal은 실제 서버 API를 호출하므로 lang을 FormData로도 함께 넘겨 서버 프롬프트
-// 언어까지 바꾼다 — functions/src/../route.ts의 lang 분기와 반드시 짝을 맞춰 유지할 것).
-// QuoteModal/ContactModal은 아직 한국어 라벨을 그대로 쓴다 — 이번 범위는 여기까지다.
+// AiDemoAnimation/ScaledAiDemo/CadAnalysisModal/ContactModal은 lang="en"을 받아 영문으로
+// 표시한다 (CadAnalysisModal은 실제 서버 API를 호출하므로 lang을 FormData로도 함께 넘겨
+// 서버 프롬프트 언어까지 바꾼다 — functions/src/../route.ts의 lang 분기와 반드시 짝을
+// 맞춰 유지할 것). QuoteModal은 아직 한국어 라벨을 그대로 쓴다 — 이번 범위는 여기까지다.
 
 function AnimatedExperienceStat() {
   const target = 40;
@@ -791,7 +791,7 @@ export default function EnglishRootPage() {
         <p className="mt-4">© 2026 HANDYHAND. All rights reserved.</p>
       </footer>
 
-      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
       {quoteOpen && <QuoteModal onClose={() => { setQuoteOpen(false); setQuotePrefill(""); }} prefillDescription={quotePrefill} />}
       {cadOpen && (
         <CadAnalysisModal

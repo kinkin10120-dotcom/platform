@@ -903,7 +903,7 @@ export default function ServicePage() {
       </footer>
 
       {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} initialStage={ctaCategory} />}
-      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} initialType={ctaCategory} />}
+      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} initialType={ctaCategory} lang="en" />}
     </div>
   );
 }

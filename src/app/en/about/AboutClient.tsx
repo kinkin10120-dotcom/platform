@@ -476,7 +476,7 @@ export default function AboutPage() {
       </footer>
 
       {quoteOpen && <QuoteModal onClose={() => setQuoteOpen(false)} />}
-      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} />}
+      {contactOpen && <ContactModal onClose={() => setContactOpen(false)} lang="en" />}
     </div>
   );
 }

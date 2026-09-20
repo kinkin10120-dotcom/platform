@@ -15,7 +15,7 @@ const NAV_LINKS = [
   { href: "/en/service", label: "Services" },
   { href: "/en/process", label: "Process" },
   { href: "/en/portfolio", label: "Portfolio" },
-  { href: "/ai-analysis", label: "AI Analysis" },
+  { href: "/en/ai-analysis", label: "AI Analysis" },
 ];
 
 const MATERIALS = [
@@ -631,7 +631,7 @@ export default function ServicePage() {
               Browse common materials and processes, and add a quantity<br className="sm:hidden" /> to get an instant recommendation.
             </p>
             <Link
-              href="/ai-analysis"
+              href="/en/ai-analysis"
               className="mb-8 inline-flex items-center gap-1.5 rounded-full border border-[#1d1d1f]/15 bg-white px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#1d1d1f]/30"
             >
               Have a drawing? Let our AI analyze it →

@@ -5,7 +5,7 @@ import { AiDemoAnimation } from "@/components/AiDemoAnimation";
 
 const AI_DEMO_DESIGN_WIDTH = 576;
 
-export function ScaledAiDemo({ onCta }: { onCta: () => void }) {
+export function ScaledAiDemo({ onCta, lang = "ko" }: { onCta: () => void; lang?: "ko" | "en" }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -32,7 +32,7 @@ export function ScaledAiDemo({ onCta }: { onCta: () => void }) {
         className="absolute left-0 top-0"
         style={{ width: AI_DEMO_DESIGN_WIDTH, transform: `scale(${scale})`, transformOrigin: "top left" }}
       >
-        <AiDemoAnimation onCta={onCta} />
+        <AiDemoAnimation onCta={onCta} lang={lang} />
       </div>
     </div>
   );

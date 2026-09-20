@@ -17,8 +17,10 @@ import { Landmark, Rocket, Megaphone, RefreshCw, FlaskConical, Factory, Menu, X,
 // 어긋날 위험이 낮고, 지금 당장은 인프라 도입 비용이 더 크기 때문. 한국어 쪽 본문을 고치면
 // 이 파일도 그에 맞춰 수동으로 반영해야 한다(자동 동기화 없음).
 //
-// QuoteModal/ContactModal/CadAnalysisModal 등 상호작용 컴포넌트는 아직 한국어 라벨을 그대로
-// 쓴다 — 이번 1차 작업 범위는 정적 마케팅 카피 번역까지다.
+// AiDemoAnimation/ScaledAiDemo/CadAnalysisModal은 lang="en"을 받아 영문으로 표시한다
+// (CadAnalysisModal은 실제 서버 API를 호출하므로 lang을 FormData로도 함께 넘겨 서버 프롬프트
+// 언어까지 바꾼다 — functions/src/../route.ts의 lang 분기와 반드시 짝을 맞춰 유지할 것).
+// QuoteModal/ContactModal은 아직 한국어 라벨을 그대로 쓴다 — 이번 범위는 여기까지다.
 
 function AnimatedExperienceStat() {
   const target = 40;
@@ -199,13 +201,13 @@ function AiAnalysisMobileIntro({ onCadOpen, onQuoteOpen }: { onCadOpen: () => vo
         >
           Start Free Analysis →
         </button>
-        <Link href="/ai-analysis" className="text-sm font-medium text-[#1d1d1f]/70 transition hover:text-[#1d1d1f]">
+        <Link href="/en/ai-analysis" className="text-sm font-medium text-[#1d1d1f]/70 transition hover:text-[#1d1d1f]">
           Learn More →
         </Link>
       </div>
 
       <div className="mt-10">
-        <ScaledAiDemo onCta={onQuoteOpen} />
+        <ScaledAiDemo onCta={onQuoteOpen} lang="en" />
       </div>
     </div>
   );
@@ -275,7 +277,7 @@ export default function EnglishRootPage() {
               <Link href="/en/service" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">Services</Link>
               <Link href="/en/process" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">Process</Link>
               <Link href="/en/portfolio" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">Portfolio</Link>
-              <Link href="/ai-analysis" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">AI Analysis</Link>
+              <Link href="/en/ai-analysis" className="whitespace-nowrap text-sm text-white/55 transition hover:text-white">AI Analysis</Link>
             </div>
             <div className="flex items-center gap-1.5">
               <Link href="/handyworks" className="min-w-[126px] text-center rounded-full bg-white px-3.5 py-1.5 text-xs font-medium text-black transition hover:bg-white/90 hidden lg:block">
@@ -307,7 +309,7 @@ export default function EnglishRootPage() {
                 { href: "/en/service", label: "Services", isLink: true },
                 { href: "/en/process", label: "Process", isLink: true },
                 { href: "/en/portfolio", label: "Portfolio", isLink: true },
-                { href: "/ai-analysis", label: "AI Analysis", isLink: true },
+                { href: "/en/ai-analysis", label: "AI Analysis", isLink: true },
                 { href: "/handyworks", label: "HANDYWORKS ↗", isLink: true },
               ].map((item, i, arr) => {
                 const num = String(i + 1).padStart(2, "0");
@@ -608,14 +610,14 @@ export default function EnglishRootPage() {
                 >
                   Start Free Analysis →
                 </button>
-                <Link href="/ai-analysis" className="text-sm font-medium text-[#1d1d1f]/70 transition hover:text-[#1d1d1f]">
+                <Link href="/en/ai-analysis" className="text-sm font-medium text-[#1d1d1f]/70 transition hover:text-[#1d1d1f]">
                   Learn More →
                 </Link>
               </div>
             </Reveal>
             <Reveal className="relative hidden lg:block" delay={150}>
               <div className="scale-[0.85]">
-                <AiDemoAnimation onCta={() => { setQuotePrefill(""); setQuoteOpen(true); }} />
+                <AiDemoAnimation onCta={() => { setQuotePrefill(""); setQuoteOpen(true); }} lang="en" />
               </div>
             </Reveal>
 
@@ -795,6 +797,7 @@ export default function EnglishRootPage() {
         <CadAnalysisModal
           onClose={() => setCadOpen(false)}
           onRequestQuote={(prefill) => { setQuotePrefill(prefill); setQuoteOpen(true); }}
+          lang="en"
         />
       )}
     </div>

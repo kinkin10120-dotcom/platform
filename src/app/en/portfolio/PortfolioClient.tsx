@@ -15,7 +15,7 @@ const NAV_LINKS = [
   { href: "/en/service", label: "Services" },
   { href: "/en/process", label: "Process" },
   { href: "/en/portfolio", label: "Portfolio" },
-  { href: "/ai-analysis", label: "AI Analysis" },
+  { href: "/en/ai-analysis", label: "AI Analysis" },
 ];
 
 const CASES = [

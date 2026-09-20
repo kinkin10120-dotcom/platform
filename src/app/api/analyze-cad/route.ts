@@ -19,29 +19,42 @@ export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
-  const material = (formData.get("material") as string | null) ?? "미정";
+  const lang = (formData.get("lang") as string | null) === "en" ? "en" : "ko";
+  const unspecified = lang === "en" ? "Unspecified" : "미정";
+  const material = (formData.get("material") as string | null) ?? unspecified;
   const purpose = (formData.get("purpose") as string | null) ?? "";
   const quantity = (formData.get("quantity") as string | null) ?? "";
 
   if (!file && !purpose.trim()) {
-    return withCors(NextResponse.json({ error: "파일을 업로드하거나 제품 용도를 입력해주세요." }, { status: 400 }));
+    return withCors(NextResponse.json(
+      { error: lang === "en" ? "Please upload a file or enter the product's intended use." : "파일을 업로드하거나 제품 용도를 입력해주세요." },
+      { status: 400 }
+    ));
   }
 
   const TEXT_EXTS = ["stp", "step", "dxf"];
   const BINARY_EXTS = ["dwg", "ipt", "iam", "sldprt", "sldasm"];
-  const BINARY_LABELS: Record<string, string> = {
-    dwg: "AutoCAD DWG",
-    ipt: "Autodesk Inventor 파트",
-    iam: "Autodesk Inventor 조립품",
-    sldprt: "SolidWorks 파트",
-    sldasm: "SolidWorks 조립품",
-  };
+  const BINARY_LABELS: Record<string, string> = lang === "en"
+    ? {
+      dwg: "AutoCAD DWG",
+      ipt: "Autodesk Inventor part",
+      iam: "Autodesk Inventor assembly",
+      sldprt: "SolidWorks part",
+      sldasm: "SolidWorks assembly",
+    }
+    : {
+      dwg: "AutoCAD DWG",
+      ipt: "Autodesk Inventor 파트",
+      iam: "Autodesk Inventor 조립품",
+      sldprt: "SolidWorks 파트",
+      sldasm: "SolidWorks 조립품",
+    };
 
   const ext = file?.name.split(".").pop()?.toLowerCase();
 
   if (file && !TEXT_EXTS.includes(ext ?? "") && !BINARY_EXTS.includes(ext ?? "")) {
     return withCors(NextResponse.json(
-      { error: "STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, SLDASM 파일만 지원합니다." },
+      { error: lang === "en" ? "Only STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, and SLDASM files are supported." : "STP, STEP, DXF, DWG, IPT, IAM, SLDPRT, SLDASM 파일만 지원합니다." },
       { status: 400 }
     ));
   }
@@ -52,7 +65,9 @@ export async function POST(req: NextRequest) {
 
   if (!file) {
     fileContent = "";
-    accuracyNote = "\n※ 도면 파일 없이 텍스트 설명만으로 추정한 결과입니다. 실제 형상을 확인하지 않은 추정치이므로 정확도가 매우 낮을 수 있습니다.";
+    accuracyNote = lang === "en"
+      ? "\n※ This result is estimated from the text description alone, without a drawing file. Since the actual shape was not reviewed, accuracy may be very low."
+      : "\n※ 도면 파일 없이 텍스트 설명만으로 추정한 결과입니다. 실제 형상을 확인하지 않은 추정치이므로 정확도가 매우 낮을 수 있습니다.";
   } else if (isBinary) {
     if (ext === "dwg") {
       const buf = await file.arrayBuffer();
@@ -66,32 +81,103 @@ export async function POST(req: NextRequest) {
         AC1015: "AutoCAD 2000",
       };
       const acVersion = versionMap[header] ?? (header.startsWith("AC") ? `AutoCAD (${header})` : "AutoCAD");
-      fileContent = `[DWG 바이너리 파일 — 텍스트 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB\nCAD 버전: ${acVersion}`;
+      fileContent = lang === "en"
+        ? `[DWG binary file — text parsing not possible]\nFile name: ${file.name}\nFile size: ${(file.size / 1024).toFixed(0)} KB\nCAD version: ${acVersion}`
+        : `[DWG 바이너리 파일 — 텍스트 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB\nCAD 버전: ${acVersion}`;
     } else {
-      fileContent = `[${BINARY_LABELS[ext ?? ""]} 바이너리 파일 — 형상 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB`;
+      fileContent = lang === "en"
+        ? `[${BINARY_LABELS[ext ?? ""]} binary file — shape parsing not possible]\nFile name: ${file.name}\nFile size: ${(file.size / 1024).toFixed(0)} KB`
+        : `[${BINARY_LABELS[ext ?? ""]} 바이너리 파일 — 형상 파싱 불가]\n파일명: ${file.name}\n파일 크기: ${(file.size / 1024).toFixed(0)} KB`;
     }
-    accuracyNote = `\n※ 이 파일은 ${BINARY_LABELS[ext ?? ""]} 바이너리 형식입니다. 파일명과 메타데이터를 기반으로 추정 분석하며, 정확도가 낮을 수 있습니다. 더 정확한 분석을 원하시면 STP/STEP 파일로 내보내기 후 업로드해주세요.`;
+    accuracyNote = lang === "en"
+      ? `\n※ This file is a ${BINARY_LABELS[ext ?? ""]} binary format. Analysis is estimated from the filename and metadata and may be less accurate. For a more accurate analysis, export to STP/STEP and upload again.`
+      : `\n※ 이 파일은 ${BINARY_LABELS[ext ?? ""]} 바이너리 형식입니다. 파일명과 메타데이터를 기반으로 추정 분석하며, 정확도가 낮을 수 있습니다. 더 정확한 분석을 원하시면 STP/STEP 파일로 내보내기 후 업로드해주세요.`;
   } else {
     fileContent = await file.text();
     if (fileContent.length > 60000) {
-      fileContent = fileContent.slice(0, 60000) + "\n... (이하 생략)";
+      fileContent = fileContent.slice(0, 60000) + (lang === "en" ? "\n... (truncated)" : "\n... (이하 생략)");
     }
   }
 
-  const contextLines = [
-    purpose ? `제품 용도: "${purpose}"` : "",
-    quantity ? `생산 수량: ${quantity}` : "",
-  ].filter(Boolean).join("\n");
+  const contextLines = lang === "en"
+    ? [
+      purpose ? `Intended use: "${purpose}"` : "",
+      quantity ? `Production quantity: ${quantity}` : "",
+    ].filter(Boolean).join("\n")
+    : [
+      purpose ? `제품 용도: "${purpose}"` : "",
+      quantity ? `생산 수량: ${quantity}` : "",
+    ].filter(Boolean).join("\n");
 
-  const isAssembly = material.startsWith("조립품");
-  const assemblyMaterialHint = material.match(/주요 재질: (.+)\)$/)?.[1] ?? "";
+  const assemblyKeyword = lang === "en" ? "Assembly" : "조립품";
+  const isAssembly = material.startsWith(assemblyKeyword);
+  const assemblyMaterialHint = lang === "en"
+    ? material.match(/Main material: (.+)\)$/)?.[1] ?? ""
+    : material.match(/주요 재질: (.+)\)$/)?.[1] ?? "";
   const dwgNote = accuracyNote;
   const fileSection = file
-    ? `CAD 파일:\n\`\`\`\n${fileContent}\n\`\`\``
-    : `도면 파일이 제공되지 않았습니다. 아래 텍스트 설명만으로 일반적인 제조 방법을 추정하세요.`;
+    ? (lang === "en" ? `CAD file:\n\`\`\`\n${fileContent}\n\`\`\`` : `CAD 파일:\n\`\`\`\n${fileContent}\n\`\`\``)
+    : (lang === "en" ? `No drawing file was provided. Estimate a general manufacturing method from the text description alone.` : `도면 파일이 제공되지 않았습니다. 아래 텍스트 설명만으로 일반적인 제조 방법을 추정하세요.`);
 
-  const prompt = isAssembly
-    ? `당신은 제조 공학 전문가입니다. 아래 CAD 파일은 조립품입니다. 파일에서 개별 파트를 식별하고 각 파트별로 재질, 최적 제조방법, 표면처리를 추천하세요.
+  const METHOD_ENUM_EN = "CNC Machining / Injection Molding / Die Casting / Extruded Profile / Laser Cutting / Sheet Metal Fabrication / Silicone Compression Molding / Silicone Injection Molding / Silicone Extrusion / Silicone Sample Tooling / Press Tooling / 3D Printing / Vacuum Casting";
+  const METHOD_ENUM_KO = "CNC가공 / 사출금형 / 다이캐스팅 / 압출 프로파일 / 레이저 커팅 / 판금가공 / 실리콘 압축성형 / 실리콘 사출성형 / 실리콘 압출성형 / 실리콘 샘플금형 / 프레스금형 / 3D프린팅 / 진공주형";
+
+  const prompt = lang === "en"
+    ? (isAssembly
+      ? `You are a manufacturing engineering expert. The CAD file below is an assembly. Identify the individual parts in the file and recommend a material, optimal manufacturing method, and surface treatment for each part.
+${assemblyMaterialHint ? `Main material of the overall assembly: ${assemblyMaterialHint} (use this as a reference when estimating each part's material, but estimate differently if a part's material is clearly different)` : ""}
+${contextLines}${dwgNote}
+
+${fileSection}
+
+Respond only in the following JSON format:
+{
+  "isAssembly": true,
+  "assemblyName": "Estimated assembly name (English only, no Korean)",
+  "parts": [
+    {
+      "partName": "Part name (English only, no Korean)",
+      "material": "Estimated material",
+      "method": "Manufacturing method",
+      "confidence": 85,
+      "reason": "One-line reason",
+      "surfaceTreatment": "Recommended surface treatment (or 'None')",
+      "initialCostLevel": 2,
+      "unitCostLevel": 2
+    }
+  ],
+  "summary": "One-line summary of the overall assembly"
+}
+
+Manufacturing methods: ${METHOD_ENUM_EN}
+Identify at most 6 parts. confidence is an integer from 0-100.
+Independently rate initialCostLevel (upfront tooling/equipment investment) and unitCostLevel (per-unit cost at the given quantity) each as an integer from 1 (low) to 3 (high). Reflect real tradeoffs — e.g. silicone molding tends to have low initialCostLevel and high unitCostLevel, while injection molding/die casting tend to have high initialCostLevel and low unitCostLevel. Never mention absolute prices.`
+      : `You are a manufacturing engineering expert. Analyze the CAD file below and recommend the best manufacturing method.
+${material !== unspecified ? `Specified material: ${material}` : "Material not specified — estimate from the shape."}
+${contextLines}${dwgNote}
+
+${fileSection}
+
+Respond only in the following JSON format:
+{
+  "isAssembly": false,
+  "partName": "Estimated part name (English only, no Korean)",
+  "complexity": "Simple | Medium | Complex",
+  "size": "Small (~100mm) | Medium (100-500mm) | Large (500mm+) | Undetermined",
+  "recommendedMethods": [
+    { "method": "Manufacturing method name", "confidence": 85, "reason": "One-line reason", "initialCostLevel": 2, "unitCostLevel": 2 }
+  ],
+  "material": "Material name only, briefly",
+  "surfaceTreatment": "Recommended surface treatment (e.g. anodizing, painting, plating, or 'None')",
+  "considerations": ["Notes (at most 2, brief)"],
+  "summary": "One-sentence summary"
+}
+
+Manufacturing methods: ${METHOD_ENUM_EN}
+List only the top 2 recommendedMethods, confidence as an integer from 0-100, in recommended order.
+Independently rate initialCostLevel (upfront tooling/equipment investment) and unitCostLevel (per-unit cost at the given quantity) each as an integer from 1 (low) to 3 (high). Reflect real tradeoffs — e.g. silicone molding tends to have low initialCostLevel and high unitCostLevel, while injection molding/die casting tend to have high initialCostLevel and low unitCostLevel. Never mention absolute prices.`)
+    : (isAssembly
+      ? `당신은 제조 공학 전문가입니다. 아래 CAD 파일은 조립품입니다. 파일에서 개별 파트를 식별하고 각 파트별로 재질, 최적 제조방법, 표면처리를 추천하세요.
 ${assemblyMaterialHint ? `전체 조립품의 주요 재질: ${assemblyMaterialHint} (각 파트 재질 추정 시 참고하되, 파트별로 다른 재질이 명백하면 그에 맞게 추정하세요)` : ""}
 ${contextLines}${dwgNote}
 
@@ -116,11 +202,11 @@ ${fileSection}
   "summary": "전체 조립품 한 줄 요약"
 }
 
-제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출 프로파일 / 레이저 커팅 / 판금가공 / 실리콘 압축성형 / 실리콘 사출성형 / 실리콘 압출성형 / 실리콘 샘플금형 / 프레스금형 / 3D프린팅 / 진공주형
+제조방법: ${METHOD_ENUM_KO}
 파트는 최대 6개까지만 식별하세요. confidence는 0~100 정수.
 initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 수량 기준 개당 단가)을 각각 1(낮음)~3(높음) 정수로 독립적으로 평가하세요. 예: 실리콘금형은 initialCostLevel 낮음·unitCostLevel 높음, 사출금형/다이캐스팅은 initialCostLevel 높음·unitCostLevel 낮음처럼 트레이드오프를 반영하세요. 절대 금액은 언급하지 마세요.`
-    : `당신은 제조 공학 전문가입니다. 아래 CAD 파일을 분석해 최적 제조방법을 추천하세요.
-${material !== "미정" ? `지정 재질: ${material}` : "재질 미지정 — 형상으로 추정하세요."}
+      : `당신은 제조 공학 전문가입니다. 아래 CAD 파일을 분석해 최적 제조방법을 추천하세요.
+${material !== unspecified ? `지정 재질: ${material}` : "재질 미지정 — 형상으로 추정하세요."}
 ${contextLines}${dwgNote}
 
 ${fileSection}
@@ -140,9 +226,9 @@ ${fileSection}
   "summary": "한 문장 요약"
 }
 
-제조방법: CNC가공 / 사출금형 / 다이캐스팅 / 압출 프로파일 / 레이저 커팅 / 판금가공 / 실리콘 압축성형 / 실리콘 사출성형 / 실리콘 압출성형 / 실리콘 샘플금형 / 프레스금형 / 3D프린팅 / 진공주형
+제조방법: ${METHOD_ENUM_KO}
 recommendedMethods는 상위 2개만, confidence는 0~100 정수, 추천 순서대로.
-initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 수량 기준 개당 단가)을 각각 1(낮음)~3(높음) 정수로 독립적으로 평가하세요. 예: 실리콘금형은 initialCostLevel 낮음·unitCostLevel 높음, 사출금형/다이캐스팅은 initialCostLevel 높음·unitCostLevel 낮음처럼 트레이드오프를 반영하세요. 절대 금액은 언급하지 마세요.`;
+initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 수량 기준 개당 단가)을 각각 1(낮음)~3(높음) 정수로 독립적으로 평가하세요. 예: 실리콘금형은 initialCostLevel 낮음·unitCostLevel 높음, 사출금형/다이캐스팅은 initialCostLevel 높음·unitCostLevel 낮음처럼 트레이드오프를 반영하세요. 절대 금액은 언급하지 마세요.`);
 
   try {
     const response = await client.messages.create({
@@ -152,16 +238,16 @@ initialCostLevel(금형·설비 등 초기 투자비)과 unitCostLevel(생산 �
     });
 
     const content = response.content[0];
-    if (content.type !== "text") throw new Error("응답 형식 오류");
+    if (content.type !== "text") throw new Error(lang === "en" ? "Invalid response format" : "응답 형식 오류");
 
     const jsonMatch = content.text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("분석 결과를 파싱할 수 없습니다.");
+    if (!jsonMatch) throw new Error(lang === "en" ? "Could not parse the analysis result." : "분석 결과를 파싱할 수 없습니다.");
 
     const result = JSON.parse(jsonMatch[0]);
     result.isAssembly = isAssembly;
     return withCors(NextResponse.json(result));
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "분석 중 오류 발생";
+    const msg = e instanceof Error ? e.message : (lang === "en" ? "An error occurred during analysis" : "분석 중 오류 발생");
     return withCors(NextResponse.json({ error: msg }, { status: 500 }));
   }
 }

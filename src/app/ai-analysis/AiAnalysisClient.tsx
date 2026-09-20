@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Menu, X, FileUp, ScanSearch, FileCheck2, PhoneCall, ChevronDown, Mail, Clock, Gift, RefreshCw } from "lucide-react";
+import { Menu, X, FileUp, ScanSearch, FileCheck2, PhoneCall, ChevronDown, Mail, Clock, Gift, RefreshCw, Languages } from "lucide-react";
 import { ScaledAiDemo } from "@/components/ScaledAiDemo";
 import { CadAnalysisModal } from "@/components/CadAnalysisModal";
 import { QuoteModal } from "@/components/QuoteModal";
@@ -482,6 +482,15 @@ export default function AiAnalysisPage() {
           )}
         </div>
       </nav>
+
+      {/* 플로팅 언어 전환 버튼 */}
+      <Link
+        href="/en/ai-analysis"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full bg-white px-4 py-3 text-xs font-semibold text-black shadow-lg transition hover:bg-white/90 hover:shadow-xl"
+      >
+        <Languages size={15} />
+        ENG
+      </Link>
 
       {/* 플로팅 문의 버튼 */}
       <button

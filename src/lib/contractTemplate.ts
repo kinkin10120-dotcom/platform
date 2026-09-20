@@ -1,6 +1,14 @@
 import { formatMoney } from "@/lib/orderCalc";
 import { Currency } from "@/lib/types";
 import { buildSignatureBlockHtml } from "@/lib/tiptapSignatureBlock";
+import { formatKoreanDateTimeCore, formatContractDateCore } from "@/lib/contractDateCore";
+import {
+  placeSignatureBlockCore,
+  normalizeBracketLabelCore,
+  replaceTopLevelParensCore,
+  BRACKET_LABEL_TOKENS,
+  diffDaysCore,
+} from "@/lib/contractHtmlCore";
 
 // 새 계약 작성 시 리치 텍스트 에디터의 기본값 — 기존에 실제로 쓰던 용역 계약서 구조를 뼈대로 하되
 // 금액·기간·당사자 등 건별로 달라지는 값은 {{토큰}}으로 남겨두고, 위쪽 입력 필드(상호명/금액/기간 등)를
@@ -103,28 +111,13 @@ export interface ContractTokenFields {
   handyhandIsGap?: boolean;
 }
 
-// functions/src/contracts.ts의 동명 함수와 동일한 이유로 로케일 이름에 기대지 않는다 —
-// 실제로 서버 쪽 Cloud Functions 런타임에서 "ko-KR" 로케일의 오전/오후 표기만 영문
-// "AM"/"PM"으로 새는 사례가 있었다(날짜 자체는 한국어 표기로 정상 출력되면서). 브라우저는
-// 대체로 문제없지만, 서버·클라이언트 두 곳이 항상 같은 문자열을 만들어야 하므로 같은 방식
-// (en-US + 숫자 전용 옵션으로 뽑고 직접 조립)으로 통일한다.
+// 실제 포맷 로직은 contractDateCore.ts(functions/src에 완전히 동일한 사본이 있다)에 있다 —
+// 클라이언트는 시스템 로컬 타임존(관리자는 항상 한국에서 접속)을 그대로 쓰고, 서버만
+// "Asia/Seoul"을 명시로 넘긴다. 그 한 줄만 다르고 나머지 조립 로직은 완전히 같아야 하므로,
+// 그 부분을 공용 파일로 빼서 sync 테스트(contractDateCore.sync.test.ts)로 강제한다.
 function formatKoreanDateTime(millis?: number): string {
   if (!millis) return "";
-  const date = new Date(millis);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
-  const hour24 = Number(get("hour"));
-  const period = hour24 < 12 ? "오전" : "오후";
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${get("year")}. ${get("month")}. ${get("day")}. ${period} ${hour12}:${get("minute")}:${get("second")}`;
+  return formatKoreanDateTimeCore(new Date(millis));
 }
 
 // {{contractDate}}용 — 계약 체결일은 곧 전자서명 완료일이다(템플릿 제5조와 동일한 기준).
@@ -132,21 +125,13 @@ function formatKoreanDateTime(millis?: number): string {
 // 서명 시점에 동결되는 문서가 어긋나지 않게 한다.
 function formatContractDate(millis?: number): string {
   if (!millis) return "전자서명 완료 시 자동 기입";
-  const d = new Date(millis);
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+  return formatContractDateCore(new Date(millis));
 }
 
-// {{periodDays}}용 — 시작일·종료일로 잡아둔 기간을 "일수"로 환산한다. 용역기간을 고정
+// {{periodDays}}용 실제 계산은 diffDaysCore(contractHtmlCore.ts)가 한다 — 용역기간을 고정
 // 날짜가 아니라 "체결일로부터 N일"로 쓰면, 서명이 늦어져도 문구가 저절로 맞고 서명 순간에
 // 내용이 바뀌지 않는다(고정 날짜로 자동 이동시키면 고객이 본 문서와 서명한 문서가 달라질 수
 // 있어 해시로 동결하는 지금 구조와 충돌한다).
-function diffDays(start?: string, end?: string): number | null {
-  if (!start || !end) return null;
-  const s = new Date(start).getTime();
-  const e = new Date(end).getTime();
-  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
-  return Math.round((e - s) / 86400000);
-}
 
 // 서명/직인 영역은 커스텀 Tiptap 노드(signatureBlock)로 관리한다 — 여기서는 그 노드가
 // "미리보기"·서명 페이지처럼 Tiptap을 거치지 않는 화면에서도 똑같은 모양으로 보이도록,
@@ -199,7 +184,7 @@ export function buildContractTokenValues(f: ContractTokenFields): Record<string,
     periodStart: f.periodStart || blank,
     periodEnd: f.periodEnd || blank,
     periodDays: (() => {
-      const d = diffDays(f.periodStart, f.periodEnd);
+      const d = diffDaysCore(f.periodStart, f.periodEnd);
       return d === null ? blank : `${d}일`;
     })(),
     contractDate: formatContractDate(f.signedAt),
@@ -207,40 +192,6 @@ export function buildContractTokenValues(f: ContractTokenFields): Record<string,
     gapSignature: buildGapSignatureHtml(f),
     eulSignature: buildEulSignatureHtml(f),
   };
-}
-
-// 문자열 전체를 훑으면서 "가장 바깥쪽" 괄호 쌍(중첩 깊이 몇 단계든 상관없이)을 찾아 각각에
-// replacer를 적용한다 — 정규식 하나로는 중첩 깊이를 딱 1단계까지만 처리할 수 있어서
-// "(사업장주소 (본사 (등록지)))"처럼 2단계 이상 중첩되면 놓치는 문제가 있었다. 괄호 안에
-// 또 괄호가 있어도(예: "(상호명 (갑))") 가장 바깥쪽 여는 괄호부터 그와 짝이 맞는 닫는 괄호
-// 까지를 통째로 label로 넘긴다.
-function replaceTopLevelParens(text: string, replacer: (match: string, label: string) => string): string {
-  let result = "";
-  let i = 0;
-  while (i < text.length) {
-    if (text[i] !== "(") {
-      result += text[i];
-      i += 1;
-      continue;
-    }
-    let depth = 1;
-    let j = i + 1;
-    while (j < text.length && depth > 0) {
-      if (text[j] === "(") depth += 1;
-      else if (text[j] === ")") depth -= 1;
-      j += 1;
-    }
-    if (depth !== 0) {
-      // 짝이 안 맞는 괄호(열기만 있고 안 닫힘) — 더 처리할 수 없으니 그대로 둔다.
-      result += text.slice(i);
-      break;
-    }
-    const match = text.slice(i, j);
-    const label = text.slice(i + 1, j - 1);
-    result += replacer(match, label);
-    i = j;
-  }
-  return result;
 }
 
 // 계약서 본문에 남아있는 {{토큰}}을 위쪽 입력 필드 값으로 치환한다. 아직 안 채워진 필드는
@@ -270,8 +221,8 @@ export function resolveContractTokens(
   // 관리자가 {{토큰}} 대신 "(제품/서비스명)"이나 "(상호명 (갑))"처럼 자연어 괄호 표기로 직접
   // 본문을 쓰는 경우도 있어, 알려진 라벨과 일치하는 괄호 텍스트만(화이트리스트) 같은 값으로
   // 채워준다 — "(목적)" 같은 조 제목의 괄호는 목록에 없는 라벨이라 그대로 남는다.
-  const withBrackets = replaceTopLevelParens(resolved, (match, label) => {
-    const key = BRACKET_LABEL_TOKENS[normalizeBracketLabel(label)];
+  const withBrackets = replaceTopLevelParensCore(resolved, (match, label) => {
+    const key = BRACKET_LABEL_TOKENS[normalizeBracketLabelCore(label)];
     return key ? tokens[key] : match;
   });
   if (opts?.skipSignatureBlocks) return withBrackets;
@@ -285,102 +236,18 @@ export function resolveContractTokens(
   // "갑"/"을" 어느 라벨 아래에 꽂을지는 handyhandIsGap에 따라 뒤바뀐다.
   let final = withBrackets;
   if (f.handyhandIsGap) {
-    final = placeSignatureBlock(final, "eul", "갑", tokens.eulSignature);
-    final = placeSignatureBlock(final, "gap", "을", tokens.gapSignature);
+    final = placeSignatureBlockCore(final, "eul", "갑", tokens.eulSignature);
+    final = placeSignatureBlockCore(final, "gap", "을", tokens.gapSignature);
   } else {
-    final = placeSignatureBlock(final, "gap", "갑", tokens.gapSignature);
-    final = placeSignatureBlock(final, "eul", "을", tokens.eulSignature);
+    final = placeSignatureBlockCore(final, "gap", "갑", tokens.gapSignature);
+    final = placeSignatureBlockCore(final, "eul", "을", tokens.eulSignature);
   }
   return final;
 }
 
-// 서명란을 "갑"/"을" 각자의 대표자 줄 바로 아래에 붙인다 — 문서 맨 끝에 두 서명란을 몰아서
-// 붙이면(예전 방식) 갑 서명란이 을 정보 뒤에 나오는 등 위치가 어색해진다. 이미 자리 잡은
-// signatureBlock 노드가 있으면 위치는 그대로 두고 내용만 최신화하고, 없으면 같은 party
-// 표시("갑"/"을") 다음에 나오는 첫 "대표자" 줄 바로 뒤에 새로 끼워 넣는다 — 그 자리를 못
-// 찾으면(완전히 자유 형식의 본문 등) 문서 끝에 붙이는 것으로 안전하게 대체한다.
-function placeSignatureBlock(html: string, variant: "gap" | "eul", partyLabel: "갑" | "을", blockHtml: string): string {
-  const existingRange = findSignatureBlockRange(html, variant);
-  if (existingRange) {
-    return html.slice(0, existingRange.start) + blockHtml + html.slice(existingRange.end);
-  }
-
-  const headingRe = new RegExp(`<p>\\s*(?:<strong>)?\\s*${partyLabel}\\s*(?:</strong>)?\\s*</p>`);
-  const headingMatch = headingRe.exec(html);
-  if (headingMatch) {
-    const afterHeading = headingMatch.index + headingMatch[0].length;
-    const repRe = /<p>[^<]*대표자[^<]*<\/p>/;
-    const repMatch = repRe.exec(html.slice(afterHeading));
-    if (repMatch) {
-      const insertPos = afterHeading + repMatch.index + repMatch[0].length;
-      return html.slice(0, insertPos) + blockHtml + html.slice(insertPos);
-    }
-  }
-  return html + blockHtml;
-}
-
-// 서명 블록 div 안에는(점선 자리표시 박스용) 중첩된 <div>가 하나 더 들어있다 — "가장 처음
-// 나오는 </div>까지"로 찾는 정규식은 이 안쪽 div에서 멈춰버려 바깥쪽 블록의 나머지 절반
-// (<p>...</p></div>)이 안 지워지고 문서에 그대로 남는다. 그 상태로 저장 후 다시 열 때마다
-// resolveContractTokens가 또 실행되면서 매번 새 블록을 하나씩 더 끼워 넣어(예전 잔해가 계속
-// 쌓여) "지워도 지워도 늘어난다"는 문제로 이어졌다 — 여는/닫는 div 개수를 실제로 세어
-// 중첩까지 정확히 짝을 맞춰 블록의 진짜 끝을 찾는다.
-function findSignatureBlockRange(html: string, variant: "gap" | "eul"): { start: number; end: number } | null {
-  const openTagRe = new RegExp(`<div[^>]*data-variant="${variant}"[^>]*>`);
-  const openMatch = openTagRe.exec(html);
-  if (!openMatch) return null;
-  const start = openMatch.index;
-
-  const tagRe = /<div\b[^>]*>|<\/div>/g;
-  tagRe.lastIndex = start + openMatch[0].length;
-  let depth = 1;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(html))) {
-    if (m[0] === "</div>") {
-      depth -= 1;
-      if (depth === 0) return { start, end: m.index + m[0].length };
-    } else {
-      depth += 1;
-    }
-  }
-  return null;
-}
-
-// "상호명 (갑)"처럼 뒤에 "(갑)"/"(을)" 같은 보충 힌트가 덧붙은 경우 그 부분은 떼고, 공백
-// 차이(사업장주소 vs 사업장 주소)도 무시하고 비교할 수 있게 정규화한다.
-function normalizeBracketLabel(raw: string): string {
-  // 괄호 안 라벨에 글자 크기 등 서식(<span style="...">)이 입혀져 있으면, 그 태그까지
-  // 라벨의 일부로 취급돼 화이트리스트와 매칭이 안 됐다 — 태그를 먼저 걷어내고 순수
-  // 텍스트만 남긴 뒤 비교한다.
-  const withoutTags = raw.replace(/<[^>]*>/g, "");
-  return withoutTags.replace(/\s*\([^()]*\)\s*$/, "").replace(/\s+/g, "");
-}
-
-// 값은 resolveContractTokens 안의 tokens(Record<string, string>) 딕셔너리 키와 맞춘다.
-// 키는 normalizeBracketLabel을 거친 뒤(공백 제거)와 비교되므로 공백 없이 적는다.
-const BRACKET_LABEL_TOKENS: Record<string, string> = {
-  "제품/서비스명": "productName",
-  "제품서비스명": "productName",
-  "서비스명": "productName",
-  "제품명": "productName",
-  "상호명": "companyName",
-  "회사명": "companyName",
-  "사업자등록번호": "bizRegNumber",
-  "사업자번호": "bizRegNumber",
-  "대표자": "bizCeoName",
-  "사업장주소": "bizAddress",
-  "담당자명": "contactName",
-  "담당자연락처": "contactPhone",
-  "용역기간시작": "periodStart",
-  "용역기간종료": "periodEnd",
-  // "용역기간"은 여기 넣으면 안 된다 — 기본 템플릿의 조 제목이 "제 3 조 (용역기간)"이라,
-  // 괄호 라벨 치환이 그 제목까지 잡아서 "제 3 조 112일"로 바꿔버린다. 조 제목과 겹치는
-  // 라벨은 화이트리스트에 넣지 않는다.
-  "계약일자": "contractDate",
-  "계약체결일": "contractDate",
-  "계약금액": "amount",
-  "대금지급방식": "paymentTerms",
-};
+// 서명란 위치 찾기(placeSignatureBlockCore)·괄호 라벨 매칭(normalizeBracketLabelCore/
+// BRACKET_LABEL_TOKENS)의 실제 로직은 contractHtmlCore.ts에 있다(functions/src에 완전히
+// 동일한 사본이 있고, sync 테스트로 강제한다).
 
 // 리치 에디터 도입 이전(순수 텍스트, "\n" 기준)에 만들어진 계약이 있을 수 있어, 태그가 하나도
 // 없는 문자열이면 줄 단위로 <p>에 담아 HTML로 변환해준다. 에디터 초기값과 미리보기 렌더링

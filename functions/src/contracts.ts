@@ -4,6 +4,14 @@ import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { createHash } from "crypto";
 import { normalizeEmail, contractEmailMatches } from "./emailMatch";
+import { formatKoreanDateTimeCore, formatContractDateCore } from "./contractDateCore";
+import {
+  placeSignatureBlockCore,
+  normalizeBracketLabelCore,
+  replaceTopLevelParensCore,
+  BRACKET_LABEL_TOKENS,
+  diffDaysCore,
+} from "./contractHtmlCore";
 import { db, storage, internalNotifySecret, sendNotifyEmail, formatMoneySimple } from "./shared";
 
 /* ------------------------------------------------------------------ */
@@ -105,14 +113,11 @@ async function assertContractEmailMatch(contractId: string, email?: string) {
   return { snap, data };
 }
 
-// 실제 배포된 Cloud Functions 런타임에서 확인된 문제: `.toLocaleString("ko-KR", {...})`가
-// 날짜(년.월.일)는 한국어 표기로 내놓으면서 오전/오후만 영문 "AM"/"PM"으로 새는 경우가 있다
-// (해당 런타임의 ICU 데이터가 "ko" 로케일의 일부 구성요소만 갖고 있는 것으로 보인다 — 같은
-// 계약서를 관리자 화면(브라우저, 정상 "오후")과 고객이 보는 서명 페이지(이 서버 함수를 거침,
-// "PM")에서 서로 다르게 보여주는 것으로 실제 확인했다). 로케일 이름에 기대는 대신, 항상 존재를
-// 보장할 수 있는 "en-US" + 숫자 전용 옵션으로 그 타임존의 실제 년/월/일/시/분/초만 뽑아내고,
-// "년/월/일" 표기와 "오전/오후" 판정은 우리가 직접 조립한다 — 어떤 Node 런타임에서 돌아가도
-// 결과가 달라지지 않는다.
+// 실제 포맷 로직은 contractDateCore.ts(src/lib에 완전히 동일한 사본이 있다)에 있다 — 서버는
+// 컨테이너가 한국이 아닌 곳에서 돌 수 있어 "Asia/Seoul"을 명시로 넘기고, 클라이언트(관리자
+// 브라우저는 항상 한국)는 시스템 로컬 타임존을 그대로 쓴다. 그 한 줄만 다르고 나머지 조립
+// 로직은 완전히 같아야 하므로, 그 부분을 공용 파일로 빼서 sync 테스트로 강제한다(실제로 한쪽만
+// 고쳐서 관리자 화면과 고객이 보는 서명 페이지가 같은 데이터를 다르게 보여준 적이 있었다).
 // f.signedAt/f.sentAt는 호출 시점에 따라 Firestore Timestamp(읽어온 원본 문서)이거나, 방금
 // 계산한 Timestamp.now()/JS Date(이번 요청에서 직접 만든 값)일 수 있어 둘 다 처리한다.
 function formatKoreanDateTime(v: unknown): string {
@@ -121,22 +126,7 @@ function formatKoreanDateTime(v: unknown): string {
   else if (v instanceof Date) date = v;
   else if (typeof v === "number") date = new Date(v);
   if (!date) return "";
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
-  const hour24 = Number(get("hour"));
-  const period = hour24 < 12 ? "오전" : "오후";
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${get("year")}. ${get("month")}. ${get("day")}. ${period} ${hour12}:${get("minute")}:${get("second")}`;
+  return formatKoreanDateTimeCore(date, "Asia/Seoul");
 }
 
 // {{contractDate}}용 — src/lib/contractTemplate.ts의 formatContractDate와 동일하게 유지한다.
@@ -149,18 +139,7 @@ function formatContractDate(v: unknown): string {
   else if (v instanceof Date) d = v;
   else if (typeof v === "number") d = new Date(v);
   if (!d) return "전자서명 완료 시 자동 기입";
-  // 서명 시각은 한국 시간 기준으로 읽어야 자정 근처에서 날짜가 하루 어긋나지 않는다.
-  const kst = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
-  return `${kst.getFullYear()}년 ${kst.getMonth() + 1}월 ${kst.getDate()}일`;
-}
-
-// {{periodDays}}용 — src/lib/contractTemplate.ts의 diffDays와 동일하게 유지한다.
-function diffDays(start?: string, end?: string): number | null {
-  if (!start || !end) return null;
-  const s = new Date(start).getTime();
-  const e = new Date(end).getTime();
-  if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
-  return Math.round((e - s) / 86400000);
+  return formatContractDateCore(d, "Asia/Seoul");
 }
 
 // src/lib/tiptapSignatureBlock.ts의 buildSignatureBlockHtml과 동일한 마크업을 만든다(별도
@@ -226,36 +205,6 @@ function buildGapSignatureHtml(f: FirebaseFirestore.DocumentData): string {
   return `<div data-signature-block="" data-variant="gap" class="signature-block" contenteditable="false"><div class="signature-placeholder-box">서명</div><p class="signature-line signature-line-empty">서명: (전자서명 대기 중)</p></div>`;
 }
 
-// src/lib/contractTemplate.ts의 replaceTopLevelParens와 동일 — 정규식 하나로는 괄호 중첩
-// 깊이를 1단계까지만 처리할 수 있어서, 가장 바깥쪽 괄호 쌍을 문자 단위로 직접 찾는다.
-function replaceTopLevelParens(text: string, replacer: (match: string, label: string) => string): string {
-  let result = "";
-  let i = 0;
-  while (i < text.length) {
-    if (text[i] !== "(") {
-      result += text[i];
-      i += 1;
-      continue;
-    }
-    let depth = 1;
-    let j = i + 1;
-    while (j < text.length && depth > 0) {
-      if (text[j] === "(") depth += 1;
-      else if (text[j] === ")") depth -= 1;
-      j += 1;
-    }
-    if (depth !== 0) {
-      result += text.slice(i);
-      break;
-    }
-    const match = text.slice(i, j);
-    const label = text.slice(i + 1, j - 1);
-    result += replacer(match, label);
-    i = j;
-  }
-  return result;
-}
-
 function resolveContractTokens(
   bodyText: string,
   f: FirebaseFirestore.DocumentData,
@@ -281,7 +230,7 @@ function resolveContractTokens(
     periodStart: f.periodStart || blank,
     periodEnd: f.periodEnd || blank,
     periodDays: (() => {
-      const d = diffDays(f.periodStart, f.periodEnd);
+      const d = diffDaysCore(f.periodStart, f.periodEnd);
       return d === null ? blank : `${d}일`;
     })(),
     contractDate: formatContractDate(f.signedAt),
@@ -290,10 +239,9 @@ function resolveContractTokens(
     eulSignature: buildEulSignatureHtml(f),
   };
   const resolved = bodyText.replace(/\{\{(\w+)\}\}/g, (match: string, key: string) => (key in tokens ? tokens[key] : match));
-  // src/lib/contractTemplate.ts의 BRACKET_LABEL_TOKENS/normalizeBracketLabel과 동일 —
   // "(제품/서비스명)"이나 "(상호명 (갑))" 같은 자연어 괄호 표기로 본문을 쓴 경우도 채워준다.
-  const withBrackets = replaceTopLevelParens(resolved, (match: string, label: string) => {
-    const key = BRACKET_LABEL_TOKENS[normalizeBracketLabel(label)];
+  const withBrackets = replaceTopLevelParensCore(resolved, (match: string, label: string) => {
+    const key = BRACKET_LABEL_TOKENS[normalizeBracketLabelCore(label)];
     return key ? tokens[key] : match;
   });
   if (opts?.skipSignatureBlocks) return withBrackets;
@@ -305,98 +253,14 @@ function resolveContractTokens(
   // 상태로 굳어있던) 옛 블록을 덮어쓰고 반영된다.
   let final = withBrackets;
   if (f.handyhandIsGap) {
-    final = placeSignatureBlock(final, "eul", "갑", tokens.eulSignature);
-    final = placeSignatureBlock(final, "gap", "을", tokens.gapSignature);
+    final = placeSignatureBlockCore(final, "eul", "갑", tokens.eulSignature);
+    final = placeSignatureBlockCore(final, "gap", "을", tokens.gapSignature);
   } else {
-    final = placeSignatureBlock(final, "gap", "갑", tokens.gapSignature);
-    final = placeSignatureBlock(final, "eul", "을", tokens.eulSignature);
+    final = placeSignatureBlockCore(final, "gap", "갑", tokens.gapSignature);
+    final = placeSignatureBlockCore(final, "eul", "을", tokens.eulSignature);
   }
   return final;
 }
-
-// src/lib/contractTemplate.ts의 placeSignatureBlock과 동일 — 서명란을 "갑"/"을" 각자의
-// 대표자 줄 바로 아래에 붙인다. 이미 자리 잡은 signatureBlock 노드가 있으면 위치는 그대로
-// 두고 내용만 최신화하고, 없으면 같은 party 표시("갑"/"을") 다음에 나오는 첫 "대표자" 줄
-// 바로 뒤에 새로 끼워 넣는다 — 그 자리를 못 찾으면 문서 끝에 붙이는 것으로 안전하게 대체한다.
-function placeSignatureBlock(html: string, variant: "gap" | "eul", partyLabel: "갑" | "을", blockHtml: string): string {
-  const existingRange = findSignatureBlockRange(html, variant);
-  if (existingRange) {
-    return html.slice(0, existingRange.start) + blockHtml + html.slice(existingRange.end);
-  }
-
-  const headingRe = new RegExp(`<p>\\s*(?:<strong>)?\\s*${partyLabel}\\s*(?:</strong>)?\\s*</p>`);
-  const headingMatch = headingRe.exec(html);
-  if (headingMatch) {
-    const afterHeading = headingMatch.index + headingMatch[0].length;
-    const repRe = /<p>[^<]*대표자[^<]*<\/p>/;
-    const repMatch = repRe.exec(html.slice(afterHeading));
-    if (repMatch) {
-      const insertPos = afterHeading + repMatch.index + repMatch[0].length;
-      return html.slice(0, insertPos) + blockHtml + html.slice(insertPos);
-    }
-  }
-  return html + blockHtml;
-}
-
-// src/lib/contractTemplate.ts의 findSignatureBlockRange와 동일 — 서명 블록 div 안에는(점선
-// 자리표시 박스용) 중첩된 <div>가 하나 더 있어서, "가장 처음 나오는 </div>까지"로 찾는
-// 정규식은 안쪽 div에서 멈춰버려 바깥쪽 블록의 나머지 절반이 안 지워지고 문서에 남는다 —
-// 그 상태로 서명란을 다시 계산할 때마다 매번 새 블록을 하나씩 더 끼워 넣어(예전 잔해가
-// 계속 쌓여) 저장 후 다시 열 때마다 줄이 하나씩 늘어나는 문제로 이어졌다. 여는/닫는 div
-// 개수를 실제로 세어 중첩까지 정확히 짝을 맞춰 블록의 진짜 끝을 찾는다.
-function findSignatureBlockRange(html: string, variant: "gap" | "eul"): { start: number; end: number } | null {
-  const openTagRe = new RegExp(`<div[^>]*data-variant="${variant}"[^>]*>`);
-  const openMatch = openTagRe.exec(html);
-  if (!openMatch) return null;
-  const start = openMatch.index;
-
-  const tagRe = /<div\b[^>]*>|<\/div>/g;
-  tagRe.lastIndex = start + openMatch[0].length;
-  let depth = 1;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(html))) {
-    if (m[0] === "</div>") {
-      depth -= 1;
-      if (depth === 0) return { start, end: m.index + m[0].length };
-    } else {
-      depth += 1;
-    }
-  }
-  return null;
-}
-
-function normalizeBracketLabel(raw: string): string {
-  // src/lib/contractTemplate.ts의 normalizeBracketLabel과 동일 — 괄호 안 라벨에 서식
-  // (<span style="...">)이 입혀져 있으면 그 태그까지 라벨의 일부로 취급돼 화이트리스트와
-  // 매칭이 안 됐다. 태그를 먼저 걷어내고 순수 텍스트만 남긴 뒤 비교한다.
-  const withoutTags = raw.replace(/<[^>]*>/g, "");
-  return withoutTags.replace(/\s*\([^()]*\)\s*$/, "").replace(/\s+/g, "");
-}
-
-// 키는 normalizeBracketLabel을 거친 뒤(공백 제거)와 비교되므로 공백 없이 적는다.
-const BRACKET_LABEL_TOKENS: Record<string, string> = {
-  "제품/서비스명": "productName",
-  "제품서비스명": "productName",
-  "서비스명": "productName",
-  "제품명": "productName",
-  "상호명": "companyName",
-  "회사명": "companyName",
-  "사업자등록번호": "bizRegNumber",
-  "사업자번호": "bizRegNumber",
-  "대표자": "bizCeoName",
-  "사업장주소": "bizAddress",
-  "담당자명": "contactName",
-  "담당자연락처": "contactPhone",
-  "용역기간시작": "periodStart",
-  "용역기간종료": "periodEnd",
-  // "용역기간"은 여기 넣으면 안 된다 — 기본 템플릿의 조 제목이 "제 3 조 (용역기간)"이라,
-  // 괄호 라벨 치환이 그 제목까지 잡아서 "제 3 조 112일"로 바꿔버린다. 조 제목과 겹치는
-  // 라벨은 화이트리스트에 넣지 않는다.
-  "계약일자": "contractDate",
-  "계약체결일": "contractDate",
-  "계약금액": "amount",
-  "대금지급방식": "paymentTerms",
-};
 
 // 계정이 이미 있는 클라이언트가 로그인 후 자기 회사에 연결된(linkedClientId) 계약 목록을
 // 보는 용도 — contracts 컬렉션은 firestore.rules상 완전히 관리자 전용이라 클라이언트는

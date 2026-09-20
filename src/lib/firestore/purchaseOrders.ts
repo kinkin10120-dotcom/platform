@@ -5,6 +5,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -279,25 +280,40 @@ export async function setPurchaseOrderLinkedTask(
 }
 
 // index === 0(첫 회차, 통상 선금) 입금 확인 시에만 연결 업무를 자동 착수 처리한다.
+//
+// order 파라미터는 화면에 떠 있던 시점의 스냅샷이라, 관리자 두 명(또는 탭 두 개)이 서로
+// 다른 회차를 거의 동시에 확인하면 installments 배열 전체를 각자 오래된 상태 기준으로
+// 덮어써서 먼저 저장된 확인 기록이 사라지는 문제가 있었다 — 트랜잭션으로 서버의 최신
+// installments를 다시 읽어와서 그 위에 이번 회차만 반영하도록 바꿔 이 경합을 없앤다.
 export async function markInstallmentPaid(order: PurchaseOrder, index: number, actor: { uid: string; name: string }) {
-  if (!order.payment) return;
+  const ref = doc(db, "purchaseOrders", order.id);
   const now = Date.now();
-  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, paid: true, paidAt: now } : it));
-  const label = installments[index].label;
 
-  // "발주 없이 직접 등록"(청구서)은 실제 생산·출고 과정이 없는 순수 청구 건이라, 회차가
-  // 전부 발행되고 입금까지 전부 확인되면 그 자체로 할 일이 끝난 것이다 — 매번 관리자가
-  // 따로 "출고완료" 처리를 눌러줄 필요 없이 자동으로 완료 상태(shipped, 목록에서 "출고완료"로
-  // 묶여 숨겨지는 그 상태)로 넘긴다. 실제 클라이언트 발주는 물리적인 생산/출고가 남아있을 수
-  // 있으므로 이 자동완료 대상이 아니다.
-  const allSettled = installments.every((it) => it.paid && it.issuedAt);
-  const autoComplete = order.createdByAdmin && allSettled && order.status !== "shipped";
+  const result = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = fromDoc(snap);
+    if (!current.payment) return null;
+    const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, paid: true, paidAt: now } : it));
+    const label = installments[index].label;
 
-  await updateDoc(doc(db, "purchaseOrders", order.id), {
-    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
-    ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
-    updatedAt: serverTimestamp(),
+    // "발주 없이 직접 등록"(청구서)은 실제 생산·출고 과정이 없는 순수 청구 건이라, 회차가
+    // 전부 발행되고 입금까지 전부 확인되면 그 자체로 할 일이 끝난 것이다 — 매번 관리자가
+    // 따로 "출고완료" 처리를 눌러줄 필요 없이 자동으로 완료 상태(shipped, 목록에서 "출고완료"로
+    // 묶여 숨겨지는 그 상태)로 넘긴다. 실제 클라이언트 발주는 물리적인 생산/출고가 남아있을 수
+    // 있으므로 이 자동완료 대상이 아니다.
+    const allSettled = installments.every((it) => it.paid && it.issuedAt);
+    const autoComplete = current.createdByAdmin && allSettled && current.status !== "shipped";
+
+    tx.update(ref, {
+      payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
+      ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    return { label };
   });
+
+  if (!result) return;
+  const { label } = result;
 
   try {
     await createNotification({
@@ -347,30 +363,44 @@ export async function markInstallmentPaid(order: PurchaseOrder, index: number, a
 // markInstallmentPaid의 부수효과는 일부러 되돌리지 않는다(관리자가 실수를 바로잡는 것이지,
 // 그 사이 이미 진행된 업무 착수·발송된 알림까지 자동으로 취소하는 건 오히려 위험하다).
 export async function unmarkInstallmentPaid(order: PurchaseOrder, index: number) {
-  if (!order.payment) return;
-  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, paid: false, paidAt: undefined } : it));
-  await updateDoc(doc(db, "purchaseOrders", order.id), {
-    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
-    updatedAt: serverTimestamp(),
+  const ref = doc(db, "purchaseOrders", order.id);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = fromDoc(snap);
+    if (!current.payment) return;
+    const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, paid: false, paidAt: undefined } : it));
+    tx.update(ref, {
+      payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
+      updatedAt: serverTimestamp(),
+    });
   });
 }
 
 export async function issueInstallmentInvoice(order: PurchaseOrder, index: number) {
-  if (!order.payment) return;
+  const ref = doc(db, "purchaseOrders", order.id);
   const now = Date.now();
-  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: now } : it));
-  const installment = installments[index];
 
-  // markInstallmentPaid와 동일한 이유 — 순서 상관없이(입금확인을 먼저 하고 나중에 발행하는
-  // 경우도 있으므로) 여기서도 전부 갖춰졌는지 확인해서 자동완료 처리한다.
-  const allSettled = installments.every((it) => it.paid && it.issuedAt);
-  const autoComplete = order.createdByAdmin && allSettled && order.status !== "shipped";
+  const result = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = fromDoc(snap);
+    if (!current.payment) return null;
+    const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: now } : it));
+    const installment = installments[index];
 
-  await updateDoc(doc(db, "purchaseOrders", order.id), {
-    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
-    ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
-    updatedAt: serverTimestamp(),
+    // markInstallmentPaid와 동일한 이유 — 순서 상관없이(입금확인을 먼저 하고 나중에 발행하는
+    // 경우도 있으므로) 여기서도 전부 갖춰졌는지 확인해서 자동완료 처리한다.
+    const allSettled = installments.every((it) => it.paid && it.issuedAt);
+    const autoComplete = current.createdByAdmin && allSettled && current.status !== "shipped";
+
+    tx.update(ref, {
+      payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
+      ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      updatedAt: serverTimestamp(),
+    });
+    return { label: installment.label };
   });
+
+  if (!result) return;
 
   try {
     await createNotification({
@@ -378,7 +408,7 @@ export async function issueInstallmentInvoice(order: PurchaseOrder, index: numbe
       type: "order_status_change",
       orderId: order.id,
       invoiceIndex: index,
-      message: `발주(${order.poNumber}) ${installment.label} 청구서가 발행되었습니다. 링크를 통해 청구서를 확인해주세요.`,
+      message: `발주(${order.poNumber}) ${result.label} 청구서가 발행되었습니다. 링크를 통해 청구서를 확인해주세요.`,
     });
   } catch (e) {
     console.error("청구서 발행 알림 발송 실패:", e);
@@ -390,21 +420,30 @@ export async function issueInstallmentInvoice(order: PurchaseOrder, index: numbe
 // 링크를 보냈으므로, 취소됐다는 것도 알려야 옛 문서를 계속 참고하는 걸 막을 수 있다.
 // (취소 즉시 invoice 페이지 자체가 issuedAt 없음을 이유로 접근을 막으므로 별도 처리는 불필요.)
 export async function unissueInstallmentInvoice(order: PurchaseOrder, index: number) {
-  if (!order.payment) return;
-  const installments = order.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: undefined } : it));
-  const installment = order.payment.installments[index];
+  const ref = doc(db, "purchaseOrders", order.id);
 
-  await updateDoc(doc(db, "purchaseOrders", order.id), {
-    payment: { installments: installments.map(serializeInstallment), note: order.payment.note ?? "" },
-    updatedAt: serverTimestamp(),
+  const result = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = fromDoc(snap);
+    if (!current.payment) return null;
+    const installment = current.payment.installments[index];
+    const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: undefined } : it));
+
+    tx.update(ref, {
+      payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
+      updatedAt: serverTimestamp(),
+    });
+    return { label: installment.label, paid: installment.paid };
   });
+
+  if (!result) return;
 
   try {
     await createNotification({
       userId: order.orderedBy,
       type: "order_status_change",
       orderId: order.id,
-      message: `발주(${order.poNumber}) ${installment.label} ${installment.paid ? "영수증" : "청구서"} 발행이 취소되었습니다.`,
+      message: `발주(${order.poNumber}) ${result.label} ${result.paid ? "영수증" : "청구서"} 발행이 취소되었습니다.`,
     });
   } catch (e) {
     console.error("발행취소 알림 발송 실패:", e);

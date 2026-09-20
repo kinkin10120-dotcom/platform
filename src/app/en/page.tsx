@@ -389,7 +389,7 @@ export default function EnglishRootPage() {
           </p>
           <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 sm:mb-10">
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F1CE00]" />
-            <span className="text-xs font-medium text-white/70">From product planning to development and mass production — HANDYHAND is with you every step</span>
+            <span className="text-xs font-medium text-white/70">From product planning to development and mass production</span>
           </div>
           <button
             onClick={() => setQuoteOpen(true)}

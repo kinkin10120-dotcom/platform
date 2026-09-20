@@ -20,6 +20,7 @@ import {
   QuoteFile,
 } from "@/lib/firestore/quotes";
 import { issueQuote } from "@/lib/functions";
+import { openAuthenticatedStorageFile } from "@/lib/firebase";
 import { formatMoney } from "@/lib/orderCalc";
 import { formatPhoneInput, formatAmountInput } from "@/lib/formatInput";
 import { Currency } from "@/lib/types";
@@ -543,14 +544,13 @@ export default function QuotesPage() {
                     <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-500">거절 사유: {selected.quoteDeclineReason}</p>
                   )}
                   {selected.bizRegCertUrl && (
-                    <a
-                      href={selected.bizRegCertUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block rounded-xl bg-green-50 px-3 py-2 text-xs font-medium text-green-600 underline underline-offset-2"
+                    <button
+                      type="button"
+                      onClick={() => openAuthenticatedStorageFile(selected.bizRegCertUrl!)}
+                      className="block w-full rounded-xl bg-green-50 px-3 py-2 text-left text-xs font-medium text-green-600 underline underline-offset-2"
                     >
                       고객이 첨부한 사업자등록증 보기
-                    </a>
+                    </button>
                   )}
                   <button
                     onClick={() => setPreviewOpen(true)}

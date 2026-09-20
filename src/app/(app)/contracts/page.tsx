@@ -24,6 +24,7 @@ import {
 import { listenContractTemplates, createContractTemplate, updateContractTemplate, deleteContractTemplate } from "@/lib/firestore/contractTemplates";
 import { createClient, updateClient, listenClients } from "@/lib/firestore/clients";
 import { createClientAccount, resendContractInvite, sendContract } from "@/lib/functions";
+import { openAuthenticatedStorageFile } from "@/lib/firebase";
 import { Client, Contract, ContractAttachment, ContractRevision, ContractStatus, CONTRACT_STATUS_LABEL, ContractTemplate, Currency } from "@/lib/types";
 
 const STATUS_STYLE: Record<ContractStatus, string> = {
@@ -992,14 +993,13 @@ function ContractReadOnlyView({ contract }: { contract: Contract }) {
       )}
 
       {contract.bizRegCertUrl && (
-        <a
-          href={contract.bizRegCertUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="block rounded-xl bg-green-50 px-3 py-2 text-xs font-medium text-green-600 underline underline-offset-2"
+        <button
+          type="button"
+          onClick={() => openAuthenticatedStorageFile(contract.bizRegCertUrl!)}
+          className="block w-full rounded-xl bg-green-50 px-3 py-2 text-left text-xs font-medium text-green-600 underline underline-offset-2"
         >
           고객이 첨부한 사업자등록증 보기
-        </a>
+        </button>
       )}
 
       <div>

@@ -3,10 +3,32 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // firestore.rules의 myProfile()과 같은 목적이지만, Storage 규칙은 Firestore 규칙 파일과
+    // 별도로 배포되는 완전히 다른 규칙 엔진이라 함수를 공유할 수 없어 그대로 다시 적는다.
+    function myProfile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && myProfile().role == 'admin';
+    }
+
+    // Firestore 쪽(firestore.rules의 projects 규칙)은 clientId로 소유권을 검사하는데, Storage
+    // 쪽은 로그인 여부만 검사하고 있었다 — 로그인한 다른 회사 고객 계정이 projectId만 알아내면
+    // (공유 링크·알림 등으로 노출될 수 있음) 그 프로젝트의 첨부파일을 읽고 쓸 수 있던 구멍을 막는다.
+    function belongsToProjectClient(projectId) {
+      return isSignedIn() && myProfile().role == 'client' &&
+        myProfile().clientId == firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientId;
+    }
+
     // 업무별 첨부 파일: projects/{projectId}/tasks/{taskId}/{fileName}
     // 프로젝트 삭제 시 하위 파일을 한꺼번에 조회/삭제할 수 있도록 프로젝트 전체 경로에 대해 list 권한도 허용
     match /projects/{projectId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin() || belongsToProjectClient(projectId);
     }
 
     // 클라이언트 브랜드 로고
@@ -48,17 +70,21 @@ service firebase.storage {
       allow write: if request.auth != null;
     }
 
-    // 견적 수락 시 고객이 첨부하는 사업자등록증 — 계약서 쪽(/contracts/{contractId})과
-    // 동일하게 관리자가 링크를 눌러 바로 열어볼 수 있어야 하므로 읽기는 공개로 둔다.
-    // (파일명이 bizRegCert.*인 것만 해당 — 아래 상담 자료 파일은 계속 인증이 필요하다.)
+    // 견적 수락 시 고객이 첨부하는 사업자등록증 — 사업자등록번호 등 민감 정보가 담겨 있어
+    // 이전처럼 완전 공개(read: true)로 두지 않고 관리자 로그인을 요구한다. 관리자 화면
+    // (quotes/page.tsx, contracts/page.tsx)에서는 <a href>가 아니라
+    // openAuthenticatedStorageFile()(SDK의 인증된 요청으로 blob을 받아옴)로 열람한다 —
+    // 단순 <a href> 링크는 브라우저가 인증 헤더를 붙이지 않아 이 규칙에 막히기 때문이다.
+    // (파일명이 bizRegCert.*인 것만 해당 — 아래 상담 자료 파일은 원래도 관리자 전용이었다.)
     match /quoteRequests/{quoteId}/{fileName} {
-      allow read: if fileName.matches('bizRegCert[.].*');
+      allow read: if isAdmin() && fileName.matches('bizRegCert[.].*');
     }
 
     // 견적 요청 상담 중(대면/화상 미팅) 이메일 등으로 추가로 받는 자료 아카이브 — 견적 요청
-    // 자체가 관리자 전용 데이터라 이 경로도 관리자만 쓴다.
+    // 자체가 관리자 전용 데이터라 이 경로도 관리자만 쓴다. (기존엔 "관리자만"이라는 주석과
+    // 달리 실제로는 로그인만 있으면 통과되던 코드-주석 불일치가 있어 함께 바로잡는다.)
     match /quoteRequests/{quoteId}/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin();
     }
   }
 }

@@ -178,10 +178,12 @@ export default function PortfolioPage() {
               <button
                 key={item.client}
                 onClick={() => setSelectedCase(item)}
-                className="h-full overflow-hidden rounded-2xl bg-white text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
+                className="flex h-full flex-col overflow-hidden rounded-2xl bg-white text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
               >
                 <PortfolioImageSlider images={item.images} alt={`${item.client} ${item.category}`.trim()} />
-                <div className="p-5 sm:p-6">
+                {/* Card height is already matched per grid row, but shorter descriptions left
+                    all the slack as blank space below the text — centering distributes it evenly. */}
+                <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
@@ -212,7 +214,7 @@ export default function PortfolioPage() {
               <button
                 key={item.name}
                 onClick={() => setSelectedBrand(item)}
-                className="h-full overflow-hidden rounded-2xl bg-[#f5f5f7] text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
+                className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#f5f5f7] text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
               >
                 <div className="relative">
                   <PortfolioImageSlider images={item.images} alt={`HANDYHAND in-house brand ${item.name}`} />
@@ -223,7 +225,7 @@ export default function PortfolioPage() {
                     </span>
                   )}
                 </div>
-                <div className="p-5 sm:p-6">
+                <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}

@@ -177,10 +177,13 @@ export default function PortfolioPage() {
               <button
                 key={item.client}
                 onClick={() => setSelectedCase(item)}
-                className="h-full overflow-hidden rounded-2xl bg-white text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
+                className="flex h-full flex-col overflow-hidden rounded-2xl bg-white text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
               >
                 <PortfolioImageSlider images={item.images} alt={`${item.client} ${item.category}`.trim()} />
-                <div className="p-5 sm:p-6">
+                {/* 카드 전체 높이는 grid가 이미 행 단위로 맞춰주지만, 설명 길이가 짧은 카드는
+                    그 여유 공간이 전부 텍스트 아래쪽 빈 여백으로 몰려 다른 카드와 비율이
+                    달라 보였다 — flex-1 + justify-center로 세로 중앙에 오도록 분산한다. */}
+                <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
@@ -211,7 +214,7 @@ export default function PortfolioPage() {
               <button
                 key={item.name}
                 onClick={() => setSelectedBrand(item)}
-                className="h-full overflow-hidden rounded-2xl bg-[#f5f5f7] text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
+                className="flex h-full flex-col overflow-hidden rounded-2xl bg-[#f5f5f7] text-left transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_-10px_rgba(0,0,0,0.15)] sm:rounded-3xl"
               >
                 <div className="relative">
                   <PortfolioImageSlider images={item.images} alt={`핸디핸드 자체 브랜드 ${item.name}`} />
@@ -222,7 +225,9 @@ export default function PortfolioPage() {
                     </span>
                   )}
                 </div>
-                <div className="p-5 sm:p-6">
+                {/* CASES 카드와 같은 이유 — 설명 길이가 짧은 카드의 여유 공간이 텍스트 아래
+                    빈 여백으로만 몰리지 않도록 세로 중앙 정렬로 분산한다. */}
+                <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}

@@ -404,7 +404,7 @@ function OrdersTab() {
                 autoFocus
                 value={deleteConfirmText}
                 onChange={(e) => setDeleteConfirmText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleConfirmDelete(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleConfirmDelete(); }}
                 placeholder={DELETE_KEYWORD}
                 className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
               />
@@ -1527,7 +1527,7 @@ function ClientCatalogSection({ client }: { client: Client }) {
                 autoFocus
                 value={deleteConfirmText}
                 onChange={(e) => setDeleteConfirmText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleConfirmDelete(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleConfirmDelete(); }}
                 placeholder={DELETE_KEYWORD}
                 className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
               />

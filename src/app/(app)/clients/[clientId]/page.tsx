@@ -495,7 +495,7 @@ export default function ClientDetailPage() {
                           autoFocus
                           value={editingUserName}
                           onChange={(e) => setEditingUserName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleSaveUserName()}
+                          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleSaveUserName()}
                           className="w-24 rounded-lg border border-[#d1d1d6] px-2 py-1 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
                         />
                         <button onClick={handleSaveUserName} disabled={savingUserName || !editingUserName.trim()} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2 disabled:opacity-40">
@@ -566,7 +566,7 @@ export default function ClientDetailPage() {
                 autoFocus
                 value={deleteUserConfirmText}
                 onChange={(e) => setDeleteUserConfirmText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleConfirmDeleteUser(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleConfirmDeleteUser(); }}
                 placeholder={DELETE_USER_KEYWORD}
                 className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
               />
@@ -607,7 +607,7 @@ export default function ClientDetailPage() {
                 autoFocus
                 value={deleteClientConfirmText}
                 onChange={(e) => setDeleteClientConfirmText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleConfirmDeleteClient(); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) handleConfirmDeleteClient(); }}
                 placeholder={DELETE_CLIENT_KEYWORD}
                 className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
               />

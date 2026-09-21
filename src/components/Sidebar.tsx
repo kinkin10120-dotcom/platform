@@ -111,7 +111,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSave();
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) handleSave();
     if (e.key === "Escape") setEditing(false);
   };
 

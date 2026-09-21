@@ -644,7 +644,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                 <input
                   value={newChecklistText}
                   onChange={(e) => setNewChecklistText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddChecklistItem(); } }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); handleAddChecklistItem(); } }}
                   placeholder="세부 항목 추가"
                   className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
                 />

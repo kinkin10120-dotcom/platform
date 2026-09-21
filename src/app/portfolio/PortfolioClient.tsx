@@ -184,7 +184,7 @@ export default function PortfolioPage() {
                     그 여유 공간이 전부 텍스트 아래쪽 빈 여백으로 몰려 다른 카드와 비율이
                     달라 보였다 — flex-1 + justify-center로 세로 중앙에 오도록 분산한다. */}
                 <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
                   </span>
@@ -228,7 +228,7 @@ export default function PortfolioPage() {
                 {/* CASES 카드와 같은 이유 — 설명 길이가 짧은 카드의 여유 공간이 텍스트 아래
                     빈 여백으로만 몰리지 않도록 세로 중앙 정렬로 분산한다. */}
                 <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
                   </span>

@@ -184,7 +184,7 @@ export default function PortfolioPage() {
                 {/* Card height is already matched per grid row, but shorter descriptions left
                     all the slack as blank space below the text — centering distributes it evenly. */}
                 <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
                   </span>
@@ -226,7 +226,7 @@ export default function PortfolioPage() {
                   )}
                 </div>
                 <div className="flex flex-1 flex-col justify-center p-5 sm:p-6">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
+                  <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-[#86868b]">
                     <span className="h-1 w-1 rounded-full bg-[#F1CE00]" />
                     {item.tag}
                   </span>

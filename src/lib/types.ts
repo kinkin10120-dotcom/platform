@@ -283,6 +283,7 @@ export interface FreelanceJob {
   postedAt: number;
   fetchedAt: number;
   status: FreelanceJobStatus;
+  proposalDraft?: string;
 }
 
 export interface FreelanceFeedConfig {

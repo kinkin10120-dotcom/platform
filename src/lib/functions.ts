@@ -32,6 +32,12 @@ export async function sendPasswordResetEmail(email: string, name?: string, compa
   return res.data;
 }
 
+export async function manualFetchFreelanceJobs() {
+  const fn = httpsCallable<void, { newCount: number }>(functions, "manualFetchFreelanceJobs");
+  const res = await fn();
+  return res.data;
+}
+
 export async function sendContract(contractId: string) {
   const fn = httpsCallable<{ contractId: string }, { ok: boolean }>(functions, "sendContract");
   const res = await fn({ contractId });

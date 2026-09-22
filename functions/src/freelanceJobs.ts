@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { XMLParser } from "fast-xml-parser";
 import { FieldValue } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { db, internalNotifySecret, recordSystemAlert } from "./shared";
 
 // Upwork 등 프리랜서 플랫폼을 매번 직접 들어가서 확인하는 시간을 줄이기 위해, 저장 검색
@@ -44,70 +45,95 @@ async function translateJob(title: string, description: string): Promise<{ title
 
 type RssItem = { title?: string; link?: string; guid?: string | { "#text"?: string }; pubDate?: string; description?: string };
 
-export const fetchFreelanceJobs = onSchedule(
-  { schedule: "every 30 minutes", timeZone: "Asia/Seoul", secrets: [internalNotifySecret], timeoutSeconds: 300 },
-  async () => {
-    const configsSnap = await db.collection("freelanceFeedConfigs").where("enabled", "==", true).get();
-    if (configsSnap.empty) return;
+// 스케줄러(5분 주기)와 관리자가 누르는 수동 새로고침 버튼이 똑같은 수집 로직을 공유한다.
+async function runFreelanceJobFetch(): Promise<{ newCount: number }> {
+  const configsSnap = await db.collection("freelanceFeedConfigs").where("enabled", "==", true).get();
+  if (configsSnap.empty) return { newCount: 0 };
 
-    const parser = new XMLParser();
-    const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  const parser = new XMLParser();
+  const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  let newCount = 0;
 
-    for (const configDoc of configsSnap.docs) {
-      const config = configDoc.data();
-      try {
-        const res = await fetch(config.url);
-        if (!res.ok) throw new Error(`피드 응답 status ${res.status}`);
-        const xml = await res.text();
-        const parsed = parser.parse(xml);
-        const rawItems = parsed?.rss?.channel?.item;
-        const items: RssItem[] = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
+  for (const configDoc of configsSnap.docs) {
+    const config = configDoc.data();
+    try {
+      const res = await fetch(config.url);
+      if (!res.ok) throw new Error(`피드 응답 status ${res.status}`);
+      const xml = await res.text();
+      const parsed = parser.parse(xml);
+      const rawItems = parsed?.rss?.channel?.item;
+      const items: RssItem[] = Array.isArray(rawItems) ? rawItems : rawItems ? [rawItems] : [];
 
-        for (const item of items.slice(0, MAX_ITEMS_PER_FEED)) {
-          const link = item.link;
-          if (!link) continue;
-          const postedAt = item.pubDate ? Date.parse(item.pubDate) : Date.now();
-          if (Number.isFinite(postedAt) && postedAt < cutoff) continue;
+      for (const item of items.slice(0, MAX_ITEMS_PER_FEED)) {
+        const link = item.link;
+        if (!link) continue;
+        const postedAt = item.pubDate ? Date.parse(item.pubDate) : Date.now();
+        if (Number.isFinite(postedAt) && postedAt < cutoff) continue;
 
-          const id = crypto.createHash("sha1").update(link).digest("hex");
-          const ref = db.collection("freelanceJobs").doc(id);
+        const id = crypto.createHash("sha1").update(link).digest("hex");
+        const ref = db.collection("freelanceJobs").doc(id);
 
-          // create()는 문서가 이미 있으면 예외를 던진다 — 이미 처리한 공고를 매번 다시
-          // 번역 API 호출까지 해가며 덮어쓰지 않도록, 별도 조회 없이 이 실패로 중복을 거른다.
-          try {
-            await ref.create({ platform: config.platform, link, createdMarker: true });
-          } catch {
-            continue;
-          }
-
-          try {
-            const title = (item.title ?? "").trim();
-            const description = stripHtml(item.description ?? "");
-            const { titleKo, descriptionKo } = await translateJob(title, description);
-
-            await ref.set({
-              platform: config.platform,
-              title,
-              titleKo,
-              description,
-              descriptionKo,
-              link,
-              postedAt: Number.isFinite(postedAt) ? postedAt : Date.now(),
-              fetchedAt: FieldValue.serverTimestamp(),
-              status: "new",
-            });
-          } catch (e) {
-            // 번역/저장 도중 실패하면 예약만 된 빈 문서가 영구히 남아 다음 실행에서도 계속
-            // 건너뛰어지므로(위 create() 중복 방지 로직 때문에), 예약을 지워 다음 실행에
-            // 다시 시도되게 한다.
-            console.error(`공고 저장 실패, 다음 실행에 재시도: ${link}`, e);
-            await ref.delete().catch(() => {});
-          }
+        // create()는 문서가 이미 있으면 예외를 던진다 — 이미 처리한 공고를 매번 다시
+        // 번역 API 호출까지 해가며 덮어쓰지 않도록, 별도 조회 없이 이 실패로 중복을 거른다.
+        try {
+          await ref.create({ platform: config.platform, link, createdMarker: true });
+        } catch {
+          continue;
         }
-      } catch (e) {
-        console.error(`입찰 공고 피드 수집 실패 (${config.label ?? config.url}):`, e);
-        await recordSystemAlert("freelance_feed", `입찰 공고 피드 수집이 실패했습니다: ${config.label ?? config.url}`);
+
+        try {
+          const title = (item.title ?? "").trim();
+          const description = stripHtml(item.description ?? "");
+          const { titleKo, descriptionKo } = await translateJob(title, description);
+
+          await ref.set({
+            platform: config.platform,
+            title,
+            titleKo,
+            description,
+            descriptionKo,
+            link,
+            postedAt: Number.isFinite(postedAt) ? postedAt : Date.now(),
+            fetchedAt: FieldValue.serverTimestamp(),
+            status: "new",
+          });
+          newCount++;
+        } catch (e) {
+          // 번역/저장 도중 실패하면 예약만 된 빈 문서가 영구히 남아 다음 실행에서도 계속
+          // 건너뛰어지므로(위 create() 중복 방지 로직 때문에), 예약을 지워 다음 실행에
+          // 다시 시도되게 한다.
+          console.error(`공고 저장 실패, 다음 실행에 재시도: ${link}`, e);
+          await ref.delete().catch(() => {});
+        }
       }
+    } catch (e) {
+      console.error(`입찰 공고 피드 수집 실패 (${config.label ?? config.url}):`, e);
+      await recordSystemAlert("freelance_feed", `입찰 공고 피드 수집이 실패했습니다: ${config.label ?? config.url}`);
     }
+  }
+
+  return { newCount };
+}
+
+export const fetchFreelanceJobs = onSchedule(
+  { schedule: "every 5 minutes", timeZone: "Asia/Seoul", secrets: [internalNotifySecret], timeoutSeconds: 300 },
+  async () => {
+    await runFreelanceJobFetch();
+  }
+);
+
+// 관리자가 피드를 새로 등록했을 때 등, 5분을 기다리지 않고 바로 확인하고 싶을 때 쓰는
+// 수동 새로고침 버튼용 콜러블.
+export const manualFetchFreelanceJobs = onCall(
+  { secrets: [internalNotifySecret], timeoutSeconds: 300 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+    }
+    const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+    if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+      throw new HttpsError("permission-denied", "관리자만 실행할 수 있습니다.");
+    }
+    return runFreelanceJobFetch();
   }
 );

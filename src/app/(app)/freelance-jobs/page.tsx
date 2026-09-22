@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Briefcase, ChevronDown, ExternalLink, Power } from "lucide-react";
+import { Plus, Trash2, Briefcase, ChevronDown, ExternalLink, Power, RefreshCw, Sparkles, Copy, Check } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   listenFreelanceJobs,
@@ -11,7 +11,9 @@ import {
   addFeedConfig,
   updateFeedConfig,
   deleteFeedConfig,
+  generateProposalDraft,
 } from "@/lib/firestore/freelanceJobs";
+import { manualFetchFreelanceJobs } from "@/lib/functions";
 import { FreelanceJob, FreelanceJobStatus, FreelanceFeedConfig, FREELANCE_JOB_PLATFORM_LABEL } from "@/lib/types";
 
 const STATUS_TABS: { key: FreelanceJobStatus | "all"; label: string }[] = [
@@ -50,6 +52,9 @@ export default function FreelanceJobsPage() {
   const [newLabel, setNewLabel] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => listenFreelanceJobs(setJobs), []);
   useEffect(() => listenFeedConfigs(setConfigs), []);
@@ -76,6 +81,36 @@ export default function FreelanceJobsPage() {
     }
   }
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const { newCount } = await manualFetchFreelanceJobs();
+      alert(newCount > 0 ? `새 공고 ${newCount}건을 가져왔습니다.` : "새로 올라온 공고가 없습니다.");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "새로고침에 실패했습니다.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function handleGenerateProposal(job: FreelanceJob) {
+    setGeneratingId(job.id);
+    try {
+      await generateProposalDraft(job.id, job.title, job.description);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "제안서 생성에 실패했습니다.");
+    } finally {
+      setGeneratingId(null);
+    }
+  }
+
+  async function handleCopyProposal(job: FreelanceJob) {
+    if (!job.proposalDraft) return;
+    await navigator.clipboard.writeText(job.proposalDraft);
+    setCopiedId(job.id);
+    setTimeout(() => setCopiedId((prev) => (prev === job.id ? null : prev)), 2000);
+  }
+
   if (appUser?.role !== "admin") {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
   }
@@ -95,12 +130,21 @@ export default function FreelanceJobsPage() {
             저장 검색 RSS 피드에서 자동으로 가져와 한글로 번역한 공고입니다. 새 공고 {newCount}건.
           </p>
         </div>
-        <button
-          onClick={() => setShowConfigForm((v) => !v)}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 self-start whitespace-nowrap rounded-full bg-[#1d1d1f] px-4 text-sm font-medium text-white transition hover:bg-black"
-        >
-          <Plus size={15} /> 피드 관리
-        </button>
+        <div className="flex shrink-0 gap-2 self-start">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing || configs.length === 0}
+            className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-[#d1d1d6] px-4 text-sm font-medium text-[#1d1d1f] transition hover:bg-[#f5f5f7] disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} /> 지금 새로고침
+          </button>
+          <button
+            onClick={() => setShowConfigForm((v) => !v)}
+            className="inline-flex h-9 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#1d1d1f] px-4 text-sm font-medium text-white transition hover:bg-black"
+          >
+            <Plus size={15} /> 피드 관리
+          </button>
+        </div>
       </div>
 
       {showConfigForm && (
@@ -109,7 +153,7 @@ export default function FreelanceJobsPage() {
             <p className="mb-3 text-sm font-semibold text-[#1d1d1f]">수집할 RSS 피드</p>
             <p className="mb-3 text-xs text-[#86868b] leading-relaxed">
               Upwork에서 원하는 키워드로 검색 후 저장 검색(Saved Search)으로 등록하고, 그 검색의 RSS 피드 주소를
-              복사해 아래에 추가하세요. 30분마다 새 공고를 자동으로 가져옵니다.
+              복사해 아래에 추가하세요. 5분마다 새 공고를 자동으로 가져옵니다.
             </p>
             {configs.length > 0 && (
               <div className="mb-3 space-y-2">
@@ -224,6 +268,21 @@ export default function FreelanceJobsPage() {
                           <summary className="cursor-pointer select-none">원문 보기</summary>
                           <p className="mt-1.5 whitespace-pre-wrap leading-relaxed">{j.description}</p>
                         </details>
+                        {j.proposalDraft && (
+                          <div className="rounded-2xl border border-[#e5e5e5] bg-[#f5f5f7] p-4">
+                            <div className="mb-2 flex items-center justify-between">
+                              <p className="text-xs font-semibold text-[#1d1d1f]">제안서 초안 (영문)</p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleCopyProposal(j); }}
+                                className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-[#e5e5e5]"
+                              >
+                                {copiedId === j.id ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+                                {copiedId === j.id ? "복사됨" : "복사"}
+                              </button>
+                            </div>
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#1d1d1f]">{j.proposalDraft}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </button>
@@ -240,6 +299,14 @@ export default function FreelanceJobsPage() {
                   >
                     <ExternalLink size={12} /> 원본 공고 열기
                   </a>
+                  <button
+                    onClick={() => handleGenerateProposal(j)}
+                    disabled={generatingId === j.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs text-[#1d1d1f] hover:bg-[#f5f5f7] disabled:opacity-50"
+                  >
+                    <Sparkles size={12} />
+                    {generatingId === j.id ? "생성 중..." : j.proposalDraft ? "제안서 다시 생성" : "제안서 초안 만들기"}
+                  </button>
                   {(["reviewed", "applied", "dismissed"] as const)
                     .filter((s) => s !== j.status)
                     .map((s) => (

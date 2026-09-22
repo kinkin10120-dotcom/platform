@@ -262,39 +262,6 @@ export interface TemplateStep {
   checklist?: string[]; // 적용 시 업무의 체크리스트로 그대로 생성됨
 }
 
-// ---- 프리랜서 플랫폼 입찰 공고 (Upwork 등 저장 검색 RSS를 서버가 주기적으로 가져와
-// 자동 번역해 쌓아두는 목록. 매번 각 사이트에 들어가 확인하는 시간을 줄이기 위한 용도) ----
-export type FreelanceJobPlatform = "upwork";
-
-export const FREELANCE_JOB_PLATFORM_LABEL: Record<FreelanceJobPlatform, string> = {
-  upwork: "Upwork",
-};
-
-export type FreelanceJobStatus = "new" | "reviewed" | "applied" | "dismissed";
-
-export interface FreelanceJob {
-  id: string;
-  platform: FreelanceJobPlatform;
-  title: string;
-  titleKo: string;
-  description: string;
-  descriptionKo: string;
-  link: string;
-  postedAt: number;
-  fetchedAt: number;
-  status: FreelanceJobStatus;
-  proposalDraft?: string;
-}
-
-export interface FreelanceFeedConfig {
-  id: string;
-  platform: FreelanceJobPlatform;
-  label: string;
-  url: string;
-  enabled: boolean;
-  createdAt: number;
-}
-
 export interface Notice {
   id: string;
   title: string;

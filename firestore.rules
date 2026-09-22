@@ -284,6 +284,19 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---- freelance jobs (Upwork 등 저장 검색 RSS로 자동 수집한 입찰 공고, 관리자 전용) ----
+    // 생성은 Cloud Functions(Admin SDK, RSS 폴링 스케줄러)만 한다 — Admin SDK는 규칙을
+    // 우회하므로 create를 막아두면 클라이언트가 가짜 공고를 심을 수 없다.
+    match /freelanceJobs/{jobId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if false;
+    }
+
+    // ---- freelance feed configs (수집할 RSS 피드 URL 관리, 관리자 전용) ----
+    match /freelanceFeedConfigs/{configId} {
+      allow read, write: if isAdmin();
+    }
+
     // ---- work-intake 업로드 내역 (별도 내부 도구용 로그, 관리자 전용) ----
     // pm-platform과 같은 Firebase 프로젝트를 공유하는 별도 앱(work-intake)이 파일 업로드 직후
     // "최근 업로드 내역" 조회용으로 남기는 로그. 실제 파일/코멘트는 tasks/{taskId}/files·comments에

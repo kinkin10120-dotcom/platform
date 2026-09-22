@@ -17,18 +17,16 @@ service firebase.storage {
       return isSignedIn() && myProfile().role == 'admin';
     }
 
-    // Firestore 쪽(firestore.rules의 projects 규칙)은 clientId로 소유권을 검사하는데, Storage
-    // 쪽은 로그인 여부만 검사하고 있었다 — 로그인한 다른 회사 고객 계정이 projectId만 알아내면
-    // (공유 링크·알림 등으로 노출될 수 있음) 그 프로젝트의 첨부파일을 읽고 쓸 수 있던 구멍을 막는다.
-    function belongsToProjectClient(projectId) {
-      return isSignedIn() && myProfile().role == 'client' &&
-        myProfile().clientId == firestore.get(/databases/(default)/documents/projects/$(projectId)).data.clientId;
-    }
-
+    // 한때 clientId 소유권까지 firestore.get()으로 검사하도록 좁혔었는데(다른 회사 고객이
+    // projectId만 알아내면 접근 가능하던 구멍을 막으려는 시도), 실제 운영 환경에서 Storage
+    // 규칙의 firestore.get() 교차 서비스 호출이 기대대로 동작하지 않아 관리자 본인의 정상
+    // 업로드까지 "업로드 권한이 없습니다" 오류로 막아버리는 회귀가 생겼다. 업무 중단이 더
+    // 급한 문제라 우선 로그인 여부만 확인하는 원래 방식으로 되돌린다 — clientId 소유권 검사는
+    // firestore.get() 대신 커스텀 클레임(Custom Claims) 등 더 안정적인 방식으로 다시 시도할 것.
     // 업무별 첨부 파일: projects/{projectId}/tasks/{taskId}/{fileName}
     // 프로젝트 삭제 시 하위 파일을 한꺼번에 조회/삭제할 수 있도록 프로젝트 전체 경로에 대해 list 권한도 허용
     match /projects/{projectId}/{allPaths=**} {
-      allow read, write: if isAdmin() || belongsToProjectClient(projectId);
+      allow read, write: if isSignedIn();
     }
 
     // 클라이언트 브랜드 로고

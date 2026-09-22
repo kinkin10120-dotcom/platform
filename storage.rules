@@ -7,22 +7,15 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // firestore.rules의 myProfile()과 같은 목적이지만, Storage 규칙은 Firestore 규칙 파일과
-    // 별도로 배포되는 완전히 다른 규칙 엔진이라 함수를 공유할 수 없어 그대로 다시 적는다.
-    function myProfile() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && myProfile().role == 'admin';
-    }
-
-    // 한때 clientId 소유권까지 firestore.get()으로 검사하도록 좁혔었는데(다른 회사 고객이
-    // projectId만 알아내면 접근 가능하던 구멍을 막으려는 시도), 실제 운영 환경에서 Storage
-    // 규칙의 firestore.get() 교차 서비스 호출이 기대대로 동작하지 않아 관리자 본인의 정상
-    // 업로드까지 "업로드 권한이 없습니다" 오류로 막아버리는 회귀가 생겼다. 업무 중단이 더
-    // 급한 문제라 우선 로그인 여부만 확인하는 원래 방식으로 되돌린다 — clientId 소유권 검사는
-    // firestore.get() 대신 커스텀 클레임(Custom Claims) 등 더 안정적인 방식으로 다시 시도할 것.
+    // 예전엔 여기에 firestore.get()으로 Firestore의 users/projects 문서를 들여다봐서
+    // 관리자 여부·clientId 소유권까지 검사하려 했었다 — 그런데 실제 배포해보니
+    // "Invalid function name: firestore.get" 경고가 뜬다: Storage 규칙 언어에는 애초에
+    // firestore.get()이라는 함수가 없다(Firestore 규칙과 달리 Storage 규칙은 다른 서비스의
+    // 문서를 들여다볼 방법이 없다). 그래서 그 함수를 쓰던 isAdmin()/clientId 검사는 관리자
+    // 여부와 무관하게 항상 실패해, 정상적인 관리자 업로드·열람까지 "권한 없음"으로 막고
+    // 있었다. 로그인 여부만 확인하는 걸로 되돌렸다 — 관리자 전용/소유권 검사가 다시
+    // 필요해지면 Firebase Auth 커스텀 클레임(Custom Claims)처럼 Storage 규칙 안에서
+    // request.auth.token으로 바로 읽을 수 있는 방식을 써야 한다.
     // 업무별 첨부 파일: projects/{projectId}/tasks/{taskId}/{fileName}
     // 프로젝트 삭제 시 하위 파일을 한꺼번에 조회/삭제할 수 있도록 프로젝트 전체 경로에 대해 list 권한도 허용
     match /projects/{projectId}/{allPaths=**} {
@@ -69,20 +62,20 @@ service firebase.storage {
     }
 
     // 견적 수락 시 고객이 첨부하는 사업자등록증 — 사업자등록번호 등 민감 정보가 담겨 있어
-    // 이전처럼 완전 공개(read: true)로 두지 않고 관리자 로그인을 요구한다. 관리자 화면
-    // (quotes/page.tsx, contracts/page.tsx)에서는 <a href>가 아니라
-    // openAuthenticatedStorageFile()(SDK의 인증된 요청으로 blob을 받아옴)로 열람한다 —
-    // 단순 <a href> 링크는 브라우저가 인증 헤더를 붙이지 않아 이 규칙에 막히기 때문이다.
+    // 완전 공개(read: true)는 피하고 싶었지만, 위와 같은 이유(firestore.get() 자체가 Storage
+    // 규칙에 없는 함수)로 관리자 전용 검사가 항상 실패해 관리자 본인의
+    // openAuthenticatedStorageFile() 열람 시도까지 조용히 막고 있었다. 우선 로그인 여부만
+    // 확인하는 방식으로 되돌린다 — 관리자 전용으로 더 좁히려면 커스텀 클레임을 써야 한다.
     // (파일명이 bizRegCert.*인 것만 해당 — 아래 상담 자료 파일은 원래도 관리자 전용이었다.)
     match /quoteRequests/{quoteId}/{fileName} {
-      allow read: if isAdmin() && fileName.matches('bizRegCert[.].*');
+      allow read: if isSignedIn() && fileName.matches('bizRegCert[.].*');
     }
 
     // 견적 요청 상담 중(대면/화상 미팅) 이메일 등으로 추가로 받는 자료 아카이브 — 견적 요청
-    // 자체가 관리자 전용 데이터라 이 경로도 관리자만 쓴다. (기존엔 "관리자만"이라는 주석과
-    // 달리 실제로는 로그인만 있으면 통과되던 코드-주석 불일치가 있어 함께 바로잡는다.)
+    // 자체가 관리자 전용 데이터라 이 경로도 원래는 관리자만 써야 하지만, 위와 같은 이유로
+    // 우선 로그인 여부만 확인한다.
     match /quoteRequests/{quoteId}/{allPaths=**} {
-      allow read, write: if isAdmin();
+      allow read, write: if isSignedIn();
     }
   }
 }

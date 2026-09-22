@@ -24,9 +24,16 @@ export const storage = getStorage(app);
 // blob을 새 탭에 띄운다. quoteRequests의 사업자등록증(bizRegCert)처럼 원래 공개 읽기였다가
 // 로그인 필요로 좁힌 파일에 사용한다.
 export async function openAuthenticatedStorageFile(url: string) {
-  const blob = await getBlob(ref(storage, url));
-  const objectUrl = URL.createObjectURL(blob);
-  window.open(objectUrl, "_blank", "noopener,noreferrer");
+  try {
+    const blob = await getBlob(ref(storage, url));
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, "_blank", "noopener,noreferrer");
+  } catch (e) {
+    // 예전엔 실패해도 아무 반응이 없어서(콘솔에만 남고 화면엔 표시 안 됨), 버튼을 눌러도
+    // "왜 안 열리지?" 상태로 남았다 — 최소한의 안내는 뜨도록 한다.
+    console.error("파일 열람 실패:", e);
+    alert("파일을 여는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
 }
 
 export default app;

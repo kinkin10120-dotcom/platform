@@ -243,6 +243,7 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
   const { appUser } = useAuth();
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => listenFiles(taskId, setFiles), [taskId]);
 
@@ -250,8 +251,18 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
     const file = e.target.files?.[0];
     if (!file || !appUser) return;
     setUploading(true);
+    setUploadError("");
     try {
       await uploadTaskFile(projectId, taskId, file, appUser.uid, appUser.name);
+    } catch (err) {
+      // 예전엔 에러를 그냥 삼켜서, 업로드가 실패해도 "업로드 중..."이 잠깐 떴다 사라질 뿐
+      // 화면에 아무 표시가 없었다 — 왜 실패했는지 알 방법이 없었다.
+      console.error("파일 업로드 실패:", err);
+      setUploadError(
+        err instanceof Error && err.message.includes("permission")
+          ? "업로드 권한이 없습니다. 관리자에게 문의해주세요."
+          : "업로드에 실패했습니다. 잠시 후 다시 시도해주세요."
+      );
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -280,6 +291,7 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
         {uploading ? "업로드 중..." : "자료 업로드"}
         <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
       </label>
+      {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
     </div>
   );
 }

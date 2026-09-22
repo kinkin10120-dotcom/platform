@@ -23,15 +23,27 @@ export const storage = getStorage(app);
 // 인증 헤더를 붙이지 않아 보안 규칙이 401/403으로 막으므로, SDK의 인증된 요청으로 받아온
 // blob을 새 탭에 띄운다. quoteRequests의 사업자등록증(bizRegCert)처럼 원래 공개 읽기였다가
 // 로그인 필요로 좁힌 파일에 사용한다.
+//
+// getBlob()으로 await한 "후에" window.open()을 부르면, 브라우저가 이 호출을
+// 클릭에서 비롯된 것으로 보지 않고 팝업 차단기로 조용히 막아버릴 수 있다(에러도 안 나서
+// 버튼을 눌러도 아무 반응이 없는 것처럼 보인다). 그래서 클릭 즉시(await 이전에) 빈 탭을
+// 먼저 열어 참조를 확보해두고, blob이 준비되면 그 탭의 주소만 옮겨준다.
 export async function openAuthenticatedStorageFile(url: string) {
+  const win = window.open("", "_blank");
   try {
     const blob = await getBlob(ref(storage, url));
     const objectUrl = URL.createObjectURL(blob);
-    window.open(objectUrl, "_blank", "noopener,noreferrer");
+    if (win) {
+      win.location.href = objectUrl;
+    } else {
+      // 빈 탭 열기 자체가 막혔던 경우(팝업 차단기 설정 등) 마지막으로 한 번 더 시도
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+    }
   } catch (e) {
     // 예전엔 실패해도 아무 반응이 없어서(콘솔에만 남고 화면엔 표시 안 됨), 버튼을 눌러도
     // "왜 안 열리지?" 상태로 남았다 — 최소한의 안내는 뜨도록 한다.
     console.error("파일 열람 실패:", e);
+    win?.close();
     alert("파일을 여는 데 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
 }

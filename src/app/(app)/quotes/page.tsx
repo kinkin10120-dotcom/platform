@@ -205,6 +205,21 @@ export default function QuotesPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [directQuoteOpen, setDirectQuoteOpen] = useState(false);
+  const [editingDraft, setEditingDraft] = useState<DirectQuoteDraft | null>(null);
+  const [drafts, setDrafts] = useState<DirectQuoteDraft[]>([]);
+
+  const refreshDrafts = () => setDrafts(loadDirectQuoteDrafts());
+  useEffect(() => { refreshDrafts(); }, []);
+
+  function openDraft(draft: DirectQuoteDraft | null) {
+    setEditingDraft(draft);
+    setDirectQuoteOpen(true);
+  }
+
+  function handleDeleteDraft(id: string) {
+    deleteDirectQuoteDraft(id);
+    refreshDrafts();
+  }
 
   // 인쇄 대화상자가 제안하는 파일명(업체명_견적서_품목). 미리보기가 열려있을 때만 적용된다.
   // 발행 전 초안은 아직 저장 전이라 지금 편집 중인 품목(quoteItems)을, 발행된 건은 저장된
@@ -378,7 +393,7 @@ export default function QuotesPage() {
             <Plus size={13} /> 견적 요청 직접 등록
           </button>
           <button
-            onClick={() => setDirectQuoteOpen(true)}
+            onClick={() => openDraft(null)}
             className="flex h-9 items-center gap-1 rounded-full border border-dashed border-[#d1d1d6] px-3 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
           >
             <Plus size={13} /> 견적서 바로 만들기 (문의 없이)
@@ -398,9 +413,40 @@ export default function QuotesPage() {
 
       {directQuoteOpen && (
         <DirectQuoteModal
-          onClose={() => setDirectQuoteOpen(false)}
-          onCreated={(q) => { setSelected(q); setDirectQuoteOpen(false); }}
+          draft={editingDraft ?? undefined}
+          onClose={() => { setDirectQuoteOpen(false); setEditingDraft(null); }}
+          onCreated={(q) => { setSelected(q); setDirectQuoteOpen(false); setEditingDraft(null); }}
+          onDraftsChanged={refreshDrafts}
         />
+      )}
+
+      {drafts.length > 0 && (
+        <div className="space-y-2 rounded-3xl bg-white p-4">
+          <p className="text-xs font-medium text-[#86868b]">임시저장된 견적 {drafts.length}건</p>
+          <div className="space-y-1.5">
+            {drafts.map((d) => (
+              <div key={d.id} className="flex items-center gap-3 rounded-2xl bg-[#f5f5f7] px-3 py-2">
+                <button onClick={() => openDraft(d)} className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium text-[#1d1d1f]">
+                    {d.company || d.name || "(제목 없음)"}
+                    {d.company && d.name ? ` · ${d.name}` : ""}
+                  </p>
+                  <p className="truncate text-xs text-[#86868b]">
+                    {new Date(d.savedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {" · "}
+                    {d.items.filter((it) => it.name.trim()).length}개 품목
+                  </p>
+                </button>
+                <button onClick={() => openDraft(d)} className="shrink-0 rounded-full border border-[#d1d1d6] px-3 py-1 text-xs font-medium text-[#1d1d1f] hover:bg-white">
+                  이어서 작성
+                </button>
+                <button onClick={() => handleDeleteDraft(d.id)} className="shrink-0 text-[#86868b] hover:text-red-500">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -815,12 +861,13 @@ function AddQuoteRequestModal({ onClose, onCreated }: { onClose: () => void; onC
 // 사람 정보와 품목을 한 번에 입력해 곧바로 정식 견적서를 발행·발송한다. 내부적으로는
 // quoteRequests 문서를 만들고 바로 issueQuote를 이어서 호출하는 것뿐이라, 목록에는
 // 처음부터 "발송됨" 상태로만 나타난다.
-// 입력 중간에 실수로 모달을 닫거나 브라우저를 새로고침해도 다시 처음부터 치지 않도록,
-// 이 브라우저에만 남는 임시저장(로컬 스토리지)을 둔다 — 여러 사람이 공유하는 서버 데이터가
-// 아니라 "쓰다 만 것"이라 굳이 Firestore까지 갈 필요는 없다.
-const DIRECT_QUOTE_DRAFT_KEY = "directQuoteDraft";
-
+//
+// 여러 견적을 동시에 임시저장해두고 이어서 작업하는 경우가 많아서, 하나만 기억하는 게
+// 아니라 여러 건을 목록으로 저장한다. 여러 사람이 보는 서버 데이터가 아니라 이 브라우저의
+// "쓰다 만 것"이라 Firestore 대신 로컬 스토리지로 충분하다.
 interface DirectQuoteDraft {
+  id: string;
+  savedAt: number;
   name: string;
   company: string;
   email: string;
@@ -830,57 +877,62 @@ interface DirectQuoteDraft {
   quoteMemo: string;
 }
 
-function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreated: (quote: QuoteRequest) => void }) {
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [items, setItems] = useState<QuoteLineItem[]>([emptyLineItem()]);
-  const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>({});
-  const [quoteMemo, setQuoteMemo] = useState("");
+const DIRECT_QUOTE_DRAFTS_KEY = "directQuoteDrafts";
+
+function loadDirectQuoteDrafts(): DirectQuoteDraft[] {
+  try {
+    const raw = localStorage.getItem(DIRECT_QUOTE_DRAFTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveDirectQuoteDraft(draft: DirectQuoteDraft) {
+  const drafts = loadDirectQuoteDrafts();
+  const idx = drafts.findIndex((d) => d.id === draft.id);
+  if (idx >= 0) drafts[idx] = draft;
+  else drafts.unshift(draft);
+  localStorage.setItem(DIRECT_QUOTE_DRAFTS_KEY, JSON.stringify(drafts));
+}
+
+function deleteDirectQuoteDraft(id: string) {
+  const drafts = loadDirectQuoteDrafts().filter((d) => d.id !== id);
+  localStorage.setItem(DIRECT_QUOTE_DRAFTS_KEY, JSON.stringify(drafts));
+}
+
+function DirectQuoteModal({
+  draft: initialDraft,
+  onClose,
+  onCreated,
+  onDraftsChanged,
+}: {
+  draft?: DirectQuoteDraft;
+  onClose: () => void;
+  onCreated: (quote: QuoteRequest) => void;
+  onDraftsChanged: () => void;
+}) {
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+  const [name, setName] = useState(initialDraft?.name ?? "");
+  const [company, setCompany] = useState(initialDraft?.company ?? "");
+  const [email, setEmail] = useState(initialDraft?.email ?? "");
+  const [phone, setPhone] = useState(initialDraft?.phone ?? "");
+  const [items, setItems] = useState<QuoteLineItem[]>(initialDraft?.items?.length ? initialDraft.items : [emptyLineItem()]);
+  const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>(initialDraft?.priceDrafts ?? {});
+  const [quoteMemo, setQuoteMemo] = useState(initialDraft?.quoteMemo ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftSavedJustNow, setDraftSavedJustNow] = useState(false);
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DIRECT_QUOTE_DRAFT_KEY);
-      if (!raw) return;
-      const draft: DirectQuoteDraft = JSON.parse(raw);
-      setName(draft.name ?? "");
-      setCompany(draft.company ?? "");
-      setEmail(draft.email ?? "");
-      setPhone(draft.phone ?? "");
-      if (draft.items?.length) setItems(draft.items);
-      setPriceDrafts(draft.priceDrafts ?? {});
-      setQuoteMemo(draft.quoteMemo ?? "");
-      setDraftLoaded(true);
-    } catch {
-      // 저장된 형식이 깨져 있으면 그냥 무시하고 빈 폼으로 시작한다.
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   function handleSaveDraft() {
-    const draft: DirectQuoteDraft = { name, company, email, phone, items, priceDrafts, quoteMemo };
-    localStorage.setItem(DIRECT_QUOTE_DRAFT_KEY, JSON.stringify(draft));
-    setDraftLoaded(true);
+    const id = draftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    saveDirectQuoteDraft({ id, savedAt: Date.now(), name, company, email, phone, items, priceDrafts, quoteMemo });
+    setDraftId(id);
     setDraftSavedJustNow(true);
+    onDraftsChanged();
     setTimeout(() => setDraftSavedJustNow(false), 2000);
-  }
-
-  function handleDiscardDraft() {
-    localStorage.removeItem(DIRECT_QUOTE_DRAFT_KEY);
-    setName("");
-    setCompany("");
-    setEmail("");
-    setPhone("");
-    setItems([emptyLineItem()]);
-    setPriceDrafts({});
-    setQuoteMemo("");
-    setDraftLoaded(false);
   }
 
   const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
@@ -901,7 +953,10 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
         description: "견적서 바로 만들기로 등록됨",
       });
       await issueQuote(ref.id, validItems, quoteMemo.trim());
-      localStorage.removeItem(DIRECT_QUOTE_DRAFT_KEY);
+      if (draftId) {
+        deleteDirectQuoteDraft(draftId);
+        onDraftsChanged();
+      }
       onCreated({
         id: ref.id,
         name: name.trim(),
@@ -929,7 +984,7 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   if (previewOpen) {
     return (
-      <div className="fixed inset-0 z-50 min-h-screen overflow-y-auto bg-[#e5e5e5] py-10 print:bg-white print:py-0">
+      <div className="no-scrollbar fixed inset-0 z-50 min-h-screen overflow-y-auto bg-[#e5e5e5] py-10 print:bg-white print:py-0">
         <style>{`
           @page { size: 210mm 297mm; margin: 0; }
           @media print {
@@ -989,12 +1044,9 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
         </div>
 
-        {draftLoaded && (
-          <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-2 rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
-            <span>{draftSavedJustNow ? "임시저장되었습니다." : "임시저장된 내용을 불러왔습니다."}</span>
-            <button onClick={handleDiscardDraft} className="shrink-0 font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]">
-              지우고 새로 작성
-            </button>
+        {(draftId || draftSavedJustNow) && (
+          <div className="mx-6 mb-1 shrink-0 rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
+            {draftSavedJustNow ? "임시저장되었습니다." : "임시저장된 내용을 이어서 작성 중입니다."}
           </div>
         )}
 

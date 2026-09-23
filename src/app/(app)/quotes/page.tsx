@@ -815,6 +815,21 @@ function AddQuoteRequestModal({ onClose, onCreated }: { onClose: () => void; onC
 // 사람 정보와 품목을 한 번에 입력해 곧바로 정식 견적서를 발행·발송한다. 내부적으로는
 // quoteRequests 문서를 만들고 바로 issueQuote를 이어서 호출하는 것뿐이라, 목록에는
 // 처음부터 "발송됨" 상태로만 나타난다.
+// 입력 중간에 실수로 모달을 닫거나 브라우저를 새로고침해도 다시 처음부터 치지 않도록,
+// 이 브라우저에만 남는 임시저장(로컬 스토리지)을 둔다 — 여러 사람이 공유하는 서버 데이터가
+// 아니라 "쓰다 만 것"이라 굳이 Firestore까지 갈 필요는 없다.
+const DIRECT_QUOTE_DRAFT_KEY = "directQuoteDraft";
+
+interface DirectQuoteDraft {
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  items: QuoteLineItem[];
+  priceDrafts: Record<number, string>;
+  quoteMemo: string;
+}
+
 function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreated: (quote: QuoteRequest) => void }) {
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
@@ -826,6 +841,47 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftSavedJustNow, setDraftSavedJustNow] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DIRECT_QUOTE_DRAFT_KEY);
+      if (!raw) return;
+      const draft: DirectQuoteDraft = JSON.parse(raw);
+      setName(draft.name ?? "");
+      setCompany(draft.company ?? "");
+      setEmail(draft.email ?? "");
+      setPhone(draft.phone ?? "");
+      if (draft.items?.length) setItems(draft.items);
+      setPriceDrafts(draft.priceDrafts ?? {});
+      setQuoteMemo(draft.quoteMemo ?? "");
+      setDraftLoaded(true);
+    } catch {
+      // 저장된 형식이 깨져 있으면 그냥 무시하고 빈 폼으로 시작한다.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleSaveDraft() {
+    const draft: DirectQuoteDraft = { name, company, email, phone, items, priceDrafts, quoteMemo };
+    localStorage.setItem(DIRECT_QUOTE_DRAFT_KEY, JSON.stringify(draft));
+    setDraftLoaded(true);
+    setDraftSavedJustNow(true);
+    setTimeout(() => setDraftSavedJustNow(false), 2000);
+  }
+
+  function handleDiscardDraft() {
+    localStorage.removeItem(DIRECT_QUOTE_DRAFT_KEY);
+    setName("");
+    setCompany("");
+    setEmail("");
+    setPhone("");
+    setItems([emptyLineItem()]);
+    setPriceDrafts({});
+    setQuoteMemo("");
+    setDraftLoaded(false);
+  }
 
   const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
 
@@ -845,6 +901,7 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
         description: "견적서 바로 만들기로 등록됨",
       });
       await issueQuote(ref.id, validItems, quoteMemo.trim());
+      localStorage.removeItem(DIRECT_QUOTE_DRAFT_KEY);
       onCreated({
         id: ref.id,
         name: name.trim(),
@@ -932,6 +989,15 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
         </div>
 
+        {draftLoaded && (
+          <div className="mx-6 mb-1 flex shrink-0 items-center justify-between gap-2 rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
+            <span>{draftSavedJustNow ? "임시저장되었습니다." : "임시저장된 내용을 불러왔습니다."}</span>
+            <button onClick={handleDiscardDraft} className="shrink-0 font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]">
+              지우고 새로 작성
+            </button>
+          </div>
+        )}
+
         <div className="no-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-6">
           <div>
             <label className="mb-1.5 block text-xs text-[#86868b]">이름 *</label>
@@ -970,13 +1036,21 @@ function DirectQuoteModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
           {error && <p className="text-xs text-red-500">{error}</p>}
 
-          <button
-            onClick={() => setPreviewOpen(true)}
-            disabled={validItems.length === 0}
-            className="w-full rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
-          >
-            미리보기
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPreviewOpen(true)}
+              disabled={validItems.length === 0}
+              className="flex-1 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+            >
+              미리보기
+            </button>
+            <button
+              onClick={handleSaveDraft}
+              className="flex-1 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+            >
+              임시저장
+            </button>
+          </div>
           <button
             onClick={handleSubmit}
             disabled={submitting || !name.trim() || !email.trim() || validItems.length === 0}

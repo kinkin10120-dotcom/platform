@@ -19,6 +19,7 @@ import {
   FormalQuoteStatus,
   QuoteFile,
 } from "@/lib/firestore/quotes";
+import { QuoteDraft, listenQuoteDrafts, saveQuoteDraft, deleteQuoteDraft } from "@/lib/firestore/quoteDrafts";
 import { issueQuote } from "@/lib/functions";
 import { openAuthenticatedStorageFile } from "@/lib/firebase";
 import { formatMoney } from "@/lib/orderCalc";
@@ -205,20 +206,18 @@ export default function QuotesPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [directQuoteOpen, setDirectQuoteOpen] = useState(false);
-  const [editingDraft, setEditingDraft] = useState<DirectQuoteDraft | null>(null);
-  const [drafts, setDrafts] = useState<DirectQuoteDraft[]>([]);
+  const [editingDraft, setEditingDraft] = useState<QuoteDraft | null>(null);
+  const [drafts, setDrafts] = useState<QuoteDraft[]>([]);
 
-  const refreshDrafts = () => setDrafts(loadDirectQuoteDrafts());
-  useEffect(() => { refreshDrafts(); }, []);
+  useEffect(() => listenQuoteDrafts(setDrafts), []);
 
-  function openDraft(draft: DirectQuoteDraft | null) {
+  function openDraft(draft: QuoteDraft | null) {
     setEditingDraft(draft);
     setDirectQuoteOpen(true);
   }
 
   function handleDeleteDraft(id: string) {
-    deleteDirectQuoteDraft(id);
-    refreshDrafts();
+    deleteQuoteDraft(id);
   }
 
   // 인쇄 대화상자가 제안하는 파일명(업체명_견적서_품목). 미리보기가 열려있을 때만 적용된다.
@@ -416,7 +415,6 @@ export default function QuotesPage() {
           draft={editingDraft ?? undefined}
           onClose={() => { setDirectQuoteOpen(false); setEditingDraft(null); }}
           onCreated={(q) => { setSelected(q); setDirectQuoteOpen(false); setEditingDraft(null); }}
-          onDraftsChanged={refreshDrafts}
         />
       )}
 
@@ -863,55 +861,18 @@ function AddQuoteRequestModal({ onClose, onCreated }: { onClose: () => void; onC
 // 처음부터 "발송됨" 상태로만 나타난다.
 //
 // 여러 견적을 동시에 임시저장해두고 이어서 작업하는 경우가 많아서, 하나만 기억하는 게
-// 아니라 여러 건을 목록으로 저장한다. 여러 사람이 보는 서버 데이터가 아니라 이 브라우저의
-// "쓰다 만 것"이라 Firestore 대신 로컬 스토리지로 충분하다.
-interface DirectQuoteDraft {
-  id: string;
-  savedAt: number;
-  name: string;
-  company: string;
-  email: string;
-  phone: string;
-  items: QuoteLineItem[];
-  priceDrafts: Record<number, string>;
-  quoteMemo: string;
-}
-
-const DIRECT_QUOTE_DRAFTS_KEY = "directQuoteDrafts";
-
-function loadDirectQuoteDrafts(): DirectQuoteDraft[] {
-  try {
-    const raw = localStorage.getItem(DIRECT_QUOTE_DRAFTS_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveDirectQuoteDraft(draft: DirectQuoteDraft) {
-  const drafts = loadDirectQuoteDrafts();
-  const idx = drafts.findIndex((d) => d.id === draft.id);
-  if (idx >= 0) drafts[idx] = draft;
-  else drafts.unshift(draft);
-  localStorage.setItem(DIRECT_QUOTE_DRAFTS_KEY, JSON.stringify(drafts));
-}
-
-function deleteDirectQuoteDraft(id: string) {
-  const drafts = loadDirectQuoteDrafts().filter((d) => d.id !== id);
-  localStorage.setItem(DIRECT_QUOTE_DRAFTS_KEY, JSON.stringify(drafts));
-}
-
+// 아니라 여러 건을 목록으로 저장한다. 처음엔 이 브라우저에만 남는 로컬 스토리지로
+// 저장했었는데, 브라우저가 저장소를 정리하면서 그대로 사라지는 일이 있었다 — 다른
+// 관리자 데이터와 마찬가지로 Firestore(quoteDrafts 컬렉션)에 저장해 브라우저를 지우거나
+// 다른 기기로 로그인해도 남아있게 한다(src/lib/firestore/quoteDrafts.ts).
 function DirectQuoteModal({
   draft: initialDraft,
   onClose,
   onCreated,
-  onDraftsChanged,
 }: {
-  draft?: DirectQuoteDraft;
+  draft?: QuoteDraft;
   onClose: () => void;
   onCreated: (quote: QuoteRequest) => void;
-  onDraftsChanged: () => void;
 }) {
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const [name, setName] = useState(initialDraft?.name ?? "");
@@ -925,14 +886,21 @@ function DirectQuoteModal({
   const [error, setError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [draftSavedJustNow, setDraftSavedJustNow] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
 
-  function handleSaveDraft() {
+  async function handleSaveDraft() {
     const id = draftId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    saveDirectQuoteDraft({ id, savedAt: Date.now(), name, company, email, phone, items, priceDrafts, quoteMemo });
-    setDraftId(id);
-    setDraftSavedJustNow(true);
-    onDraftsChanged();
-    setTimeout(() => setDraftSavedJustNow(false), 2000);
+    setSavingDraft(true);
+    try {
+      await saveQuoteDraft(id, { name, company, email, phone, items, priceDrafts, quoteMemo });
+      setDraftId(id);
+      setDraftSavedJustNow(true);
+      setTimeout(() => setDraftSavedJustNow(false), 2000);
+    } catch (e: any) {
+      setError(e?.message ?? "임시저장 중 오류가 발생했습니다.");
+    } finally {
+      setSavingDraft(false);
+    }
   }
 
   const validItems = items.filter((it) => it.name.trim() && it.unitPrice > 0 && it.quantity > 0);
@@ -954,8 +922,7 @@ function DirectQuoteModal({
       });
       await issueQuote(ref.id, validItems, quoteMemo.trim());
       if (draftId) {
-        deleteDirectQuoteDraft(draftId);
-        onDraftsChanged();
+        await deleteQuoteDraft(draftId);
       }
       onCreated({
         id: ref.id,
@@ -1098,9 +1065,10 @@ function DirectQuoteModal({
             </button>
             <button
               onClick={handleSaveDraft}
-              className="flex-1 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+              disabled={savingDraft}
+              className="flex-1 rounded-full border border-[#d1d1d6] py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
             >
-              임시저장
+              {savingDraft ? "저장 중..." : "임시저장"}
             </button>
           </div>
           <button

@@ -186,6 +186,11 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
+    // ---- quote drafts ("견적서 바로 만들기" 임시저장, 관리자 전용) ----
+    match /quoteDrafts/{draftId} {
+      allow read, write: if isAdmin();
+    }
+
     // ---- notices (공지사항) ----
     match /notices/{noticeId} {
       allow read: if isSignedIn();

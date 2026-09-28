@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useState, useRef, useEffect } from "react";
 
@@ -19,6 +19,10 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   const { appUser, signOut, updateUserName } = useAuth();
   const pathname = usePathname();
   const isAdmin = appUser?.role === "admin";
+  // 협력사(파트너) 계정 — 지정된 프로젝트만 보는 최소 권한이라, 발주·계약·문의 등 클라이언트
+  // 전용 메뉴는 노출되면 안 된다(계약·견적 절대 비노출 요구사항).
+  const isPartner = appUser?.role === "partner";
+  const isClient = !isAdmin && !isPartner;
 
   const [editing, setEditing] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
@@ -29,15 +33,16 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   const allItems: NavItem[] = [
     { href: "/home", label: "홈", icon: LayoutGrid, show: true },
     { href: "/clients", label: "클라이언트 관리", icon: Building2, show: isAdmin },
+    { href: "/partners", label: "협력사 관리", icon: Factory, show: isAdmin },
     { href: "/quotes", label: "견적 관리", icon: FileText, show: isAdmin },
     { href: "/inquiries", label: "문의 관리", icon: MessageCircleQuestion, show: isAdmin },
     { href: "/orders", label: "발주 관리", icon: ShoppingCart, show: isAdmin },
     { href: "/contracts", label: "계약 관리", icon: FileSignature, show: isAdmin },
     { href: "/schedule-report", label: "일정 변경 리포트", icon: TrendingUp, show: isAdmin },
     { href: "/templates", label: "업무 템플릿", icon: ListChecks, show: isAdmin },
-    { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: !isAdmin },
-    { href: "/my-contracts", label: "계약", icon: FileSignature, show: !isAdmin },
-    { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: !isAdmin },
+    { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: isClient },
+    { href: "/my-contracts", label: "계약", icon: FileSignature, show: isClient },
+    { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
     { href: "/notification-settings", label: "알림 설정", icon: Bell, show: true },
     { href: "/notices", label: "공지사항", icon: Megaphone, show: true },
   ];

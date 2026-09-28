@@ -58,6 +58,84 @@ export const createClientAccount = onCall({ invoker: "public", secrets: [interna
 });
 
 /* ------------------------------------------------------------------ */
+/* 1-0-1) 협력사(파트너) 계정 생성 (관리자 전용 callable)                    */
+/*    - 중국 파트너 공장 등 제조 협력사에게 지정된 프로젝트의 일정·업무·       */
+/*      첨부 자료·코멘트만 보여주는 용도. clientId 대신 projectIds 배열로     */
+/*      볼 수 있는 프로젝트를 지정한다(firestore.rules의 belongsToPartnerProject). */
+/* ------------------------------------------------------------------ */
+export const createPartnerAccount = onCall({ invoker: "public", secrets: [internalNotifySecret] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "관리자만 계정을 생성할 수 있습니다.");
+  }
+
+  const { email, name, projectIds } = request.data as {
+    email?: string;
+    name?: string;
+    projectIds?: string[];
+  };
+
+  if (!email || !name || !projectIds?.length) {
+    throw new HttpsError("invalid-argument", "email, name, projectIds는 필수입니다.");
+  }
+
+  // 존재하지 않는 프로젝트를 잘못 지정하는 실수를 막는다.
+  for (const projectId of projectIds) {
+    const snap = await db.collection("projects").doc(projectId).get();
+    if (!snap.exists) {
+      throw new HttpsError("not-found", `존재하지 않는 프로젝트입니다: ${projectId}`);
+    }
+  }
+
+  let userRecord;
+  try {
+    userRecord = await auth.createUser({ email, displayName: name });
+  } catch (err: any) {
+    if (err?.code === "auth/email-already-exists") {
+      throw new HttpsError("already-exists", "이미 사용 중인 이메일입니다.");
+    }
+    throw new HttpsError("internal", `계정 생성 중 오류가 발생했습니다: ${err?.message ?? err}`);
+  }
+
+  await db.collection("users").doc(userRecord.uid).set({
+    email,
+    name,
+    role: "partner",
+    projectIds,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  await sendAccountEmail(email, name, "created");
+
+  return { uid: userRecord.uid };
+});
+
+/* ------------------------------------------------------------------ */
+/* 1-0-2) 협력사 계정의 프로젝트 접근 범위 수정 (관리자 전용 callable)        */
+/* ------------------------------------------------------------------ */
+export const updatePartnerProjects = onCall({ invoker: "public" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "관리자만 사용할 수 있습니다.");
+  }
+  const { uid, projectIds } = request.data as { uid?: string; projectIds?: string[] };
+  if (!uid || !projectIds) {
+    throw new HttpsError("invalid-argument", "uid, projectIds는 필수입니다.");
+  }
+  const targetSnap = await db.collection("users").doc(uid).get();
+  if (!targetSnap.exists || targetSnap.data()?.role !== "partner") {
+    throw new HttpsError("not-found", "존재하지 않는 협력사 계정입니다.");
+  }
+  await targetSnap.ref.update({ projectIds });
+  return { ok: true };
+});
+
+/* ------------------------------------------------------------------ */
 /* 1-1) 비밀번호 설정/재설정 링크 이메일 발송 (관리자 전용 callable)          */
 /*    - 계정 생성 시 자동으로 한 번 호출되고, 클라이언트가 비밀번호를 잊었을 때  */
 /*      관리자가 계정 관리 화면에서 다시 트리거할 수도 있다.                  */

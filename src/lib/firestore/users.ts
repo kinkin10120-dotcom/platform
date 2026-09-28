@@ -74,6 +74,26 @@ export function listenAdmins(cb: (users: AppUser[]) => void) {
   });
 }
 
+// 협력사(파트너) 계정 목록 — 관리자 전용 화면(/partners)에서만 호출한다.
+export function listenPartners(cb: (users: AppUser[]) => void) {
+  const q = query(colRef, where("role", "==", "partner"));
+  return onSnapshot(q, (snap) => {
+    cb(
+      snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          uid: d.id,
+          email: data.email,
+          name: data.name,
+          role: data.role,
+          projectIds: data.projectIds ?? [],
+          createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+        } as AppUser;
+      })
+    );
+  });
+}
+
 export function listenUsersByClient(clientId: string, cb: (users: AppUser[]) => void) {
   const q = query(colRef, where("clientId", "==", clientId));
   return onSnapshot(q, (snap) => {

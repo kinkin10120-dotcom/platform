@@ -87,10 +87,12 @@ function FileRow({
   f,
   canDelete,
   badge,
+  hideAi,
 }: {
   f: TaskFile;
   canDelete: boolean;
   badge?: React.ReactNode;
+  hideAi: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showAi, setShowAi] = useState(false);
@@ -118,7 +120,7 @@ function FileRow({
           <span className="truncate text-[#1d1d1f]">{f.name}</span>
           <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
           {badge}
-          {f.aiAnalysis && (
+          {!hideAi && f.aiAnalysis && (
             <button
               onClick={() => setShowAi((v) => !v)}
               className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f] hover:bg-[#e5e5e5]"
@@ -147,7 +149,7 @@ function FileRow({
           )}
         </div>
       </div>
-      {showAi && (
+      {!hideAi && showAi && (
         <div className="px-3 pb-3">
           <AiAnalysisPanel f={f} />
         </div>
@@ -160,10 +162,12 @@ function FileGroupRow({
   latest,
   older,
   canDelete,
+  hideAi,
 }: {
   latest: TaskFile;
   older: TaskFile[];
   canDelete: (f: TaskFile) => boolean;
+  hideAi: boolean;
 }) {
   const [showOlder, setShowOlder] = useState(false);
 
@@ -172,6 +176,7 @@ function FileGroupRow({
       <FileRow
         f={latest}
         canDelete={canDelete(latest)}
+        hideAi={hideAi}
         badge={
           older.length > 0 ? (
             <button
@@ -192,6 +197,7 @@ function FileGroupRow({
               key={f.id}
               f={f}
               canDelete={canDelete(f)}
+              hideAi={hideAi}
               badge={
                 <span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">
                   v{f.version}
@@ -205,7 +211,7 @@ function FileGroupRow({
   );
 }
 
-function TaskFileSection({ task, appUser }: { task: Task; appUser: { uid: string; role: string } | null }) {
+function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid: string; role: string } | null; hideAi: boolean }) {
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -238,6 +244,7 @@ function TaskFileSection({ task, appUser }: { task: Task; appUser: { uid: string
               key={latest.id}
               latest={latest}
               older={older}
+              hideAi={hideAi}
               canDelete={(f) => appUser?.role === "admin" || appUser?.uid === f.uploadedBy}
             />
           ))}
@@ -249,6 +256,10 @@ function TaskFileSection({ task, appUser }: { task: Task; appUser: { uid: string
 
 export default function ProjectFilesTab({ tasks }: { tasks: Task[] }) {
   const { appUser } = useAuth();
+  // AI 형상 분석은 원가 수준(초기투자/개당단가) 추정까지 함께 보여주는데, 협력사(외부
+  // 제조사)에게 이걸 노출할 이유가 없어 아예 감춘다 — 요청받은 범위(일정·자료·코멘트)에도
+  // 포함되지 않는다.
+  const hideAi = appUser?.role === "partner";
 
   // 파일이 있는 업무만 렌더(각 섹션 내부에서 판단)
   const orderedTasks = [...tasks].sort((a, b) => a.order - b.order);
@@ -256,7 +267,7 @@ export default function ProjectFilesTab({ tasks }: { tasks: Task[] }) {
   return (
     <div className="space-y-3">
       {orderedTasks.map((task) => (
-        <TaskFileSection key={task.id} task={task} appUser={appUser} />
+        <TaskFileSection key={task.id} task={task} appUser={appUser} hideAi={hideAi} />
       ))}
       {orderedTasks.length === 0 && (
         <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">

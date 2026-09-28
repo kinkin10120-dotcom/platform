@@ -32,6 +32,24 @@ export async function sendPasswordResetEmail(email: string, name?: string, compa
   return res.data;
 }
 
+export interface CreatePartnerAccountInput {
+  email: string;
+  name: string;
+  projectIds: string[];
+}
+
+export async function createPartnerAccount(input: CreatePartnerAccountInput) {
+  const fn = httpsCallable<CreatePartnerAccountInput, { uid: string }>(functions, "createPartnerAccount");
+  const res = await fn(input);
+  return res.data;
+}
+
+export async function updatePartnerProjects(uid: string, projectIds: string[]) {
+  const fn = httpsCallable<{ uid: string; projectIds: string[] }, { ok: boolean }>(functions, "updatePartnerProjects");
+  const res = await fn({ uid, projectIds });
+  return res.data;
+}
+
 export async function sendContract(contractId: string) {
   const fn = httpsCallable<{ contractId: string }, { ok: boolean }>(functions, "sendContract");
   const res = await fn({ contractId });

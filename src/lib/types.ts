@@ -1,6 +1,9 @@
 // 전역에서 쓰는 타입 정의
 
-export type UserRole = "admin" | "client";
+// partner: 중국 파트너 공장 등 제조 협력사 계정 — 지정된 프로젝트의 일정·업무·첨부 자료·
+// 코멘트만 보고 코멘트/파일 등록까지 가능하지만, 클라이언트 목록·계약·견적·발주 등
+// 금액이 얽힌 데이터는 애초에 접근 경로 자체가 없다(firestore.rules 참고).
+export type UserRole = "admin" | "client" | "partner";
 
 export interface AppUser {
   uid: string;
@@ -8,6 +11,7 @@ export interface AppUser {
   name: string;
   role: UserRole;
   clientId?: string; // role === 'client' 일 때만 존재
+  projectIds?: string[]; // role === 'partner' 일 때만 존재 — 볼 수 있는 프로젝트 목록
   createdAt: number;
   notificationPrefs?: Partial<Record<NotificationType, boolean>>; // 설정 안 된 타입은 기본 on
 }

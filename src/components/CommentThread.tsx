@@ -33,7 +33,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete }: {
         <span className="text-sm font-medium text-[#1d1d1f]">
           {c.authorName}
           <span className="ml-1 text-xs text-[#86868b]">
-            {c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : "(클라이언트)"}
+            {c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : c.authorRole === "partner" ? "(협력사)" : "(클라이언트)"}
           </span>
         </span>
         <div className="flex items-center gap-2">

@@ -49,7 +49,7 @@ export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Tas
               <span className="text-sm font-medium text-[#1d1d1f]">
                 {c.authorName}
                 <span className="ml-1 text-xs text-[#86868b]">
-                  {c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : "(클라이언트)"}
+                  {c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : c.authorRole === "partner" ? "(협력사)" : "(클라이언트)"}
                 </span>
               </span>
               <span className="shrink-0 text-xs text-[#d1d1d6]">

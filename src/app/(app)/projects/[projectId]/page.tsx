@@ -62,6 +62,9 @@ export default function ProjectWorkspacePage() {
   const router = useRouter();
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  // 협력사(파트너) 계정 — 지정된 프로젝트의 일정·업무·첨부 자료·코멘트만 보고, 클라이언트
+  // 정보·프로젝트 수정·업무 편집 등 관리자 전용 기능은 전부 isAdmin 분기로 이미 가려진다.
+  const isPartner = appUser?.role === "partner";
 
   const [project, setProject] = useState<Project | null | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
@@ -114,9 +117,9 @@ export default function ProjectWorkspacePage() {
         setTasks(t);
       },
       (e) => setTasksError(e.message),
-      isAdmin ? undefined : appUser.clientId
+      (isAdmin || isPartner) ? undefined : appUser.clientId
     );
-  }, [projectId, appUser, isAdmin]);
+  }, [projectId, appUser, isAdmin, isPartner]);
 
   // 검색 결과(코멘트·자료)에서 ?task=taskId 로 들어오면 해당 업무 상세를 바로 연다.
   useEffect(() => {
@@ -132,12 +135,15 @@ export default function ProjectWorkspacePage() {
   const projectClientId = project?.clientId;
 
   useEffect(() => {
-    if (!projectClientId) return;
+    // 협력사 계정은 clients 컬렉션 접근 권한이 없다(firestore.rules) — 애초에 호출하지 않는다.
+    if (!projectClientId || isPartner) return;
     return listenClient(projectClientId, setClient);
-  }, [projectClientId]);
+  }, [projectClientId, isPartner]);
 
   useEffect(() => {
-    if (!projectClientId) return;
+    // 담당자 배정 UI는 관리자 전용 기능이라 협력사에게는 필요 없고, listenUsersByClient는
+    // 협력사 계정으로 호출하면 권한 오류가 난다(협력사는 clientId가 없음).
+    if (!projectClientId || isPartner) return;
     const admins: AppUser[] = [];
     const clientUsers: AppUser[] = [];
     const unsub1 = listenAdmins((u) => {
@@ -170,6 +176,10 @@ export default function ProjectWorkspacePage() {
   }, [tasks]);
 
   const decisionTasks = useMemo(() => tasks.filter((t) => t.needsDecision), [tasks]);
+  const visibleTabOrder = useMemo(
+    () => (isPartner ? tabOrder.filter((id) => id !== "dashboard") : tabOrder),
+    [tabOrder, isPartner]
+  );
 
   async function handleToggleClientVisible() {
     if (!project) return;
@@ -420,12 +430,12 @@ export default function ProjectWorkspacePage() {
         </div>
       )}
 
-      {/* 탭 */}
+      {/* 탭 — 협력사는 요청 범위(일정·업무·자료·코멘트)만 보여주고 대시보드는 뺀다 */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <DndContext sensors={tabSensors} collisionDetection={closestCenter} onDragEnd={handleTabReorder}>
-          <SortableContext items={tabOrder} strategy={horizontalListSortingStrategy}>
+          <SortableContext items={visibleTabOrder} strategy={horizontalListSortingStrategy}>
             <div className="flex gap-1 overflow-x-auto rounded-full bg-[#eeeef0] p-1">
-              {tabOrder.map((id) => (
+              {visibleTabOrder.map((id) => (
                 <SortableTabButton
                   key={id}
                   id={id}

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenAllProjects, listenProjectsByClient, updateProject, deleteProject } from "@/lib/firestore/projects";
+import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenNotices, markNoticeRead } from "@/lib/firestore/notices";
@@ -82,6 +82,9 @@ export default function HomePage() {
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
 
   const isAdmin = appUser?.role === "admin";
+  // 협력사(파트너) 계정 — clients 컬렉션 접근 권한이 없어 clientId로 묶어 조회할 수 없다.
+  // 관리자가 배정한 projectIds 각각을 개별 문서 구독(listenProject)으로 가져온다.
+  const isPartner = appUser?.role === "partner";
 
   useEffect(() => {
     return listenNotices((notices) => setLatestNotice(notices[0] ?? null));
@@ -124,10 +127,29 @@ export default function HomePage() {
         if (p.length === 1) router.replace(`/projects/${p[0].id}`);
       }, () => setLoaded(true));
       return () => unsub();
+    } else if (isPartner) {
+      const ids = appUser.projectIds ?? [];
+      if (ids.length === 0) {
+        setProjects([]);
+        setLoaded(true);
+        return;
+      }
+      const results: Record<string, Project> = {};
+      const unsubs = ids.map((id) =>
+        listenProject(id, (p) => {
+          if (p) results[id] = p;
+          else delete results[id];
+          const list = Object.values(results);
+          setProjects(list);
+          setLoaded(true);
+          if (ids.length === 1 && list.length === 1) router.replace(`/projects/${list[0].id}`);
+        })
+      );
+      return () => unsubs.forEach((u) => u());
     } else {
       setLoaded(true);
     }
-  }, [appUser, isAdmin, router]);
+  }, [appUser, isAdmin, isPartner, router]);
 
   useEffect(() => {
     if (isAdmin || projects.length === 0 || !appUser?.clientId) return;
@@ -138,6 +160,15 @@ export default function HomePage() {
     }, undefined, appUser.clientId));
     return () => unsubs.forEach((u) => u());
   }, [isAdmin, projects, appUser?.clientId]);
+
+  useEffect(() => {
+    if (!isPartner || projects.length === 0) return;
+    // clientId 없이(undefined) 호출 — belongsToPartnerProject 규칙이 projectId만으로 허용한다.
+    const unsubs = projects.map((p) => listenTasksByProject(p.id, (ts) => {
+      setAllTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...ts]);
+    }));
+    return () => unsubs.forEach((u) => u());
+  }, [isPartner, projects]);
 
   const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
   const clientLogo = (clientId: string) => clients.find((c) => c.id === clientId)?.logoUrl;

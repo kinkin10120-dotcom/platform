@@ -2,7 +2,7 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { GanttChartSquare, ListChecks, LayoutDashboard, Pencil, Paperclip, Download, CalendarDays, MessageSquare, ImageIcon, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { GanttChartSquare, ListChecks, LayoutDashboard, Pencil, Paperclip, Download, CalendarDays, MessageSquare, ImageIcon, AlertCircle, Eye, EyeOff, Lock } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -34,11 +34,12 @@ import TaskDetailDrawer from "@/components/TaskDetailDrawer";
 import ProjectDashboard from "@/components/dashboard/ProjectDashboard";
 import ProjectFilesTab from "@/components/ProjectFilesTab";
 import ProjectCommentsTab from "@/components/ProjectCommentsTab";
+import PartnerArchiveTab from "@/components/PartnerArchiveTab";
 import AiDiagnosisPanel from "@/components/AiDiagnosisPanel";
 
-type Tab = "gantt" | "list" | "dashboard" | "files" | "comments";
+type Tab = "gantt" | "list" | "dashboard" | "files" | "comments" | "partner";
 
-const DEFAULT_TAB_ORDER: Tab[] = ["gantt", "list", "dashboard", "files", "comments"];
+const DEFAULT_TAB_ORDER: Tab[] = ["gantt", "list", "dashboard", "files", "comments", "partner"];
 
 const TAB_LABEL: Record<Tab, string> = {
   gantt: "프로젝트 일정",
@@ -46,6 +47,7 @@ const TAB_LABEL: Record<Tab, string> = {
   dashboard: "대시보드",
   files: "첨부 자료",
   comments: "코멘트",
+  partner: "협력사 자료함",
 };
 
 function getTabIcon(id: Tab) {
@@ -53,6 +55,7 @@ function getTabIcon(id: Tab) {
   if (id === "list") return <ListChecks size={15} />;
   if (id === "dashboard") return <LayoutDashboard size={15} />;
   if (id === "files") return <Paperclip size={15} />;
+  if (id === "partner") return <Lock size={15} />;
   return <MessageSquare size={15} />;
 }
 
@@ -186,10 +189,14 @@ export default function ProjectWorkspacePage() {
   }, [tasks]);
 
   const decisionTasks = useMemo(() => tasks.filter((t) => t.needsDecision), [tasks]);
-  const visibleTabOrder = useMemo(
-    () => (isPartner ? tabOrder.filter((id) => id !== "dashboard") : tabOrder),
-    [tabOrder, isPartner]
-  );
+  // 협력사 자료함(partner) 탭은 관리자·협력사에게만 보인다 — 고객(클라이언트) 계정에겐
+  // 탭 자체가 아예 렌더링되지 않는다("이런 게 있다"는 존재조차 몰라야 한다).
+  const visibleTabOrder = useMemo(() => {
+    let order = tabOrder;
+    if (isPartner) order = order.filter((id) => id !== "dashboard");
+    if (!isAdmin && !isPartner) order = order.filter((id) => id !== "partner");
+    return order;
+  }, [tabOrder, isPartner, isAdmin]);
 
   async function handleToggleClientVisible() {
     if (!project) return;
@@ -541,6 +548,7 @@ export default function ProjectWorkspacePage() {
       {tab === "dashboard" && <ProjectDashboard project={project} tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "files" && <ProjectFilesTab tasks={tasks} />}
       {tab === "comments" && <ProjectCommentsTab tasks={tasks} onSelectTask={setSelectedTask} />}
+      {tab === "partner" && (isAdmin || isPartner) && <PartnerArchiveTab projectId={project.id} />}
 
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

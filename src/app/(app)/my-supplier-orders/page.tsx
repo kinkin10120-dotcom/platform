@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package } from "lucide-react";
+import Link from "next/link";
+import { Package, FileText } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL } from "@/lib/types";
@@ -87,9 +88,19 @@ export default function MySupplierOrdersPage() {
                   <p className="mt-0.5 text-xs text-[#86868b]">{o.linkedProjectName}</p>
                 )}
               </div>
-              <p className="text-xs text-[#86868b]">
-                {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-[#86868b]">
+                  {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                </p>
+                <Link
+                  href={`/supplier-orders/${o.id}/print`}
+                  target="_blank"
+                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                >
+                  <FileText size={12} />
+                  {zh(isZh, "미리보기 / PDF")}
+                </Link>
+              </div>
             </div>
 
             <div className="mt-4 space-y-2">

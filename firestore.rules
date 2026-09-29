@@ -339,6 +339,32 @@ service cloud.firestore {
       allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
     }
 
+    // ---- 협력사 자료함 (관리자 ↔ 협력사 전용, 업무와 무관한 프로젝트 단위 공간) ----
+    // 여기엔 belongsToClient/adminOrClientOf 등 client 관련 함수를 아예 쓰지 않는다 — 고객이
+    // 이 두 컬렉션을 볼 방법을 규칙에서 원천적으로 만들지 않는 방식으로 "협력사 전용"을
+    // 구조적으로 보장한다(토글로 업무 하나하나 가리는 방식과 달리, 업무 목록·엑셀 다운로드·
+    // 캘린더·AI 진단 등 기존/향후 어떤 기능도 이 컬렉션을 아예 모른다).
+    match /partnerArchiveFiles/{fileId} {
+      allow list: if isAdmin();
+      // list는 where('projectId','==',...) 쿼리로 이미 단일 프로젝트로 좁혀져서 쿼리 결과
+      // 안의 모든 문서가 같은 projectId를 가진다 — hiddenFromPartner 때와 달리 문서마다
+      // 값이 갈리지 않으므로 list에도 안전하게 걸 수 있다.
+      allow list: if belongsToPartnerProject(resource.data.projectId);
+      allow get: if isAdmin() || belongsToPartnerProject(resource.data.projectId);
+      allow create: if (isAdmin() || belongsToPartnerProject(request.resource.data.projectId))
+        && request.resource.data.uploadedBy == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.uploadedBy == request.auth.uid;
+    }
+
+    match /partnerArchiveComments/{commentId} {
+      allow list: if isAdmin();
+      allow list: if belongsToPartnerProject(resource.data.projectId);
+      allow get: if isAdmin() || belongsToPartnerProject(resource.data.projectId);
+      allow create: if (isAdmin() || belongsToPartnerProject(request.resource.data.projectId))
+        && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+    }
+
     // ---- work-intake 업로드 내역 (별도 내부 도구용 로그, 관리자 전용) ----
     // pm-platform과 같은 Firebase 프로젝트를 공유하는 별도 앱(work-intake)이 파일 업로드 직후
     // "최근 업로드 내역" 조회용으로 남기는 로그. 실제 파일/코멘트는 tasks/{taskId}/files·comments에

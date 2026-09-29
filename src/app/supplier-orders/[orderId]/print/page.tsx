@@ -8,6 +8,7 @@ import { listenSupplierOrder, setSupplierOrderStatus } from "@/lib/firestore/sup
 import { SupplierOrder } from "@/lib/types";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 // 구매발주서 인쇄 전용 페이지.
 //
@@ -22,6 +23,7 @@ import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 export default function SupplierOrderPrintPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { firebaseUser, appUser, loading } = useAuth();
+  const isZh = usePartnerZh();
   const router = useRouter();
   const [order, setOrder] = useState<SupplierOrder | null | undefined>(undefined);
 
@@ -51,14 +53,16 @@ export default function SupplierOrderPrintPage() {
 
   if (loading || order === undefined) return null;
 
-  // 매입 원가가 담긴 문서라 관리자 외에는 아무도 볼 수 없다. Firestore 규칙(supplierOrders는
-  // isAdmin 전용)이 이미 막지만, 화면에서도 명시적으로 한 번 더 막는다.
-  if (appUser?.role !== "admin") {
-    return <p className="p-10 text-center text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
+  // 매입 원가가 담긴 문서라 원래는 관리자만 볼 수 있었는데, 이 발주서를 실제로 받는
+  // 협력사 계정(partnerId로 연동됨)에게는 자기 발주서 열람만 예외로 허용한다. Firestore
+  // 규칙(supplierOrders — partnerId == 본인 uid)이 이미 막지만, 화면에서도 한 번 더 막는다.
+  const canView = appUser?.role === "admin" || (appUser?.role === "partner" && !!order && order.partnerId === appUser.uid);
+  if (!canView) {
+    return <p className="p-10 text-center text-sm text-[#86868b]">{zh(isZh, "접근 권한이 없습니다.")}</p>;
   }
 
   if (!order) {
-    return <p className="p-10 text-center text-sm text-[#86868b]">구매발주 정보를 찾을 수 없습니다.</p>;
+    return <p className="p-10 text-center text-sm text-[#86868b]">{zh(isZh, "구매발주 정보를 찾을 수 없습니다.")}</p>;
   }
 
   return (
@@ -78,17 +82,17 @@ export default function SupplierOrderPrintPage() {
             <button
               onClick={() => router.back()}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
-              title="닫기"
+              title={zh(isZh, "닫기")}
             >
               <X size={16} />
             </button>
-            <p className="text-sm text-[#86868b]">{order.soNumber} — 인쇄 시 A4 크기로 저장됩니다.</p>
+            <p className="text-sm text-[#86868b]">{order.soNumber} — {zh(isZh, "인쇄 시 A4 크기로 저장됩니다.")}</p>
           </div>
           <button
             onClick={() => window.print()}
             className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
           >
-            인쇄 / PDF 저장
+            {zh(isZh, "인쇄 / PDF 저장")}
           </button>
         </div>
       </div>

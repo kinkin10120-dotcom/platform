@@ -196,6 +196,36 @@ export interface TaskFile {
   visibleToClient?: boolean; // false면 클라이언트(고객)에게는 안 보임 — 협력사가 올린 자료의 기본값(관리자 승인 전 비공개)
 }
 
+// ---- 협력사 자료함 (관리자 ↔ 협력사 전용, 업무와 무관한 프로젝트 단위 공간) ----
+// tasks/{taskId}/files·comments와 달리 클라이언트(고객)는 이 컬렉션에 접근할 방법 자체가
+// 없다(firestore.rules에 client 관련 함수를 아예 안 씀) — "협력사 전용 공간"이라는 요구를
+// 토글로 매번 챙기는 대신, 클라이언트가 쓰는 어떤 기능(업무 목록·엑셀 다운로드·캘린더·AI
+// 진단)도 이 컬렉션을 아예 모르게 만들어 구조적으로 새는 경로를 없앴다.
+export interface PartnerArchiveFile {
+  id: string;
+  projectId: string;
+  name: string;
+  url: string;
+  storagePath: string;
+  size: number;
+  contentType: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedAt: number;
+  version: number;
+}
+
+export interface PartnerArchiveComment {
+  id: string;
+  projectId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: CommentAuthorRole;
+  text: string;
+  textZh?: string;
+  createdAt: number;
+}
+
 // 3D(STEP) 모델 위의 특정 지점에 꽂는 리뷰 핀 — position은 모델 로컬 좌표(StepViewer가
 // 렌더링 시 그룹을 바운딩박스 중심으로 옮기는 것과 동일한 기준)라 카메라 각도와 무관하게
 // 항상 같은 모델 표면 지점을 가리킨다.

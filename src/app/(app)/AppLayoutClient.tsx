@@ -9,10 +9,12 @@ import NotificationBell from "@/components/NotificationBell";
 import GlobalSearch from "@/components/GlobalSearch";
 import AddToHomeScreenBanner from "@/components/AddToHomeScreenBanner";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
+import { usePartnerZh } from "@/lib/i18n";
 
 function TodayDate() {
+  const isZh = usePartnerZh();
   const today = new Date();
-  const formatted = today.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+  const formatted = today.toLocaleDateString(isZh ? "zh-CN" : "ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
   return <span className="text-sm text-[#86868b]">{formatted}</span>;
 }
 

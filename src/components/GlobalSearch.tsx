@@ -6,6 +6,7 @@ import { collectionGroup, getDocs } from "firebase/firestore";
 import { Search, X, FolderKanban, ListTodo, MessageSquare, Paperclip, Building2, FileText, ShoppingCart, FileSignature, Megaphone } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
+import { zh, usePartnerZh } from "@/lib/i18n";
 import { listenAllProjects, listenProjectsByClient } from "@/lib/firestore/projects";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenClients } from "@/lib/firestore/clients";
@@ -41,6 +42,7 @@ export default function GlobalSearch() {
   const { appUser } = useAuth();
   const router = useRouter();
   const isAdmin = appUser?.role === "admin";
+  const isZh = usePartnerZh();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -234,7 +236,7 @@ export default function GlobalSearch() {
       <button
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 rounded-lg p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
-        title="검색 (⌘K)"
+        title={zh(isZh, "검색 (⌘K)")}
       >
         <Search size={18} />
       </button>

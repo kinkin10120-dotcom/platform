@@ -4,17 +4,19 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, BellRing, BellOff, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { ko } from "date-fns/locale";
+import { ko, zhCN } from "date-fns/locale";
 import { useAuth } from "@/lib/auth-context";
 import { listenNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, deleteAllNotifications } from "@/lib/firestore/notifications";
 import { enablePushNotifications, disablePushNotifications, syncPushToken } from "@/lib/messaging";
 import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
 import { AppNotification } from "@/lib/types";
 import IosAddToHomeScreenGuide from "@/components/IosAddToHomeScreenGuide";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 export default function NotificationBell() {
   const router = useRouter();
   const { appUser } = useAuth();
+  const isZh = usePartnerZh();
   const [items, setItems] = useState<AppNotification[]>([]);
   const [open, setOpen] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -77,7 +79,7 @@ export default function NotificationBell() {
 
   function handleDeleteAll() {
     if (items.length === 0) return;
-    if (!confirm("모든 알림을 삭제하시겠습니까?")) return;
+    if (!confirm(zh(isZh, "모든 알림을 삭제하시겠습니까?"))) return;
     deleteAllNotifications(items.map((i) => i.id));
   }
 
@@ -97,9 +99,9 @@ export default function NotificationBell() {
           setPushEnabled(true);
           // 이미 권한이 허용된 기기(특히 홈 화면에 추가한 iOS 앱)에서는 권한 팝업이 뜨지
           // 않아 아무 일도 안 일어난 것처럼 보인다 — 등록됐다는 걸 명시적으로 알려준다.
-          setPushError("푸시 알림이 켜졌습니다. 이제 이 기기로 알림이 옵니다.");
+          setPushError(zh(isZh, "푸시 알림이 켜졌습니다. 이제 이 기기로 알림이 옵니다."));
         } else {
-          setPushError(result.error ?? "설정에 실패했습니다.");
+          setPushError(result.error ?? zh(isZh, "설정에 실패했습니다."));
         }
       }
     } finally {
@@ -124,24 +126,24 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-80 rounded-2xl border border-black/5 bg-white shadow-[0_8px_24px_rgba(0,0,0,0.08)]">
           <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
-            <span className="text-sm font-semibold text-[#1d1d1f]">알림</span>
+            <span className="text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "알림")}</span>
             <div className="flex items-center gap-3">
               <button
                 onClick={handleTogglePush}
                 disabled={pushBusy}
-                title={pushEnabled ? "브라우저 알림 끄기" : "브라우저 알림 켜기"}
+                title={pushEnabled ? zh(isZh, "브라우저 알림 끄기") : zh(isZh, "브라우저 알림 켜기")}
                 className="flex items-center gap-1 text-xs font-medium text-[#86868b] hover:text-[#1d1d1f] disabled:opacity-40"
               >
                 {pushEnabled ? <BellRing size={13} /> : <BellOff size={13} />}
               </button>
               {unreadCount > 0 && (
                 <button onClick={handleMarkAllRead} className="text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">
-                  모두 읽음
+                  {zh(isZh, "모두 읽음")}
                 </button>
               )}
               {items.length > 0 && (
                 <button onClick={handleDeleteAll} className="text-xs font-medium text-[#86868b] hover:text-red-500">
-                  전체 삭제
+                  {zh(isZh, "전체 삭제")}
                 </button>
               )}
             </div>
@@ -153,7 +155,7 @@ export default function NotificationBell() {
           )}
           <div className="scrollbar-thin max-h-96 overflow-y-auto">
             {items.length === 0 && (
-              <p className="px-4 py-6 text-center text-sm text-[#86868b]">알림이 없습니다.</p>
+              <p className="px-4 py-6 text-center text-sm text-[#86868b]">{zh(isZh, "알림이 없습니다.")}</p>
             )}
             {items.map((n) => (
               <div
@@ -165,7 +167,7 @@ export default function NotificationBell() {
                 <button onClick={() => handleNotificationClick(n)} className="min-w-0 flex-1 text-left">
                   <p>{n.message}</p>
                   <p className="mt-1 text-xs text-[#d1d1d6]">
-                    {formatDistanceToNow(n.createdAt, { addSuffix: true, locale: ko })}
+                    {formatDistanceToNow(n.createdAt, { addSuffix: true, locale: isZh ? zhCN : ko })}
                   </p>
                 </button>
                 <button

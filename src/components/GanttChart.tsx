@@ -2,10 +2,11 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, EyeOff } from "lucide-react";
 import { Task, TaskStatus } from "@/lib/types";
 import { isOverdue } from "@/lib/bottleneck";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import { useAuth } from "@/lib/auth-context";
 
 const LABEL_WIDTH_DESKTOP = 220;
 const LABEL_WIDTH_MOBILE = 132;
@@ -31,6 +32,8 @@ interface Props {
 }
 
 export default function GanttChart({ tasks, onSelectTask }: Props) {
+  const { appUser } = useAuth();
+  const isAdmin = appUser?.role === "admin";
   const isZh = usePartnerZh();
   // 업무명·그룹명은 관리자가 직접 입력한 자유 텍스트라 고정 UI 사전(zh)이 아니라 기계
   // 번역(useZhAutoTranslate)으로 처리한다 — 아직 번역 전이면 원문이 그대로 보인다.
@@ -255,8 +258,11 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
               title={row.kind === "task" ? trName(row.task.name) : `${trName(row.name)} (${row.tasks.length}${zh(isZh, "건")})`}
             >
               {row.kind === "task" ? (
-                <button onClick={() => onSelectTask?.(row.task)} className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
-                  {trName(row.task.name)}
+                <button onClick={() => onSelectTask?.(row.task)} className="flex min-w-0 flex-1 items-center gap-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
+                  {isAdmin && row.task.hiddenFromPartner && (
+                    <EyeOff size={12} className="shrink-0 text-[#d1d1d6]" aria-label="협력사에게 숨김" />
+                  )}
+                  <span className="truncate">{trName(row.task.name)}</span>
                 </button>
               ) : (
                 <button

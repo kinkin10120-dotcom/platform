@@ -117,9 +117,13 @@ service cloud.firestore {
       // 클라이언트 쿼리는 반드시 where('clientId','==',내clientId)를 포함해야 한다
       // (listenTasksByProject가 clientId 인자를 받는 이유). 협력사는 clientId가 없으므로
       // where('projectId','==',...)만으로 조회한다(관리자와 동일한 쿼리 형태).
-      // hiddenFromPartner는 resource.data 필드라 list에서도(clientVisible과 달리) 문서별로
-      // 바로 검사할 수 있다 — "계약체결"처럼 협력사에게 개별적으로 숨기고 싶은 업무용.
-      allow list: if isSignedIn() && (adminOrClientOf(resource.data.clientId) || (belongsToPartnerProject(resource.data.projectId) && resource.data.get('hiddenFromPartner', false) != true));
+      // hiddenFromPartner는 여기(list)서 검사하면 안 된다 — clientVisible과 똑같은 함정:
+      // list 규칙은 쿼리 결과 문서 중 하나라도 조건을 통과 못 하면 그 문서만 걸러지는 게
+      // 아니라 쿼리 전체가 permission-denied로 실패한다. 프로젝트에 숨김 업무가 하나만
+      // 있어도 협력사의 업무 목록 전체가 사라지는 사고가 났었다. get(단건 조회)에서만
+      // 검사하고, list 결과에서 숨김 업무를 빼는 건 앱 쪽(listenTasksByProject 호출부)에서
+      // 필터링한다.
+      allow list: if isSignedIn() && (adminOrClientOf(resource.data.clientId) || belongsToPartnerProject(resource.data.projectId));
       allow create, delete: if isAdmin();
       // 상태/진행률/체크리스트는 관리자 전용 관리 지표라 클라이언트는 못 건드리게 막고,
       // 확인/승인 요청 응답에 필요한 필드만 예외적으로 열어둔다.

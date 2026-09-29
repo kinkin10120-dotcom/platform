@@ -169,8 +169,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!isPartner || projects.length === 0) return;
     // clientId 없이(undefined) 호출 — belongsToPartnerProject 규칙이 projectId만으로 허용한다.
+    // hiddenFromPartner는 list 규칙에서 걸러줄 수 없어(문서 하나라도 조건을 못 넘으면 쿼리
+    // 전체가 거부되는 함정) 쿼리는 전체를 받아온 뒤 여기서 걸러낸다.
     const unsubs = projects.map((p) => listenTasksByProject(p.id, (ts) => {
-      setAllTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...ts]);
+      const visible = ts.filter((t) => !t.hiddenFromPartner);
+      setAllTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...visible]);
     }));
     return () => unsubs.forEach((u) => u());
   }, [isPartner, projects]);

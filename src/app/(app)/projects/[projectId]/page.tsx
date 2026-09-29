@@ -120,7 +120,10 @@ export default function ProjectWorkspacePage() {
       projectId,
       (t) => {
         setTasksError(null);
-        setTasks(t);
+        // hiddenFromPartner는 firestore.rules의 list 규칙에서 걸러줄 수 없다(문서 하나라도
+        // 조건을 통과 못 하면 쿼리 전체가 거부되는 함정 — clientVisible과 동일) — 그래서
+        // 쿼리는 전체를 받아온 뒤 여기서 협력사 계정에 한해 숨김 업무를 걸러낸다.
+        setTasks(isPartner ? t.filter((task) => !task.hiddenFromPartner) : t);
       },
       (e) => setTasksError(e.message),
       (isAdmin || isPartner) ? undefined : appUser.clientId

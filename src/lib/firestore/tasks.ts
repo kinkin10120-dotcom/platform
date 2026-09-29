@@ -58,6 +58,7 @@ function fromDoc(d: any): Task {
     dependsOn: data.dependsOn ?? [],
     templateId: data.templateId ?? undefined,
     group: data.group ?? undefined,
+    hiddenFromPartner: !!data.hiddenFromPartner,
     statusHistory: (data.statusHistory ?? []).map((h: any) => ({
       status: h.status,
       enteredAt: toMillis(h.enteredAt),

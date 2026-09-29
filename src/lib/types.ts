@@ -12,6 +12,7 @@ export interface AppUser {
   role: UserRole;
   clientId?: string; // role === 'client' 일 때만 존재
   projectIds?: string[]; // role === 'partner' 일 때만 존재 — 볼 수 있는 프로젝트 목록
+  partnerLang?: "ko" | "zh"; // role === 'partner' 일 때만 존재 — 협력사가 보는 화면 UI 언어
   createdAt: number;
   notificationPrefs?: Partial<Record<NotificationType, boolean>>; // 설정 안 된 타입은 기본 on
 }

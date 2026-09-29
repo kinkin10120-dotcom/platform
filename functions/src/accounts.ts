@@ -73,14 +73,18 @@ export const createPartnerAccount = onCall({ invoker: "public", secrets: [intern
     throw new HttpsError("permission-denied", "관리자만 계정을 생성할 수 있습니다.");
   }
 
-  const { email, name, projectIds } = request.data as {
+  const { email, name, projectIds, partnerLang } = request.data as {
     email?: string;
     name?: string;
     projectIds?: string[];
+    partnerLang?: "ko" | "zh";
   };
 
   if (!email || !name || !projectIds?.length) {
     throw new HttpsError("invalid-argument", "email, name, projectIds는 필수입니다.");
+  }
+  if (partnerLang && partnerLang !== "ko" && partnerLang !== "zh") {
+    throw new HttpsError("invalid-argument", "partnerLang은 ko 또는 zh만 가능합니다.");
   }
 
   // 존재하지 않는 프로젝트를 잘못 지정하는 실수를 막는다.
@@ -106,6 +110,7 @@ export const createPartnerAccount = onCall({ invoker: "public", secrets: [intern
     name,
     role: "partner",
     projectIds,
+    partnerLang: partnerLang ?? "ko",
     createdAt: FieldValue.serverTimestamp(),
   });
 
@@ -115,7 +120,7 @@ export const createPartnerAccount = onCall({ invoker: "public", secrets: [intern
 });
 
 /* ------------------------------------------------------------------ */
-/* 1-0-2) 협력사 계정의 프로젝트 접근 범위 수정 (관리자 전용 callable)        */
+/* 1-0-2) 협력사 계정의 프로젝트 접근 범위·UI 언어 수정 (관리자 전용 callable)   */
 /* ------------------------------------------------------------------ */
 export const updatePartnerProjects = onCall({ invoker: "public" }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
@@ -123,15 +128,22 @@ export const updatePartnerProjects = onCall({ invoker: "public" }, async (reques
   if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
     throw new HttpsError("permission-denied", "관리자만 사용할 수 있습니다.");
   }
-  const { uid, projectIds } = request.data as { uid?: string; projectIds?: string[] };
+  const { uid, projectIds, partnerLang } = request.data as {
+    uid?: string;
+    projectIds?: string[];
+    partnerLang?: "ko" | "zh";
+  };
   if (!uid || !projectIds) {
     throw new HttpsError("invalid-argument", "uid, projectIds는 필수입니다.");
+  }
+  if (partnerLang && partnerLang !== "ko" && partnerLang !== "zh") {
+    throw new HttpsError("invalid-argument", "partnerLang은 ko 또는 zh만 가능합니다.");
   }
   const targetSnap = await db.collection("users").doc(uid).get();
   if (!targetSnap.exists || targetSnap.data()?.role !== "partner") {
     throw new HttpsError("not-found", "존재하지 않는 협력사 계정입니다.");
   }
-  await targetSnap.ref.update({ projectIds });
+  await targetSnap.ref.update({ projectIds, ...(partnerLang ? { partnerLang } : {}) });
   return { ok: true };
 });
 

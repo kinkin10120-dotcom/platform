@@ -87,6 +87,7 @@ export function listenPartners(cb: (users: AppUser[]) => void) {
           name: data.name,
           role: data.role,
           projectIds: data.projectIds ?? [],
+          partnerLang: data.partnerLang ?? "ko",
           createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
         } as AppUser;
       })

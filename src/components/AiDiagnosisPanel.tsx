@@ -5,6 +5,7 @@ import { Sparkles, Loader2 } from "lucide-react";
 import { Project, Task } from "@/lib/types";
 import { isOverdue, isDueSoon, computeProjectProgress } from "@/lib/bottleneck";
 import { getComments } from "@/lib/firestore/comments";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 interface AiInsight {
   summary: string;
@@ -19,6 +20,7 @@ const RISK_STYLE: Record<AiInsight["riskLevel"], string> = {
 };
 
 export default function AiDiagnosisPanel({ project, tasks }: { project: Project; tasks: Task[] }) {
+  const isZh = usePartnerZh();
   const [aiInsight, setAiInsight] = useState<AiInsight | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -109,8 +111,8 @@ export default function AiDiagnosisPanel({ project, tasks }: { project: Project;
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-[#1d1d1f]">AI 진단</h3>
-          <p className="mt-0.5 text-xs text-[#86868b]">실제 데이터 수치만 근거로 생성되는 참고 의견입니다</p>
+          <h3 className="text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "AI 진단")}</h3>
+          <p className="mt-0.5 text-xs text-[#86868b]">{zh(isZh, "실제 데이터 수치만 근거로 생성되는 참고 의견입니다")}</p>
         </div>
         <button
           onClick={handleAiDiagnose}
@@ -120,12 +122,12 @@ export default function AiDiagnosisPanel({ project, tasks }: { project: Project;
           {aiLoading ? (
             <span key="loading" className="flex items-center gap-1.5">
               <Loader2 size={13} className="animate-spin" />
-              진단 중...
+              {zh(isZh, "진단 중...")}
             </span>
           ) : (
             <span key="idle" className="flex items-center gap-1.5">
               <Sparkles size={13} />
-              {aiInsight ? "다시 진단" : "AI 진단하기"}
+              {aiInsight ? zh(isZh, "다시 진단") : zh(isZh, "AI 진단하기")}
             </span>
           )}
         </button>
@@ -136,10 +138,10 @@ export default function AiDiagnosisPanel({ project, tasks }: { project: Project;
       {aiInsight && (
         <div className="mt-4 space-y-3 border-t border-[#f0f0f0] pt-4">
           <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${RISK_STYLE[aiInsight.riskLevel]}`}>
-            {RISK_LABEL[aiInsight.riskLevel]}
+            {zh(isZh, RISK_LABEL[aiInsight.riskLevel])}
           </span>
           <p className="text-sm leading-relaxed text-[#1d1d1f]">{aiInsight.summary}</p>
-          <p className="text-[10px] text-[#d1d1d6]">* AI가 자동 생성한 참고 의견입니다.</p>
+          <p className="text-[10px] text-[#d1d1d6]">{zh(isZh, "* AI가 자동 생성한 참고 의견입니다.")}</p>
         </div>
       )}
     </div>

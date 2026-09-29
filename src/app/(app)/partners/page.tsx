@@ -22,6 +22,7 @@ export default function PartnersPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [partnerLang, setPartnerLang] = useState<"ko" | "zh">("ko");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [editingUid, setEditingUid] = useState<string | null>(null);
@@ -47,6 +48,7 @@ export default function PartnersPage() {
     setName("");
     setEmail("");
     setSelectedProjectIds([]);
+    setPartnerLang("ko");
     setError("");
     setShowForm(true);
   }
@@ -56,6 +58,7 @@ export default function PartnersPage() {
     setName(p.name);
     setEmail(p.email);
     setSelectedProjectIds(p.projectIds ?? []);
+    setPartnerLang(p.partnerLang ?? "ko");
     setError("");
     setShowForm(true);
   }
@@ -70,9 +73,9 @@ export default function PartnersPage() {
     setError("");
     try {
       if (editingUid) {
-        await updatePartnerProjects(editingUid, selectedProjectIds);
+        await updatePartnerProjects(editingUid, selectedProjectIds, partnerLang);
       } else {
-        await createPartnerAccount({ email: email.trim(), name: name.trim(), projectIds: selectedProjectIds });
+        await createPartnerAccount({ email: email.trim(), name: name.trim(), projectIds: selectedProjectIds, partnerLang });
       }
       setShowForm(false);
     } catch (err: any) {
@@ -140,6 +143,23 @@ export default function PartnersPage() {
             </>
           )}
           <div>
+            <label className="mb-1.5 block text-xs font-medium text-[#86868b]">업체 언어 (화면에 표시될 언어)</label>
+            <div className="flex gap-2">
+              {(["ko", "zh"] as const).map((lang) => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setPartnerLang(lang)}
+                  className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                    partnerLang === lang ? "bg-[#1d1d1f] text-white" : "bg-[#f5f5f7] text-[#86868b] hover:bg-[#ececee]"
+                  }`}
+                >
+                  {lang === "ko" ? "한국 업체 (한국어)" : "중국 업체 (中文)"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <label className="mb-1.5 block text-xs font-medium text-[#86868b]">볼 수 있는 프로젝트</label>
             <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-[#e5e5e5] p-2">
               {projects.map((p) => (
@@ -182,7 +202,12 @@ export default function PartnersPage() {
           <div key={p.uid} className="rounded-3xl bg-white p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="font-medium text-[#1d1d1f]">{p.name}</p>
+                <p className="flex items-center gap-1.5 font-medium text-[#1d1d1f]">
+                  {p.name}
+                  <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 text-[10px] font-medium text-[#86868b]">
+                    {p.partnerLang === "zh" ? "中文" : "한국어"}
+                  </span>
+                </p>
                 <p className="text-xs text-[#86868b]">{p.email}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">

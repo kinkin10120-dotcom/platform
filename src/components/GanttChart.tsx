@@ -5,6 +5,7 @@ import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Task, TaskStatus } from "@/lib/types";
 import { isOverdue } from "@/lib/bottleneck";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const LABEL_WIDTH_DESKTOP = 220;
 const LABEL_WIDTH_MOBILE = 132;
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export default function GanttChart({ tasks, onSelectTask }: Props) {
+  const isZh = usePartnerZh();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState(LABEL_WIDTH_DESKTOP);
   const [isMobile, setIsMobile] = useState(false);
@@ -195,7 +197,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
   if (sorted.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
-        등록된 업무가 없습니다. 업무 리스트 탭에서 업무를 추가해보세요.
+        {zh(isZh, "등록된 업무가 없습니다. 업무 리스트 탭에서 업무를 추가해보세요.")}
       </div>
     );
   }
@@ -207,7 +209,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
         <button
           onClick={resetZoom}
           className="rounded-full p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
-          title="전체 보기"
+          title={zh(isZh, "전체 보기")}
         >
           <Maximize2 size={14} />
         </button>
@@ -215,7 +217,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
           onClick={zoomOut}
           disabled={dayWidth <= DAY_WIDTH_MIN}
           className="rounded-full p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f] disabled:opacity-30"
-          title="축소"
+          title={zh(isZh, "축소")}
         >
           <ZoomOut size={14} />
         </button>
@@ -223,7 +225,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
           onClick={zoomIn}
           disabled={dayWidth >= DAY_WIDTH_MAX}
           className="rounded-full p-1.5 text-[#86868b] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f] disabled:opacity-30"
-          title="확대"
+          title={zh(isZh, "확대")}
         >
           <ZoomIn size={14} />
         </button>
@@ -236,14 +238,14 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
             className="flex items-center border-b border-[#e5e5e5] bg-[#ececef] pl-6 pr-3 text-sm font-medium text-[#86868b] sm:pl-8"
             style={{ height: HEADER_HEIGHT }}
           >
-            업무명
+            {zh(isZh, "업무명")}
           </div>
           {rows.map((row) => (
             <div
               key={row.kind === "task" ? `${row.task.id}${row.indent ? "-nested" : ""}` : `group:${row.name}`}
               className={`flex items-center border-b border-[#f0f0f0] pr-3 text-sm text-[#1d1d1f] ${row.kind === "task" && row.indent ? "pl-9 sm:pl-11" : "pl-6 sm:pl-8"}`}
               style={{ height: ROW_HEIGHT }}
-              title={row.kind === "task" ? row.task.name : `${row.name} (${row.tasks.length}건)`}
+              title={row.kind === "task" ? row.task.name : `${row.name} (${row.tasks.length}${zh(isZh, "건")})`}
             >
               {row.kind === "task" ? (
                 <button onClick={() => onSelectTask?.(row.task)} className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
@@ -254,7 +256,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
                   onClick={() => toggleGroup(row.name)}
                   className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline"
                 >
-                  {row.name} <span className="text-xs font-normal text-[#86868b]">({row.tasks.length}건)</span>
+                  {row.name} <span className="text-xs font-normal text-[#86868b]">({row.tasks.length}{zh(isZh, "건")})</span>
                 </button>
               )}
             </div>

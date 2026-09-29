@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { updateNotificationPrefs } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { NotificationType, NOTIFICATION_TYPE_LABEL } from "@/lib/types";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const ALL_TYPES: NotificationType[] = [
   "assigned",
@@ -54,6 +55,7 @@ const TYPE_DESC: Record<NotificationType, string> = {
 
 export default function NotificationSettingsPage() {
   const { appUser } = useAuth();
+  const isZh = usePartnerZh();
   const [prefs, setPrefs] = useState<Partial<Record<NotificationType, boolean>>>({});
   const [saving, setSaving] = useState<NotificationType | null>(null);
   const [testState, setTestState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -95,10 +97,10 @@ export default function NotificationSettingsPage() {
       <div>
         <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
           <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
-          알림 설정
+          {zh(isZh, "알림 설정")}
         </h1>
         <p className="mt-1 pl-4 text-sm text-[#86868b]">
-          꺼둔 알림은 푸시·이메일로 보내지 않아요. 알림 목록에는 계속 남습니다.
+          {zh(isZh, "꺼둔 알림은 푸시·이메일로 보내지 않아요. 알림 목록에는 계속 남습니다.")}
         </p>
       </div>
 
@@ -108,9 +110,9 @@ export default function NotificationSettingsPage() {
       <div className="rounded-3xl bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-medium text-[#1d1d1f]">알림 테스트</p>
+            <p className="text-sm font-medium text-[#1d1d1f]">{zh(isZh, "알림 테스트")}</p>
             <p className="mt-0.5 text-xs text-[#86868b]">
-              나에게 테스트 알림을 한 건 보냅니다. 알림벨·푸시·이메일이 모두 정상인지 한 번에 확인할 수 있어요.
+              {zh(isZh, "나에게 테스트 알림을 한 건 보냅니다. 알림벨·푸시·이메일이 모두 정상인지 한 번에 확인할 수 있어요.")}
             </p>
           </div>
           <button
@@ -118,17 +120,17 @@ export default function NotificationSettingsPage() {
             disabled={testState === "sending"}
             className="shrink-0 rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
           >
-            {testState === "sending" ? "보내는 중..." : "테스트 알림 보내기"}
+            {testState === "sending" ? zh(isZh, "보내는 중...") : zh(isZh, "테스트 알림 보내기")}
           </button>
         </div>
         {testState === "sent" && (
           <p className="mt-3 rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs leading-relaxed text-[#86868b]">
-            보냈습니다. 알림벨에 바로 뜨고, 푸시·이메일은 1분 안에 도착합니다. 안 오면 이 화면 맨 위에 빨간 안내가 뜹니다.
+            {zh(isZh, "보냈습니다. 알림벨에 바로 뜨고, 푸시·이메일은 1분 안에 도착합니다. 안 오면 이 화면 맨 위에 빨간 안내가 뜹니다.")}
           </p>
         )}
         {testState === "error" && (
           <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs leading-relaxed text-red-600">
-            테스트 알림을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.
+            {zh(isZh, "테스트 알림을 만들지 못했습니다. 잠시 후 다시 시도해 주세요.")}
           </p>
         )}
       </div>
@@ -142,7 +144,7 @@ export default function NotificationSettingsPage() {
               className={`flex items-center justify-between gap-4 px-5 py-4 ${i > 0 ? "border-t border-[#f0f0f0]" : ""}`}
             >
               <div className="min-w-0">
-                <p className="font-medium text-[#1d1d1f]">{NOTIFICATION_TYPE_LABEL[type]}</p>
+                <p className="font-medium text-[#1d1d1f]">{zh(isZh, NOTIFICATION_TYPE_LABEL[type])}</p>
                 <p className="mt-0.5 text-xs text-[#86868b]">{TYPE_DESC[type]}</p>
               </div>
               <button

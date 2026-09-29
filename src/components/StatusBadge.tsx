@@ -1,4 +1,5 @@
 import { TaskStatus, TASK_STATUS_LABEL } from "@/lib/types";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const COLOR: Record<TaskStatus, string> = {
   pending: "bg-gray-100 text-gray-500",
@@ -9,9 +10,10 @@ const COLOR: Record<TaskStatus, string> = {
 };
 
 export default function StatusBadge({ status }: { status: TaskStatus }) {
+  const isZh = usePartnerZh();
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${COLOR[status]}`}>
-      {TASK_STATUS_LABEL[status]}
+      {zh(isZh, TASK_STATUS_LABEL[status])}
     </span>
   );
 }

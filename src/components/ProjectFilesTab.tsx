@@ -7,6 +7,7 @@ import { listenFiles, deleteTaskFile } from "@/lib/firestore/files";
 import { Task, TaskFile } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const StepViewer = dynamic(() => import("@/components/StepViewer"), { ssr: false });
 
@@ -212,6 +213,7 @@ function FileGroupRow({
 }
 
 function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid: string; role: string } | null; hideAi: boolean }) {
+  const isZh = usePartnerZh();
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -233,7 +235,7 @@ function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid
         )}
         <span className="font-medium text-[#1d1d1f] text-sm">{task.name}</span>
         <StatusBadge status={task.status} />
-        <span className="ml-auto text-xs text-[#86868b]">{files.length}개</span>
+        <span className="ml-auto text-xs text-[#86868b]">{files.length}{isZh ? "个" : "개"}</span>
       </button>
 
       {/* 파일 목록 */}
@@ -260,6 +262,7 @@ export default function ProjectFilesTab({ tasks }: { tasks: Task[] }) {
   // 제조사)에게 이걸 노출할 이유가 없어 아예 감춘다 — 요청받은 범위(일정·자료·코멘트)에도
   // 포함되지 않는다.
   const hideAi = appUser?.role === "partner";
+  const isZh = usePartnerZh();
 
   // 파일이 있는 업무만 렌더(각 섹션 내부에서 판단)
   const orderedTasks = [...tasks].sort((a, b) => a.order - b.order);
@@ -271,7 +274,7 @@ export default function ProjectFilesTab({ tasks }: { tasks: Task[] }) {
       ))}
       {orderedTasks.length === 0 && (
         <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
-          등록된 업무가 없습니다.
+          {zh(isZh, "등록된 업무가 없습니다.")}
         </div>
       )}
     </div>

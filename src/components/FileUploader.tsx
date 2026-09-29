@@ -6,6 +6,7 @@ import { Paperclip, Download, Trash2, Eye, EyeOff, Maximize2, X, History, Chevro
 import { useAuth } from "@/lib/auth-context";
 import { listenFiles, uploadTaskFile, deleteTaskFile } from "@/lib/firestore/files";
 import { TaskFile } from "@/lib/types";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const COST_LABEL: Record<number, string> = { 1: "낮음", 2: "보통", 3: "높음" };
 
@@ -114,7 +115,7 @@ function ExpandModal({ f, onClose }: { f: TaskFile; onClose: () => void }) {
   );
 }
 
-function FileRow({ f, canDelete, onDelete, badge }: { f: TaskFile; canDelete: boolean; onDelete: () => void; badge?: React.ReactNode }) {
+function FileRow({ f, canDelete, onDelete, badge, hideAi, isZh }: { f: TaskFile; canDelete: boolean; onDelete: () => void; badge?: React.ReactNode; hideAi: boolean; isZh: boolean }) {
   const [preview, setPreview] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showAi, setShowAi] = useState(false);
@@ -145,13 +146,13 @@ function FileRow({ f, canDelete, onDelete, badge }: { f: TaskFile; canDelete: bo
             <span className="truncate text-[#1d1d1f]">{f.name}</span>
             <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
             {badge}
-            {f.aiAnalysis && (
+            {!hideAi && f.aiAnalysis && (
               <button
                 onClick={() => setShowAi((v) => !v)}
                 className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f] hover:bg-[#e5e5e5]"
               >
                 {f.aiAnalysis.status === "pending" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                AI 분석
+                {zh(isZh, "AI 분석")}
               </button>
             )}
           </div>
@@ -176,7 +177,7 @@ function FileRow({ f, canDelete, onDelete, badge }: { f: TaskFile; canDelete: bo
             )}
           </div>
         </div>
-        {showAi && (
+        {!hideAi && showAi && (
           <div className="px-3 pb-3">
             <AiAnalysisPanel f={f} />
           </div>
@@ -191,11 +192,15 @@ function FileGroupRow({
   older,
   canDelete,
   onDelete,
+  hideAi,
+  isZh,
 }: {
   latest: TaskFile;
   older: TaskFile[];
   canDelete: (f: TaskFile) => boolean;
   onDelete: (f: TaskFile) => void;
+  hideAi: boolean;
+  isZh: boolean;
 }) {
   const [showOlder, setShowOlder] = useState(false);
 
@@ -205,6 +210,8 @@ function FileGroupRow({
         f={latest}
         canDelete={canDelete(latest)}
         onDelete={() => onDelete(latest)}
+        hideAi={hideAi}
+        isZh={isZh}
         badge={
           older.length > 0 ? (
             <button
@@ -226,6 +233,8 @@ function FileGroupRow({
               f={f}
               canDelete={canDelete(f)}
               onDelete={() => onDelete(f)}
+              hideAi={hideAi}
+              isZh={isZh}
               badge={
                 <span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">
                   v{f.version}
@@ -241,6 +250,10 @@ function FileGroupRow({
 
 export default function FileUploader({ projectId, taskId }: { projectId: string; taskId: string }) {
   const { appUser } = useAuth();
+  // AI 형상 분석은 원가 수준(초기투자/개당단가) 추정까지 함께 보여주는데, 협력사(외부 제조사)
+  // 에게 노출할 이유가 없어 감춘다 — ProjectFilesTab.tsx의 hideAi와 동일한 정책.
+  const hideAi = appUser?.role === "partner";
+  const isZh = usePartnerZh();
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -260,8 +273,8 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
       console.error("파일 업로드 실패:", err);
       setUploadError(
         err instanceof Error && err.message.includes("permission")
-          ? "업로드 권한이 없습니다. 관리자에게 문의해주세요."
-          : "업로드에 실패했습니다. 잠시 후 다시 시도해주세요."
+          ? zh(isZh, "업로드 권한이 없습니다. 관리자에게 문의해주세요.")
+          : zh(isZh, "업로드에 실패했습니다. 잠시 후 다시 시도해주세요.")
       );
     } finally {
       setUploading(false);
@@ -281,14 +294,16 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
             older={older}
             canDelete={canDelete}
             onDelete={(f) => deleteTaskFile(taskId, f.id, f.storagePath)}
+            hideAi={hideAi}
+            isZh={isZh}
           />
         ))}
-        {files.length === 0 && <p className="text-sm text-[#86868b]">첨부된 자료가 없습니다.</p>}
+        {files.length === 0 && <p className="text-sm text-[#86868b]">{zh(isZh, "첨부된 자료가 없습니다.")}</p>}
       </div>
 
       <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]">
         <Paperclip size={12} />
-        {uploading ? "업로드 중..." : "자료 업로드"}
+        {uploading ? zh(isZh, "업로드 중...") : zh(isZh, "자료 업로드")}
         <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
       </label>
       {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}

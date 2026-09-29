@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { zh, usePartnerZh } from "@/lib/i18n";
 import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
@@ -85,6 +86,7 @@ export default function HomePage() {
   // 협력사(파트너) 계정 — clients 컬렉션 접근 권한이 없어 clientId로 묶어 조회할 수 없다.
   // 관리자가 배정한 projectIds 각각을 개별 문서 구독(listenProject)으로 가져온다.
   const isPartner = appUser?.role === "partner";
+  const isZh = usePartnerZh();
 
   useEffect(() => {
     return listenNotices((notices) => setLatestNotice(notices[0] ?? null));
@@ -241,7 +243,7 @@ export default function HomePage() {
   }
 
   if (!loaded) {
-    return <p className="text-sm text-[#86868b]">불러오는 중...</p>;
+    return <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>;
   }
 
   return (
@@ -262,10 +264,10 @@ export default function HomePage() {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
-            {isAdmin ? "전체 프로젝트 현황" : "내 프로젝트"}
+            {isAdmin ? "전체 프로젝트 현황" : zh(isZh, "내 프로젝트")}
           </h1>
           <p className="mt-1 pl-4 text-sm text-[#86868b]">
-            {isAdmin ? "진행 중인 프로젝트와 마감 임박 업무를 한눈에 확인하세요." : "내가 참여 중인 프로젝트의 진행 상황을 확인하세요."}
+            {isAdmin ? "진행 중인 프로젝트와 마감 임박 업무를 한눈에 확인하세요." : zh(isZh, "내가 참여 중인 프로젝트의 진행 상황을 확인하세요.")}
           </p>
         </div>
       </div>
@@ -311,7 +313,7 @@ export default function HomePage() {
         <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">
           <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-violet-700">
             <AlertCircle size={15} />
-            확인/승인이 필요한 업무 {decisionTasks.length}건
+            {zh(isZh, "확인/승인이 필요한 업무")} {decisionTasks.length}{zh(isZh, "건")}
           </p>
           <div className="space-y-2">
             {decisionTasks.slice(0, 8).map((t) => {
@@ -337,7 +339,7 @@ export default function HomePage() {
             })}
           </div>
           {decisionTasks.length > 8 && (
-            <p className="mt-2 px-1 text-xs text-violet-600">외 {decisionTasks.length - 8}건 더 있음</p>
+            <p className="mt-2 px-1 text-xs text-violet-600">{zh(isZh, "외")} {decisionTasks.length - 8}{zh(isZh, "건 더 있음")}</p>
           )}
         </div>
       )}
@@ -412,7 +414,7 @@ export default function HomePage() {
         <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
           {isAdmin
             ? "아직 등록된 프로젝트가 없습니다. 클라이언트 관리에서 프로젝트를 생성해보세요."
-            : "아직 배정된 프로젝트가 없습니다."}
+            : zh(isZh, "아직 배정된 프로젝트가 없습니다.")}
         </div>
       )}
 
@@ -423,7 +425,7 @@ export default function HomePage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={isAdmin ? "클라이언트명, 프로젝트명 검색" : "프로젝트명 검색"}
+              placeholder={isAdmin ? "클라이언트명, 프로젝트명 검색" : zh(isZh, "프로젝트명 검색")}
               className="w-full rounded-full border border-[#d1d1d6] bg-white py-2 pl-9 pr-3 text-sm text-[#1d1d1f] outline-none placeholder:text-[#86868b] focus:border-[#86868b]"
             />
           </div>
@@ -436,7 +438,7 @@ export default function HomePage() {
                   statusFilter === s ? "bg-[#1d1d1f] text-white" : "bg-white text-[#86868b] hover:bg-[#f5f5f7]"
                 }`}
               >
-                {s === "all" ? "전체" : STATUS_LABEL[s]}
+                {s === "all" ? zh(isZh, "전체") : zh(isZh, STATUS_LABEL[s])}
               </button>
             ))}
           </div>
@@ -448,13 +450,17 @@ export default function HomePage() {
           onClick={() => setShowCompleted((v) => !v)}
           className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]"
         >
-          {showCompleted ? "완료된 프로젝트 숨기기" : `완료된 프로젝트 ${archivedCount}건 숨겨짐 · 보기`}
+          {showCompleted
+            ? zh(isZh, "완료된 프로젝트 숨기기")
+            : isZh
+              ? `已隐藏 ${archivedCount} 个已完成项目 · 查看`
+              : `완료된 프로젝트 ${archivedCount}건 숨겨짐 · 보기`}
         </button>
       )}
 
       {projects.length > 0 && filteredProjects.length === 0 && (
         <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
-          검색 결과가 없습니다.
+          {zh(isZh, "검색 결과가 없습니다.")}
         </div>
       )}
 
@@ -500,7 +506,7 @@ export default function HomePage() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {p.projectType.map((t) => (
                         <span key={t} className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs text-[#1d1d1f]">
-                          {PROJECT_TYPE_LABEL[t]}
+                          {zh(isZh, PROJECT_TYPE_LABEL[t])}
                         </span>
                       ))}
                     </div>
@@ -509,7 +515,7 @@ export default function HomePage() {
               </div>
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs text-[#86868b]">
                 <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[p.status]}`} />
-                {STATUS_LABEL[p.status]}
+                {zh(isZh, STATUS_LABEL[p.status])}
               </span>
             </Link>
           </div>
@@ -517,7 +523,7 @@ export default function HomePage() {
         })}
         {!isAdmin && hiddenProjectCount > 0 && !search.trim() && statusFilter === "all" && (
           <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[#d1d1d6] p-6 text-center">
-            <p className="text-sm font-medium text-[#86868b]">새 프로젝트를 준비하고 있습니다</p>
+            <p className="text-sm font-medium text-[#86868b]">{zh(isZh, "새 프로젝트를 준비하고 있습니다")}</p>
           </div>
         )}
       </div>

@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/lib/auth-context";
+import { zh, usePartnerZh } from "@/lib/i18n";
 import { listenProject, updateProject } from "@/lib/firestore/projects";
 import { listenClient, uploadClientLogo } from "@/lib/firestore/clients";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
@@ -65,6 +66,7 @@ export default function ProjectWorkspacePage() {
   // 협력사(파트너) 계정 — 지정된 프로젝트의 일정·업무·첨부 자료·코멘트만 보고, 클라이언트
   // 정보·프로젝트 수정·업무 편집 등 관리자 전용 기능은 전부 isAdmin 분기로 이미 가려진다.
   const isPartner = appUser?.role === "partner";
+  const isZh = usePartnerZh();
 
   const [project, setProject] = useState<Project | null | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
@@ -354,7 +356,7 @@ export default function ProjectWorkspacePage() {
               <div className="mt-2.5 flex flex-wrap items-center gap-1">
                 {project.projectType?.map((t) => (
                   <span key={t} className="whitespace-nowrap rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs font-medium text-[#1d1d1f]">
-                    {PROJECT_TYPE_LABEL[t]}
+                    {zh(isZh, PROJECT_TYPE_LABEL[t])}
                   </span>
                 ))}
               </div>
@@ -376,7 +378,7 @@ export default function ProjectWorkspacePage() {
 
         {stats.total > 0 && (
           <div className="mt-6 border-t border-[#f0f0f0] pt-5">
-            <p className="text-xs text-[#86868b]">전체 진행률</p>
+            <p className="text-xs text-[#86868b]">{zh(isZh, "전체 진행률")}</p>
             <div className="mt-1.5 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#f5f5f7]">
                 <div className="h-full rounded-full bg-[#1d1d1f]" style={{ width: `${stats.progress}%` }} />
@@ -391,7 +393,7 @@ export default function ProjectWorkspacePage() {
         <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">
           <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-violet-700">
             <AlertCircle size={15} />
-            확인/승인이 필요한 업무 {decisionTasks.length}건
+            {zh(isZh, "확인/승인이 필요한 업무")} {decisionTasks.length}{zh(isZh, "건")}
           </p>
           <div className="space-y-2">
             {decisionTasks.map((t) => {
@@ -425,7 +427,7 @@ export default function ProjectWorkspacePage() {
 
       {tasksError && (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
-          <p className="text-sm font-medium text-red-700">업무 목록을 불러오지 못했습니다.</p>
+          <p className="text-sm font-medium text-red-700">{zh(isZh, "업무 목록을 불러오지 못했습니다.")}</p>
           <p className="mt-1 break-all text-xs text-red-600">{tasksError}</p>
         </div>
       )}
@@ -442,7 +444,7 @@ export default function ProjectWorkspacePage() {
                   active={tab === id}
                   onClick={() => setTab(id)}
                   icon={getTabIcon(id)}
-                  label={TAB_LABEL[id]}
+                  label={zh(isZh, TAB_LABEL[id])}
                 />
               ))}
             </div>
@@ -463,11 +465,11 @@ export default function ProjectWorkspacePage() {
           <button
             onClick={handleOpenCalendarLink}
             disabled={tasks.length === 0 || calendarLoading}
-            title="캘린더 구독 링크 — 구글/애플 캘린더에 URL로 추가하면 일정이 자동으로 갱신됩니다"
+            title={zh(isZh, "캘린더 구독 링크 — 구글/애플 캘린더에 URL로 추가하면 일정이 자동으로 갱신됩니다")}
             className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] disabled:opacity-40"
           >
             <CalendarDays size={13} />
-            <span className="hidden sm:inline">{calendarLoading ? "준비 중..." : "캘린더 구독"}</span>
+            <span className="hidden sm:inline">{calendarLoading ? zh(isZh, "준비 중...") : zh(isZh, "캘린더 구독")}</span>
           </button>
           <button
             onClick={handleExportExcel}
@@ -475,7 +477,7 @@ export default function ProjectWorkspacePage() {
             className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] disabled:opacity-40"
           >
             <Download size={13} />
-            <span className="hidden sm:inline">엑셀 다운로드</span>
+            <span className="hidden sm:inline">{zh(isZh, "엑셀 다운로드")}</span>
           </button>
         </div>
       </div>
@@ -485,14 +487,14 @@ export default function ProjectWorkspacePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => setCalendarUrl(null)}>
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
             <div>
-              <h2 className="text-lg font-semibold text-[#1d1d1f]">캘린더 구독</h2>
-              <p className="mt-1 text-sm text-[#86868b]">아래 버튼을 누르면 캘린더 앱이 바로 열리면서 구독이 시작됩니다. 안 열리면 링크를 복사해서 캘린더 앱에 직접 추가해주세요.</p>
+              <h2 className="text-lg font-semibold text-[#1d1d1f]">{zh(isZh, "캘린더 구독")}</h2>
+              <p className="mt-1 text-sm text-[#86868b]">{zh(isZh, "아래 버튼을 누르면 캘린더 앱이 바로 열리면서 구독이 시작됩니다. 안 열리면 링크를 복사해서 캘린더 앱에 직접 추가해주세요.")}</p>
             </div>
             <a
               href={calendarUrl.replace(/^https:/, "webcal:")}
               className="block w-full rounded-full bg-[#1d1d1f] py-3 text-center text-sm font-semibold text-white transition hover:bg-black"
             >
-              캘린더 앱에 바로 추가
+              {zh(isZh, "캘린더 앱에 바로 추가")}
             </a>
             <input
               readOnly
@@ -501,12 +503,12 @@ export default function ProjectWorkspacePage() {
               className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setCalendarUrl(null)} className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">닫기</button>
+              <button onClick={() => setCalendarUrl(null)} className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">{zh(isZh, "닫기")}</button>
               <button
                 onClick={handleCopyCalendarUrl}
                 className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm font-medium text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
               >
-                {calendarCopied ? "복사됨!" : "링크 복사"}
+                {calendarCopied ? zh(isZh, "복사됨!") : zh(isZh, "링크 복사")}
               </button>
             </div>
           </div>

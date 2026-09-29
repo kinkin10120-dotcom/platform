@@ -10,6 +10,7 @@ import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import StatusBadge from "@/components/StatusBadge";
 import CommentThread from "@/components/CommentThread";
 import FileUploader from "@/components/FileUploader";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 interface Props {
   task: Task;
@@ -21,6 +22,7 @@ interface Props {
 export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onClose }: Props) {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const isZh = usePartnerZh();
 
   const [name, setName] = useState(task.name);
   const [description, setDescription] = useState(task.description ?? "");
@@ -179,7 +181,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
       await resolveTaskDecision(task, appUser.uid, appUser.name, responseNote.trim() || undefined);
       setResponseNote("");
     } catch (e) {
-      setDecisionError(e instanceof Error ? e.message : "확인 처리 중 오류가 발생했습니다.");
+      setDecisionError(e instanceof Error ? e.message : zh(isZh, "확인 처리 중 오류가 발생했습니다."));
     }
   }
 
@@ -234,7 +236,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
       <div className="scrollbar-thin h-full w-full max-w-lg overflow-y-auto bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[#f0f0f0] bg-white/95 px-6 py-4 backdrop-blur">
-          <span className="text-xs font-semibold uppercase tracking-widest text-[#86868b]">업무 상세</span>
+          <span className="text-xs font-semibold uppercase tracking-widest text-[#86868b]">{zh(isZh, "업무 상세")}</span>
           <div className="flex items-center gap-1">
             {isAdmin && (
               <button onClick={handleDelete} className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500">
@@ -255,7 +257,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-violet-700">
-                      {isAdmin ? "클라이언트 확인/승인 대기 중" : "확인/승인이 필요합니다"}
+                      {isAdmin ? "클라이언트 확인/승인 대기 중" : zh(isZh, "확인/승인이 필요합니다")}
                     </p>
                     {isAdmin && openDecision && !editingNote && (
                       <button onClick={startEditNote} className="shrink-0 text-xs font-medium text-violet-600 underline underline-offset-2 hover:text-violet-700">
@@ -302,14 +304,14 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                   <input
                     value={responseNote}
                     onChange={(e) => setResponseNote(e.target.value)}
-                    placeholder="응답 메모(선택)"
+                    placeholder={zh(isZh, "응답 메모(선택)")}
                     className="w-full rounded-xl border border-violet-200 bg-white px-3 py-1.5 text-sm text-[#1d1d1f] outline-none focus:border-violet-400"
                   />
                   <button
                     onClick={handleResolveDecision}
                     className="rounded-full bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-700"
                   >
-                    확인했습니다
+                    {zh(isZh, "확인했습니다")}
                   </button>
                 </div>
               )}
@@ -362,10 +364,10 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               )
             )}
             {overdue && (
-              <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-500">지연</span>
+              <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-500">{zh(isZh, "지연")}</span>
             )}
             {!overdue && dueSoon && (
-              <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600">마감임박</span>
+              <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-600">{zh(isZh, "마감임박")}</span>
             )}
             {isAdmin && (
               <button
@@ -429,14 +431,14 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               onClick={() => toggleSection("schedule")}
               className="flex w-full items-center justify-between text-xs font-semibold text-[#86868b]"
             >
-              <span className="flex items-center gap-1.5"><CalendarDays size={13} />일정</span>
+              <span className="flex items-center gap-1.5"><CalendarDays size={13} />{zh(isZh, "일정")}</span>
               <ChevronDown size={14} className={`shrink-0 transition-transform ${openSections.schedule ? "rotate-180" : ""}`} />
             </button>
             {openSections.schedule && (
             <div className="mt-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <label className="mb-1 block text-xs text-[#86868b]">시작일</label>
+                <label className="mb-1 block text-xs text-[#86868b]">{zh(isZh, "시작일")}</label>
                 {isAdmin ? (
                   <input
                     type="date"
@@ -450,7 +452,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                 )}
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#86868b]">마감일</label>
+                <label className="mb-1 block text-xs text-[#86868b]">{zh(isZh, "마감일")}</label>
                 {isAdmin ? (
                   <input
                     type="date"
@@ -475,20 +477,20 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               <div className="mt-3 border-t border-black/5 pt-3">
                 <p className="mb-1.5 flex items-center gap-1.5 text-xs text-[#86868b]">
                   <History size={12} />
-                  일정 변경 이력
+                  {zh(isZh, "일정 변경 이력")}
                 </p>
                 <div className="max-h-40 space-y-1.5 overflow-y-auto scrollbar-thin">
                   {[...task.dateHistory].reverse().map((h, i) => (
                     <div key={i} className="rounded-xl bg-white px-3 py-2 text-xs text-[#86868b]">
                       {h.fromStartDate !== h.toStartDate && (
-                        <p>시작일 {h.fromStartDate} → <span className="font-medium text-[#1d1d1f]">{h.toStartDate}</span></p>
+                        <p>{zh(isZh, "시작일")} {h.fromStartDate} → <span className="font-medium text-[#1d1d1f]">{h.toStartDate}</span></p>
                       )}
                       {h.fromDueDate !== h.toDueDate && (
-                        <p>마감일 {h.fromDueDate} → <span className="font-medium text-[#1d1d1f]">{h.toDueDate}</span></p>
+                        <p>{zh(isZh, "마감일")} {h.fromDueDate} → <span className="font-medium text-[#1d1d1f]">{h.toDueDate}</span></p>
                       )}
                       <p className="mt-0.5 text-[10px] text-[#c7c7cc]">
                         {h.changedBy} · {new Date(h.changedAt).toLocaleDateString("ko-KR")}
-                        {h.cascaded ? " · 선행 업무 변경으로 자동 조정" : ""}
+                        {h.cascaded ? ` · ${zh(isZh, "선행 업무 변경으로 자동 조정")}` : ""}
                       </p>
                     </div>
                   ))}
@@ -505,14 +507,14 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               onClick={() => toggleSection("assignee")}
               className="flex w-full items-center justify-between text-xs font-semibold text-[#86868b]"
             >
-              <span className="flex items-center gap-1.5"><UserRound size={13} />담당 및 진행 상태</span>
+              <span className="flex items-center gap-1.5"><UserRound size={13} />{zh(isZh, "담당 및 진행 상태")}</span>
               <ChevronDown size={14} className={`shrink-0 transition-transform ${openSections.assignee ? "rotate-180" : ""}`} />
             </button>
             {openSections.assignee && (
             <div className="mt-3">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <label className="mb-1 block text-xs text-[#86868b]">담당자</label>
+                <label className="mb-1 block text-xs text-[#86868b]">{zh(isZh, "담당자")}</label>
                 {isAdmin ? (
                   <select
                     value={task.assigneeId || ""}
@@ -528,11 +530,11 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                     ))}
                   </select>
                 ) : (
-                  <p className="text-sm text-[#1d1d1f]">{task.assigneeName || "미지정"}</p>
+                  <p className="text-sm text-[#1d1d1f]">{task.assigneeName || zh(isZh, "미지정")}</p>
                 )}
               </div>
               <div>
-                <label className="mb-1 block text-xs text-[#86868b]">상태</label>
+                <label className="mb-1 block text-xs text-[#86868b]">{zh(isZh, "상태")}</label>
                 {isAdmin ? (
                   <select
                     value={task.status}
@@ -552,12 +554,12 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               </div>
             </div>
             {task.status === "pending" && (
-              <p className="mt-2 text-xs text-[#86868b]">선행 업무가 모두 완료되면 자동으로 시작 가능 상태로 전환됩니다.</p>
+              <p className="mt-2 text-xs text-[#86868b]">{zh(isZh, "선행 업무가 모두 완료되면 자동으로 시작 가능 상태로 전환됩니다.")}</p>
             )}
 
             <div className="mt-4 border-t border-black/5 pt-4">
               <label className="mb-2 flex items-center justify-between text-xs text-[#86868b]">
-                <span className="flex items-center gap-1.5"><Flag size={12} /> 진행률</span>
+                <span className="flex items-center gap-1.5"><Flag size={12} /> {zh(isZh, "진행률")}</span>
                 <span className="font-semibold text-[#1d1d1f]">{progress}%</span>
               </label>
               {task.checklist.length > 0 ? (
@@ -565,7 +567,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-white">
                     <div className="h-full rounded-full bg-[#1d1d1f] transition-all" style={{ width: `${task.progress}%` }} />
                   </div>
-                  <p className="mt-1.5 text-[11px] text-[#86868b]">체크리스트 완료 항목 기준으로 자동 계산됩니다.</p>
+                  <p className="mt-1.5 text-[11px] text-[#86868b]">{zh(isZh, "체크리스트 완료 항목 기준으로 자동 계산됩니다.")}</p>
                 </>
               ) : isAdmin ? (
                 <>
@@ -601,11 +603,11 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               onClick={() => toggleSection("checklist")}
               className="flex w-full items-center justify-between text-xs font-semibold text-[#86868b]"
             >
-              <span className="flex items-center gap-1.5"><ListTodo size={13} />체크리스트</span>
+              <span className="flex items-center gap-1.5"><ListTodo size={13} />{zh(isZh, "체크리스트")}</span>
               <span className="flex items-center gap-2">
                 {task.checklist.length > 0 && (
                   <span className="text-xs font-semibold text-[#1d1d1f]">
-                    {task.checklist.filter((i) => i.done).length}/{task.checklist.length} 완료
+                    {task.checklist.filter((i) => i.done).length}/{task.checklist.length} {zh(isZh, "완료")}
                   </span>
                 )}
                 <ChevronDown size={14} className={`shrink-0 transition-transform ${openSections.checklist ? "rotate-180" : ""}`} />
@@ -668,7 +670,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                 onClick={() => toggleSection("dependsOn")}
                 className="flex w-full items-center justify-between text-xs font-semibold text-[#86868b]"
               >
-                <span className="flex items-center gap-1.5"><GitBranch size={13} />선행 업무</span>
+                <span className="flex items-center gap-1.5"><GitBranch size={13} />{zh(isZh, "선행 업무")}</span>
                 <ChevronDown size={14} className={`shrink-0 transition-transform ${openSections.dependsOn ? "rotate-180" : ""}`} />
               </button>
               {openSections.dependsOn && (
@@ -716,7 +718,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
             <section className="mb-5 rounded-2xl border border-violet-200 bg-violet-100/70 p-4">
               <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-violet-700">
                 <AlertCircle size={13} />
-                확인/승인 이력
+                {zh(isZh, "확인/승인 이력")}
               </p>
               <div className="max-h-56 space-y-2 overflow-y-auto scrollbar-thin">
                 {[...task.decisionHistory].reverse().map((h, i) => {
@@ -735,21 +737,21 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                         )}
                       </div>
                       <p className="mt-1 text-[#86868b]">
-                        요청 · {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("ko-KR")}
+                        {zh(isZh, "요청")} · {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("ko-KR")}
                       </p>
                       {h.decidedAt ? (
                         h.resolution === "cancelled" ? (
                           <p className="mt-0.5 font-medium text-[#86868b]">
-                            요청 취소됨 · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
+                            {zh(isZh, "요청 취소됨")} · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
                           </p>
                         ) : (
                           <p className="mt-0.5 font-medium text-violet-600">
-                            확인 완료 · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
+                            {zh(isZh, "확인 완료")} · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
                             {h.responseNote && <span className="ml-1 font-normal text-[#1d1d1f]">· {h.responseNote}</span>}
                           </p>
                         )
                       ) : (
-                        <p className="mt-0.5 font-medium text-amber-600">대기 중</p>
+                        <p className="mt-0.5 font-medium text-amber-600">{zh(isZh, "대기 중")}</p>
                       )}
                     </div>
                   );
@@ -762,7 +764,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
           <section className="mb-5">
             <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-[#86868b]">
               <Paperclip size={13} />
-              첨부 자료
+              {zh(isZh, "첨부 자료")}
             </p>
             <FileUploader projectId={task.projectId} taskId={task.id} />
           </section>
@@ -771,12 +773,12 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
           <section>
             <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-[#86868b]">
               <MessageSquare size={13} />
-              코멘트
+              {zh(isZh, "코멘트")}
             </p>
             <CommentThread taskId={task.id} task={task} projectUsers={assigneeOptions} />
           </section>
 
-          {saving && <p className="mt-3 text-xs text-[#d1d1d6]">저장 중...</p>}
+          {saving && <p className="mt-3 text-xs text-[#d1d1d6]">{zh(isZh, "저장 중...")}</p>}
         </div>
       </div>
     </div>,

@@ -7,6 +7,7 @@ import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import { useAuth } from "@/lib/auth-context";
 import { updateTaskStatus, reorderTasks } from "@/lib/firestore/tasks";
 import StatusBadge from "@/components/StatusBadge";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 interface Props {
   tasks: Task[];
@@ -34,6 +35,7 @@ function groupItems(list: Task[]): ListItem[] {
 export default function TaskList({ tasks, onSelectTask }: Props) {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const isZh = usePartnerZh();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -93,12 +95,12 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
           <div className="flex-1 min-w-0">
             <p className="flex items-center gap-1.5 font-medium text-[#1d1d1f] truncate">
               {task.needsDecision && (
-                <span className="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">확인필요</span>
+                <span className="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">{zh(isZh, "확인필요")}</span>
               )}
               <span className="truncate">{task.name}</span>
             </p>
             {activeDependsOnCount(task) > 0 && (
-              <p className="text-xs text-[#86868b] mt-0.5">선행 {activeDependsOnCount(task)}건</p>
+              <p className="text-xs text-[#86868b] mt-0.5">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</p>
             )}
           </div>
           {isAdmin ? (
@@ -111,7 +113,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
             >
               {TASK_STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>
-                  {TASK_STATUS_LABEL[s]}
+                  {zh(isZh, TASK_STATUS_LABEL[s])}
                 </option>
               ))}
             </select>
@@ -129,7 +131,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
               : ""
             }
           >
-            ~{task.dueDate}{overdue ? " (지연)" : dueSoon ? " (임박)" : ""}
+            ~{task.dueDate}{overdue ? ` (${zh(isZh, "지연")})` : dueSoon ? ` (${zh(isZh, "임박")})` : ""}
           </span>
           <span className="ml-auto font-medium text-[#1d1d1f]">{task.progress}%</span>
         </div>
@@ -172,15 +174,15 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
         )}
         <td className={`px-4 py-3 font-medium text-[#1d1d1f] ${indented ? "pl-8" : ""}`} onClick={() => onSelectTask(task)}>
           {task.needsDecision && (
-            <span className="mr-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">확인필요</span>
+            <span className="mr-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">{zh(isZh, "확인필요")}</span>
           )}
           {task.name}
           {activeDependsOnCount(task) > 0 && (
-            <span className="ml-2 text-xs text-[#86868b]">선행 {activeDependsOnCount(task)}건</span>
+            <span className="ml-2 text-xs text-[#86868b]">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</span>
           )}
         </td>
         <td className="px-4 py-3 text-[#86868b]" onClick={() => onSelectTask(task)}>
-          {task.assigneeName || <span className="text-[#d1d1d6]">미지정</span>}
+          {task.assigneeName || <span className="text-[#d1d1d6]">{zh(isZh, "미지정")}</span>}
         </td>
         <td className="px-4 py-3 text-[#86868b]" onClick={() => onSelectTask(task)}>
           {task.startDate}
@@ -190,8 +192,8 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
           onClick={() => onSelectTask(task)}
         >
           {task.dueDate}
-          {overdue && " (지연)"}
-          {!overdue && dueSoon && " (임박)"}
+          {overdue && ` (${zh(isZh, "지연")})`}
+          {!overdue && dueSoon && ` (${zh(isZh, "임박")})`}
         </td>
         <td className="px-4 py-3 text-[#86868b]" onClick={() => onSelectTask(task)}>
           {task.progress}%
@@ -207,7 +209,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
             >
               {TASK_STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>
-                  {TASK_STATUS_LABEL[s]}
+                  {zh(isZh, TASK_STATUS_LABEL[s])}
                 </option>
               ))}
             </select>
@@ -228,7 +230,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="업무명 또는 담당자 검색"
+            placeholder={zh(isZh, "업무명 또는 담당자 검색")}
             className="w-full rounded-xl border border-[#e5e5e5] bg-white py-2 pl-8 pr-3 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
           />
         </div>
@@ -243,7 +245,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                   : "border border-[#e5e5e5] bg-white text-[#86868b] hover:border-[#86868b]"
               }`}
             >
-              {s === "all" ? "전체" : TASK_STATUS_LABEL[s]}
+              {s === "all" ? zh(isZh, "전체") : zh(isZh, TASK_STATUS_LABEL[s])}
             </button>
           ))}
         </div>
@@ -251,7 +253,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
 
       {sorted.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
-          {search || statusFilter !== "all" ? "검색 결과가 없습니다." : "등록된 업무가 없습니다."}
+          {search || statusFilter !== "all" ? zh(isZh, "검색 결과가 없습니다.") : zh(isZh, "등록된 업무가 없습니다.")}
         </div>
       ) : (
         <>
@@ -267,7 +269,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                     className="flex w-full items-center justify-between rounded-2xl bg-[#1d1d1f] px-4 py-3 text-left"
                   >
                     <span className="font-medium text-white">
-                      {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}건)</span>
+                      {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                     </span>
                     <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -283,12 +285,12 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
               <thead className="bg-[#ececef] text-left text-sm font-medium text-[#86868b]">
                 <tr>
                   {canReorder && <th className="w-8 px-2 py-3" />}
-                  <th className="px-4 py-3">업무명</th>
-                  <th className="px-4 py-3">담당자</th>
-                  <th className="px-4 py-3">시작일</th>
-                  <th className="px-4 py-3">마감일</th>
-                  <th className="px-4 py-3">진행률</th>
-                  <th className="px-4 py-3">상태</th>
+                  <th className="px-4 py-3">{zh(isZh, "업무명")}</th>
+                  <th className="px-4 py-3">{zh(isZh, "담당자")}</th>
+                  <th className="px-4 py-3">{zh(isZh, "시작일")}</th>
+                  <th className="px-4 py-3">{zh(isZh, "마감일")}</th>
+                  <th className="px-4 py-3">{zh(isZh, "진행률")}</th>
+                  <th className="px-4 py-3">{zh(isZh, "상태")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -301,7 +303,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                         <td colSpan={canReorder ? 7 : 6} className="px-4 py-3 font-medium text-white">
                           <span className="flex items-center gap-2">
                             <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}건)</span>
+                            {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                           </span>
                         </td>
                       </tr>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { zh, usePartnerZh } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; show: boolean };
@@ -23,6 +24,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   // 전용 메뉴는 노출되면 안 된다(계약·견적 절대 비노출 요구사항).
   const isPartner = appUser?.role === "partner";
   const isClient = !isAdmin && !isPartner;
+  const isZh = usePartnerZh();
 
   const [editing, setEditing] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
@@ -31,7 +33,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   const inputRef = useRef<HTMLInputElement>(null);
 
   const allItems: NavItem[] = [
-    { href: "/home", label: "홈", icon: LayoutGrid, show: true },
+    { href: "/home", label: zh(isZh, "홈"), icon: LayoutGrid, show: true },
     { href: "/clients", label: "클라이언트 관리", icon: Building2, show: isAdmin },
     { href: "/partners", label: "협력사 관리", icon: Factory, show: isAdmin },
     { href: "/quotes", label: "견적 관리", icon: FileText, show: isAdmin },
@@ -43,8 +45,8 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: isClient },
     { href: "/my-contracts", label: "계약", icon: FileSignature, show: isClient },
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
-    { href: "/notification-settings", label: "알림 설정", icon: Bell, show: true },
-    { href: "/notices", label: "공지사항", icon: Megaphone, show: true },
+    { href: "/notification-settings", label: zh(isZh, "알림 설정"), icon: Bell, show: true },
+    { href: "/notices", label: zh(isZh, "공지사항"), icon: Megaphone, show: true },
   ];
 
   const visibleHrefs = allItems.filter((i) => i.show).map((i) => i.href);
@@ -126,7 +128,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
         <Link href="/handyworks" className="group block">
           <Image src="/handyworks-logo.png" alt="HANDYWORKS" width={120} height={36} style={{ objectFit: "contain", filter: "brightness(0)" }} />
           <p className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-[#86868b]">
-            제품개발·제조 올인원 플랫폼
+            {zh(isZh, "제품개발·제조 올인원 플랫폼")}
           </p>
         </Link>
       </div>
@@ -165,7 +167,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
             onClick={() => setDocsOpen((v) => !v)}
             className="flex items-center gap-1 text-[11px] text-[#86868b] transition hover:text-[#1d1d1f]"
           >
-            <FileText size={11} /> 핸디핸드 사업자 서류
+            <FileText size={11} /> {zh(isZh, "핸디핸드 사업자 서류")}
           </button>
           {docsOpen && (
             <div className="absolute bottom-full left-6 mb-1.5 w-40 space-y-0.5 rounded-xl border border-[#e5e5e5] bg-white p-1.5 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
@@ -175,7 +177,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
                 rel="noopener noreferrer"
                 className="block rounded-lg px-2 py-1.5 text-xs text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
-                사업자등록증
+                {zh(isZh, "사업자등록증")}
               </a>
               <a
                 href="https://firebasestorage.googleapis.com/v0/b/handyhand-a175a.firebasestorage.app/o/assets%2Fhandyhand-bankbook.pdf?alt=media"
@@ -183,7 +185,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
                 rel="noopener noreferrer"
                 className="block rounded-lg px-2 py-1.5 text-xs text-[#1d1d1f] hover:bg-[#f5f5f7]"
               >
-                통장사본
+                {zh(isZh, "통장사본")}
               </a>
             </div>
           )}
@@ -231,7 +233,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
               onClick={() => signOut()}
               className="mt-3 flex items-center gap-1.5 text-xs text-[#86868b] transition hover:text-red-500"
             >
-              <LogOut size={13} /> 로그아웃
+              <LogOut size={13} /> {zh(isZh, "로그아웃")}
             </button>
           </div>
         </div>

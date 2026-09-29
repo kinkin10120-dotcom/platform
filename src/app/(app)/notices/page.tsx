@@ -5,14 +5,16 @@ import { Plus, Trash2, Megaphone, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenNotices, createNotice, deleteNotice } from "@/lib/firestore/notices";
 import { Notice } from "@/lib/types";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
-function formatDate(ts: number) {
-  return new Date(ts).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+function formatDate(ts: number, isZh: boolean) {
+  return new Date(ts).toLocaleDateString(isZh ? "zh-CN" : "ko-KR", { year: "numeric", month: "long", day: "numeric" });
 }
 
 export default function NoticesPage() {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const isZh = usePartnerZh();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
@@ -51,9 +53,9 @@ export default function NoticesPage() {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
-            공지사항
+            {zh(isZh, "공지사항")}
           </h1>
-          <p className="mt-1 pl-4 text-sm text-[#86868b]">클라이언트와 팀 전체에 알릴 내용을 등록하고 확인 여부를 관리합니다.</p>
+          <p className="mt-1 pl-4 text-sm text-[#86868b]">{zh(isZh, "클라이언트와 팀 전체에 알릴 내용을 등록하고 확인 여부를 관리합니다.")}</p>
         </div>
         {isAdmin && (
           <button
@@ -107,7 +109,7 @@ export default function NoticesPage() {
       {notices.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[#d1d1d6] bg-white py-16 text-center">
           <Megaphone size={32} className="mb-3 text-[#d1d1d6]" />
-          <p className="text-sm text-[#86868b]">등록된 공지사항이 없습니다.</p>
+          <p className="text-sm text-[#86868b]">{zh(isZh, "등록된 공지사항이 없습니다.")}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -121,7 +123,7 @@ export default function NoticesPage() {
                     <p className="font-semibold text-[#1d1d1f]">{n.title}</p>
                     <ChevronDown size={14} className={`shrink-0 text-[#86868b] transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </div>
-                  <p className="mt-0.5 text-xs text-[#86868b]">{formatDate(n.createdAt)} · {n.createdByName}</p>
+                  <p className="mt-0.5 text-xs text-[#86868b]">{formatDate(n.createdAt, isZh)} · {n.createdByName}</p>
                   {expanded && (
                     <p className="mt-3 whitespace-pre-wrap text-sm text-[#1d1d1f] leading-relaxed">{n.content}</p>
                   )}

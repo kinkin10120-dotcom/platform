@@ -5,7 +5,11 @@ import { NextRequest, NextResponse } from "next/server";
 // 생성한다. LLM이 수치에 없는 내용(고객 만족도, 품질, 예산 등)을 추측하지 못하도록 프롬프트로 제한한다.
 export async function POST(req: NextRequest) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const stats = await req.json();
+  const body = await req.json();
+  const { lang, ...stats } = body as { lang?: "ko" | "zh" };
+  // 중국 협력사 계정은 요약을 다시 번역기에 돌리는 대신, 처음부터 중국어로 생성하게 한다
+  // (번역 왕복 없이 더 자연스러운 결과 + 딜레이 감소).
+  const isZh = lang === "zh";
 
   const prompt = `당신은 제품 개발 프로젝트의 진행 현황을 요약하는 어시스턴트입니다.
 아래는 실제 프로젝트 데이터에서 자동 계산된 수치입니다. 이 수치 외의 어떠한 정보도 알지 못합니다.
@@ -23,11 +27,12 @@ ${JSON.stringify(stats, null, 2)}
 - 과장하지 말고 담백한 사실 기반 어조로 작성하세요.
 - "~것으로 보입니다", "~점검이 필요해 보입니다"처럼 단정하지 않는 어조를 쓰세요.
 - summary 안에서 판단 근거가 된 구체적 수치나 코멘트 인용을 함께 언급해, 사람이 바로 대조 확인할 수 있게 하세요.
-- 단, 위 JSON의 영문 필드명(예: overdueTaskCount, expectedProgressPercent)이나 괄호 안 영문 표기는 절대 그대로 인용하지 마세요. 반드시 자연스러운 한국어 문장으로 풀어서 표현하세요. (예: "overdueTaskCount: 20" ❌ → "지연된 업무 20건" ✅)
+- 단, 위 JSON의 영문 필드명(예: overdueTaskCount, expectedProgressPercent)이나 괄호 안 영문 표기는 절대 그대로 인용하지 마세요. 반드시 자연스러운 문장으로 풀어서 표현하세요. (예: "overdueTaskCount: 20" ❌ → "지연된 업무 20건" ✅)
+${isZh ? "- summary는 반드시 자연스러운 중국어 간체(简体中文)로만 작성하세요. 한국어를 섞지 마세요." : "- summary는 한국어로 작성하세요."}
 
 다음 JSON 형식으로만 응답하세요:
 {
-  "summary": "2~4문장 한국어 요약",
+  "summary": "2~4문장 ${isZh ? "중국어" : "한국어"} 요약",
   "riskLevel": "low" | "medium" | "high"
 }`;
 

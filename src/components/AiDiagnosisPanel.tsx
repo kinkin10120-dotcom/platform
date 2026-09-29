@@ -95,7 +95,7 @@ export default function AiDiagnosisPanel({ project, tasks }: { project: Project;
       const res = await fetch("/api/project-insight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(stats),
+        body: JSON.stringify({ ...stats, lang: isZh ? "zh" : "ko" }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? "진단에 실패했습니다.");

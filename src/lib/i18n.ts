@@ -242,6 +242,16 @@ function loadCacheFromStorage() {
   }
 }
 
+// 이 함수를 useEffect 안에서만 호출하면 첫 렌더는 항상 원문(한국어)으로 그려진 뒤에야
+// 캐시가 채워져 화면이 한 번 깜빡인다(원문 → 중국어) — 이미 번역해본 적 있는 문구까지
+// 매번 새로고침할 때마다 그렇게 보이는 게 거슬린다는 피드백이 있었다. 모듈이 로드되는
+// 시점(첫 렌더보다 먼저)에 즉시 한 번 읽어둬서, 브라우저 세션에서 이미 캐싱된 문구는
+// 첫 렌더부터 바로 중국어로 나오게 한다. "use client" 컴포넌트에서만 이 모듈이
+// 번들되므로 브라우저 환경이 보장되지만, SSR 사전 렌더 안전을 위해 형식적으로 가드한다.
+if (typeof window !== "undefined") {
+  loadCacheFromStorage();
+}
+
 function persistCacheToStorage() {
   try {
     localStorage.setItem(AUTO_TRANSLATE_STORAGE_KEY, JSON.stringify(Object.fromEntries(autoTranslateCache)));

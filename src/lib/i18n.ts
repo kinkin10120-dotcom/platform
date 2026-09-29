@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 
 // 협력사(파트너) 계정에게 보여줄 중국어 UI 문자열 사전. 계정 생성 시 관리자가 지정한
@@ -217,4 +218,93 @@ export function zh(useZh: boolean, ko: string): string {
 export function usePartnerZh(): boolean {
   const { appUser } = useAuth();
   return appUser?.role === "partner" && appUser.partnerLang === "zh";
+}
+
+// ---- 프로젝트명·업무명 등 자유 텍스트 자동 번역 ----
+// ZH_DICT는 고정된 UI 문구용이라, 관리자가 직접 입력해 매번 값이 다른 데이터(프로젝트명,
+// 업무명 등)는 /api/translate-zh로 기계 번역한다. 같은 문구를 반복 요청하지 않도록 메모리
+// + localStorage에 캐싱한다(새로고침해도 유지, 프라이빗 모드 등으로 storage를 못 쓰면
+// 메모리 캐시만으로 계속 동작).
+const autoTranslateCache = new Map<string, string>();
+const AUTO_TRANSLATE_STORAGE_KEY = "zh-auto-translate-cache-v1";
+let cacheLoadedFromStorage = false;
+
+function loadCacheFromStorage() {
+  if (cacheLoadedFromStorage) return;
+  cacheLoadedFromStorage = true;
+  try {
+    const raw = localStorage.getItem(AUTO_TRANSLATE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    for (const [k, v] of Object.entries(parsed)) autoTranslateCache.set(k, v);
+  } catch {
+    // 프라이빗 모드 등으로 localStorage를 못 쓰면 메모리 캐시만으로 계속 동작한다.
+  }
+}
+
+function persistCacheToStorage() {
+  try {
+    localStorage.setItem(AUTO_TRANSLATE_STORAGE_KEY, JSON.stringify(Object.fromEntries(autoTranslateCache)));
+  } catch {
+    // 저장 실패해도 이번 세션 동안은 메모리 캐시로 계속 동작한다.
+  }
+}
+
+// 여러 컴포넌트(간트차트, 업무 리스트 등)가 겹치는 텍스트를 동시에 요청할 때 같은
+// 조합을 중복으로 호출하지 않도록 진행 중인 요청도 함께 추적한다.
+const pendingTranslateRequests = new Map<string, Promise<void>>();
+
+async function translateBatch(texts: string[]): Promise<void> {
+  const key = texts.join(" ");
+  const existing = pendingTranslateRequests.get(key);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const res = await fetch("/api/translate-zh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texts }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const translations = data.translations as string[];
+      texts.forEach((t, i) => {
+        if (translations[i]) autoTranslateCache.set(t, translations[i]);
+      });
+      persistCacheToStorage();
+    } catch {
+      // 번역 실패 시 원문을 계속 보여주는 걸로 충분하다 — 별도 에러 UI 없음.
+    } finally {
+      pendingTranslateRequests.delete(key);
+    }
+  })();
+  pendingTranslateRequests.set(key, promise);
+  return promise;
+}
+
+/**
+ * 협력사(중국 업체) 계정에게 texts(예: 업무명 목록)를 자동 번역해서 보여준다.
+ * useZh가 false면 빈 맵을 반환한다(호출 쪽에서 map[text] ?? text로 원문 폴백).
+ * 반환값은 { [원문]: 번역문 } — 아직 번역 중이거나 실패한 항목은 키가 없다.
+ */
+export function useZhAutoTranslate(useZh: boolean, texts: string[]): Record<string, string> {
+  const [, forceRerender] = useState(0);
+  const key = texts.filter(Boolean).join(" ");
+
+  useEffect(() => {
+    if (!useZh || !key) return;
+    loadCacheFromStorage();
+    const unique = Array.from(new Set(key.split(" "))).filter((t) => t && !autoTranslateCache.has(t));
+    if (unique.length === 0) return;
+    // API 쪽 1회 요청 상한(MAX_TEXTS=50)에 맞춰 과도하게 큰 목록은 앞부분만 우선 번역한다.
+    translateBatch(unique.slice(0, 50)).then(() => forceRerender((n) => n + 1));
+  }, [useZh, key]);
+
+  if (!useZh || !key) return {};
+  const map: Record<string, string> = {};
+  for (const t of key.split(" ")) {
+    if (t && autoTranslateCache.has(t)) map[t] = autoTranslateCache.get(t)!;
+  }
+  return map;
 }

@@ -20,7 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/lib/auth-context";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import { listenProject, updateProject } from "@/lib/firestore/projects";
 import { listenClient, uploadClientLogo } from "@/lib/firestore/clients";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
@@ -75,6 +75,10 @@ export default function ProjectWorkspacePage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [tab, setTab] = useState<Tab>("gantt");
   const [tabOrder, setTabOrder] = useState<Tab[]>(DEFAULT_TAB_ORDER);
+  // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다. project가 아직
+  // 로딩 전(undefined)이거나 없음(null)이어도 훅은 항상 같은 순서로 호출되어야 하므로
+  // 조건 없이 여기서 호출한다.
+  const zhProjectName = useZhAutoTranslate(isZh, project ? [project.name] : []);
 
   useEffect(() => {
     try {
@@ -331,7 +335,7 @@ export default function ProjectWorkspacePage() {
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{client.name}</p>
               )}
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-[#1d1d1f]">{project.name}</h1>
+                <h1 className="text-2xl font-bold text-[#1d1d1f]">{zhProjectName[project.name] ?? project.name}</h1>
                 {isAdmin && (
                   <button onClick={openEdit} className="text-[#d1d1d6] hover:text-[#86868b]">
                     <Pencil size={15} />

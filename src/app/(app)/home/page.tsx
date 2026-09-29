@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
@@ -91,6 +91,9 @@ export default function HomePage() {
   useEffect(() => {
     return listenNotices((notices) => setLatestNotice(notices[0] ?? null));
   }, []);
+
+  // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
+  const zhProjectNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
 
   const showNoticeBanner = !!latestNotice && !!appUser && !latestNotice.readBy?.includes(appUser.uid);
 
@@ -501,7 +504,7 @@ export default function HomePage() {
             )}
             <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin ? "pt-0.5" : "pt-6"}`}>
               <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-[#1d1d1f]">{p.name}</p>
+                  <p className="font-semibold text-[#1d1d1f]">{zhProjectNames[p.name] ?? p.name}</p>
                   {p.projectType && p.projectType.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {p.projectType.map((t) => (

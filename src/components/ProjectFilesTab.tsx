@@ -7,7 +7,7 @@ import { listenFiles, deleteTaskFile } from "@/lib/firestore/files";
 import { Task, TaskFile } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 const StepViewer = dynamic(() => import("@/components/StepViewer"), { ssr: false });
 
@@ -214,6 +214,7 @@ function FileGroupRow({
 
 function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid: string; role: string } | null; hideAi: boolean }) {
   const isZh = usePartnerZh();
+  const zhNames = useZhAutoTranslate(isZh, [task.name]);
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -233,7 +234,7 @@ function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid
         ) : (
           <ChevronDown size={15} className="shrink-0 text-[#86868b]" />
         )}
-        <span className="font-medium text-[#1d1d1f] text-sm">{task.name}</span>
+        <span className="font-medium text-[#1d1d1f] text-sm">{zhNames[task.name] ?? task.name}</span>
         <StatusBadge status={task.status} />
         <span className="ml-auto text-xs text-[#86868b]">{files.length}{isZh ? "个" : "개"}</span>
       </button>

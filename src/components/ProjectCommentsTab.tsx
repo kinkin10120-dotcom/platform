@@ -6,7 +6,7 @@ import { ko, zhCN } from "date-fns/locale";
 import { ArrowUpRight, MessageSquare } from "lucide-react";
 import { listenComments } from "@/lib/firestore/comments";
 import { Task, TaskComment } from "@/lib/types";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 interface FeedComment extends TaskComment {
   taskName: string;
@@ -15,6 +15,7 @@ interface FeedComment extends TaskComment {
 export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Task[]; onSelectTask: (task: Task) => void }) {
   const isZh = usePartnerZh();
   const [byTask, setByTask] = useState<Record<string, FeedComment[]>>({});
+  const zhNames = useZhAutoTranslate(isZh, tasks.map((t) => t.name));
 
   useEffect(() => {
     const unsubs = tasks.map((t) =>
@@ -65,7 +66,7 @@ export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Tas
               className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#86868b] transition hover:bg-[#eeeef0] hover:text-[#1d1d1f] disabled:opacity-40"
             >
               <MessageSquare size={11} />
-              {c.taskName}
+              {zhNames[c.taskName] ?? c.taskName}
               <ArrowUpRight size={11} />
             </button>
           </div>

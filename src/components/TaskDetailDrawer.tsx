@@ -10,7 +10,7 @@ import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import StatusBadge from "@/components/StatusBadge";
 import CommentThread from "@/components/CommentThread";
 import FileUploader from "@/components/FileUploader";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 interface Props {
   task: Task;
@@ -23,6 +23,9 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
   const isZh = usePartnerZh();
+  // 업무명·그룹명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
+  const zhNames = useZhAutoTranslate(isZh, [task.name, task.group?.trim() ?? ""].filter(Boolean));
+  const trName = (s: string) => zhNames[s] ?? s;
 
   const [name, setName] = useState(task.name);
   const [description, setDescription] = useState(task.description ?? "");
@@ -330,7 +333,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               className="mb-2 w-full rounded-xl border border-transparent px-1 py-1 text-xl font-bold text-[#1d1d1f] hover:border-[#e5e5e5] focus:border-[#86868b] focus:outline-none"
             />
           ) : (
-            <h2 className="mb-2 px-1 text-xl font-bold text-[#1d1d1f]">{task.name}</h2>
+            <h2 className="mb-2 px-1 text-xl font-bold text-[#1d1d1f]">{trName(task.name)}</h2>
           )}
 
           <div className="mb-4 flex flex-wrap items-center gap-2 px-1">
@@ -364,7 +367,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               </>
             ) : (
               task.group && (
-                <span className="inline-flex items-center rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-xs font-medium text-white">{task.group}</span>
+                <span className="inline-flex items-center rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-xs font-medium text-white">{trName(task.group)}</span>
               )
             )}
             {overdue && (

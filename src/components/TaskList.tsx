@@ -7,7 +7,7 @@ import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import { useAuth } from "@/lib/auth-context";
 import { updateTaskStatus, reorderTasks } from "@/lib/firestore/tasks";
 import StatusBadge from "@/components/StatusBadge";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 interface Props {
   tasks: Task[];
@@ -36,6 +36,13 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
   const isZh = usePartnerZh();
+  // 업무명·그룹명은 관리자가 직접 입력한 자유 텍스트라 고정 UI 사전이 아니라 기계 번역으로
+  // 처리한다(useZhAutoTranslate) — 번역 전에는 원문이 그대로 보인다.
+  const zhNames = useZhAutoTranslate(
+    isZh,
+    Array.from(new Set([...tasks.map((t) => t.name), ...tasks.map((t) => t.group?.trim()).filter((g): g is string => !!g)]))
+  );
+  const trName = (s: string) => zhNames[s] ?? s;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -100,7 +107,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
               {isAdmin && task.hiddenFromPartner && (
                 <EyeOff size={12} className="shrink-0 text-[#d1d1d6]" aria-label="협력사에게 숨김" />
               )}
-              <span className="truncate">{task.name}</span>
+              <span className="truncate">{trName(task.name)}</span>
             </p>
             {activeDependsOnCount(task) > 0 && (
               <p className="text-xs text-[#86868b] mt-0.5">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</p>
@@ -182,7 +189,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
           {isAdmin && task.hiddenFromPartner && (
             <EyeOff size={12} className="mr-1.5 inline text-[#d1d1d6]" aria-label="협력사에게 숨김" />
           )}
-          {task.name}
+          {trName(task.name)}
           {activeDependsOnCount(task) > 0 && (
             <span className="ml-2 text-xs text-[#86868b]">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</span>
           )}
@@ -275,7 +282,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                     className="flex w-full items-center justify-between rounded-2xl bg-[#1d1d1f] px-4 py-3 text-left"
                   >
                     <span className="font-medium text-white">
-                      {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
+                      {trName(item.name)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                     </span>
                     <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -309,7 +316,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                         <td colSpan={canReorder ? 7 : 6} className="px-4 py-3 font-medium text-white">
                           <span className="flex items-center gap-2">
                             <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            {item.name} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
+                            {trName(item.name)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                           </span>
                         </td>
                       </tr>

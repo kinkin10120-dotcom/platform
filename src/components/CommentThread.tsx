@@ -34,7 +34,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh, trText }: {
     <div className="group rounded-2xl bg-[#f5f5f7] p-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[#1d1d1f]">
-          {c.authorName}
+          {zh(isZh, c.authorName)}
           <span className="ml-1 text-xs text-[#86868b]">
             {zh(isZh, c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "claude-auto" ? "(Claude 자동)" : c.authorRole === "partner" ? "(협력사)" : "(클라이언트)")}
           </span>

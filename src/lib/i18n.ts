@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 const ZH_DICT: Record<string, string> = {
   // Sidebar
   "제품개발·제조 올인원 플랫폼": "产品开发·制造一体化平台",
+  "핸디핸드": "汉迪汉德",
   "홈": "首页",
   "협력사 관리": "合作伙伴管理",
   "알림 설정": "通知设置",

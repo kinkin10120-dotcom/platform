@@ -531,7 +531,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                         <p>{zh(isZh, "마감일")} {h.fromDueDate} → <span className="font-medium text-[#1d1d1f]">{h.toDueDate}</span></p>
                       )}
                       <p className="mt-0.5 text-[10px] text-[#c7c7cc]">
-                        {h.changedBy} · {new Date(h.changedAt).toLocaleDateString("ko-KR")}
+                        {zh(isZh, h.changedBy)} · {new Date(h.changedAt).toLocaleDateString("ko-KR")}
                         {h.cascaded ? ` · ${zh(isZh, "선행 업무 변경으로 자동 조정")}` : ""}
                       </p>
                     </div>
@@ -779,16 +779,16 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                         )}
                       </div>
                       <p className="mt-1 text-[#86868b]">
-                        {zh(isZh, "요청")} · {h.requestedBy} · {new Date(h.requestedAt).toLocaleDateString("ko-KR")}
+                        {zh(isZh, "요청")} · {zh(isZh, h.requestedBy)} · {new Date(h.requestedAt).toLocaleDateString("ko-KR")}
                       </p>
                       {h.decidedAt ? (
                         h.resolution === "cancelled" ? (
                           <p className="mt-0.5 font-medium text-[#86868b]">
-                            {zh(isZh, "요청 취소됨")} · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
+                            {zh(isZh, "요청 취소됨")} · {zh(isZh, h.decidedBy ?? "")} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
                           </p>
                         ) : (
                           <p className="mt-0.5 font-medium text-violet-600">
-                            {zh(isZh, "확인 완료")} · {h.decidedBy} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
+                            {zh(isZh, "확인 완료")} · {zh(isZh, h.decidedBy ?? "")} · {new Date(h.decidedAt).toLocaleDateString("ko-KR")}
                             {h.responseNote && <span className="ml-1 font-normal text-[#1d1d1f]">· {h.responseNote}</span>}
                           </p>
                         )

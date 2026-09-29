@@ -23,8 +23,16 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
   const isZh = usePartnerZh();
-  // 업무명·그룹명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
-  const zhNames = useZhAutoTranslate(isZh, [task.name, task.group?.trim() ?? ""].filter(Boolean));
+  const dependsOnTasks = allTasks.filter((t) => task.dependsOn.includes(t.id));
+  const dependsOnEntries = dependsOnTasks.map((t) => ({ id: t.id, task: t }));
+  // 업무명·그룹명·체크리스트 항목·선행 업무명은 관리자가 직접 입력한 자유 텍스트라 기계
+  // 번역으로 처리한다.
+  const zhNames = useZhAutoTranslate(isZh, [
+    task.name,
+    task.group?.trim() ?? "",
+    ...task.checklist.map((i) => i.text),
+    ...dependsOnTasks.map((t) => t.name),
+  ].filter(Boolean));
   const trName = (s: string) => zhNames[s] ?? s;
 
   const [name, setName] = useState(task.name);
@@ -67,8 +75,6 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
     setProgress(task.progress);
   }, [task.id, task.name, task.description, task.group, task.startDate, task.dueDate, task.progress]);
 
-  const dependsOnTasks = allTasks.filter((t) => task.dependsOn.includes(t.id));
-  const dependsOnEntries = dependsOnTasks.map((t) => ({ id: t.id, task: t }));
   const existingGroups = Array.from(
     new Set(allTasks.map((t) => t.group?.trim()).filter((g): g is string => !!g && g !== task.group))
   );
@@ -661,7 +667,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                       className="h-4 w-4 shrink-0 accent-[#1d1d1f] disabled:cursor-default"
                     />
                     <span className={`flex-1 text-sm ${item.done ? "text-[#86868b] line-through" : "text-[#1d1d1f]"}`}>
-                      {item.text}
+                      {trName(item.text)}
                     </span>
                     {isAdmin && (
                       <button
@@ -714,7 +720,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                   {dependsOnEntries.map((entry) => (
                     <li key={entry.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-[#1d1d1f]">
                       <StatusBadge status={entry.task.status} />
-                      <span className="min-w-0 flex-1 truncate">{entry.task.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{trName(entry.task.name)}</span>
                       {isAdmin && (
                         <button
                           onClick={() => handleRemoveDependency(entry.id)}

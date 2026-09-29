@@ -15,7 +15,6 @@ interface FeedComment extends TaskComment {
 export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Task[]; onSelectTask: (task: Task) => void }) {
   const isZh = usePartnerZh();
   const [byTask, setByTask] = useState<Record<string, FeedComment[]>>({});
-  const zhNames = useZhAutoTranslate(isZh, tasks.map((t) => t.name));
 
   useEffect(() => {
     const unsubs = tasks.map((t) =>
@@ -33,6 +32,10 @@ export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Tas
   const feed = Object.values(byTask)
     .flat()
     .sort((a, b) => b.createdAt - a.createdAt);
+
+  // 업무명뿐 아니라 코멘트 본문도 관리자·클라이언트가 자유롭게 입력하는 텍스트라 기계
+  // 번역으로 처리한다.
+  const zhNames = useZhAutoTranslate(isZh, [...tasks.map((t) => t.name), ...feed.map((c) => c.text)]);
 
   if (feed.length === 0) {
     return (
@@ -59,7 +62,7 @@ export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Tas
                 {formatDistanceToNow(c.createdAt, { addSuffix: true, locale: isZh ? zhCN : ko })}
               </span>
             </div>
-            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.text}</p>
+            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[#1d1d1f]">{zhNames[c.text] ?? c.text}</p>
             <button
               onClick={() => task && onSelectTask(task)}
               disabled={!task}

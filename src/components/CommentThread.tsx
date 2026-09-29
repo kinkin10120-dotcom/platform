@@ -8,14 +8,15 @@ import { listenComments, addComment, updateComment, deleteComment } from "@/lib/
 import { createNotification } from "@/lib/firestore/notifications";
 import { TaskComment, AppUser, Task } from "@/lib/types";
 import { Pencil, Trash2, Check, X } from "lucide-react";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
-function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
+function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh, trText }: {
   comment: TaskComment;
   isMine: boolean;
   onUpdate: (text: string) => Promise<void>;
   onDelete: () => Promise<void>;
   isZh: boolean;
+  trText: (s: string) => string;
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(c.text);
@@ -63,7 +64,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
           </div>
         </div>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.text}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{trText(c.text)}</p>
       )}
     </div>
   );
@@ -77,6 +78,10 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => listenComments(taskId, setComments), [taskId]);
+
+  // 코멘트 본문은 사용자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
+  const zhTexts = useZhAutoTranslate(isZh, comments.map((c) => c.text));
+  const trText = (s: string) => zhTexts[s] ?? s;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -117,6 +122,7 @@ export default function CommentThread({ taskId, task, projectUsers }: { taskId: 
             onUpdate={(text) => updateComment(taskId, c.id, text)}
             onDelete={() => deleteComment(taskId, c.id)}
             isZh={isZh}
+            trText={trText}
           />
         ))}
       </div>

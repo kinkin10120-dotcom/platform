@@ -332,6 +332,11 @@ service cloud.firestore {
     // 구조적으로 막힌다. 화면(발주 관리)도 관리자 전용 라우트라 이중으로 잠긴다.
     match /supplierOrders/{orderId} {
       allow read, write: if isAdmin();
+      // 협력사 계정은 자기 앞으로 연동된(partnerId == 본인 uid) 발주서만 조회 가능 — 쓰기는
+      // 여전히 관리자 전용. 쿼리(where('partnerId','==',내 uid))가 규칙 조건과 정확히
+      // 일치해서 list도 안전하다(hiddenFromPartner 때와 달리 문서마다 값이 갈리는 필드가
+      // 아니라 쿼리 자체가 이미 그 값으로 좁혀져 있어서 걸러줄 필요가 없다).
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
     }
 
     // ---- work-intake 업로드 내역 (별도 내부 도구용 로그, 관리자 전용) ----

@@ -3,9 +3,11 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SupplierCostItem, SupplierCurrency, SupplierOrder, SupplierOrderItem, SupplierOrderStatus } from "@/lib/types";
@@ -36,6 +38,8 @@ function fromDoc(d: any): SupplierOrder {
     lotNo: data.lotNo || undefined,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
+    partnerId: data.partnerId || undefined,
+    partnerName: data.partnerName || undefined,
     // 예전에 쓰던 상태값(공장 확인·종료)이 남아 있는 문서는 "발행됨"으로 본다 — 어차피
     // 발주서를 이미 내보낸 건들이다.
     status: data.status === "draft" || !data.status ? "draft" : "issued",
@@ -81,6 +85,14 @@ export function listenSupplierOrder(id: string, cb: (order: SupplierOrder | null
   return onSnapshot(doc(db, "supplierOrders", id), (snap) => cb(snap.exists() ? fromDoc(snap) : null));
 }
 
+// 협력사 계정 전용 — 자기 앞으로 연동된 발주서만 조회한다(firestore.rules 참고).
+export function listenSupplierOrdersByPartner(partnerId: string, cb: (orders: SupplierOrder[]) => void) {
+  const q = query(colRef, where("partnerId", "==", partnerId));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map(fromDoc).sort((a, b) => b.createdAt - a.createdAt));
+  });
+}
+
 export interface CreateSupplierOrderInput {
   supplierName: string;
   items: SupplierOrderItem[];
@@ -97,6 +109,8 @@ export interface CreateSupplierOrderInput {
   lotNo?: string;
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
+  partnerId?: string;
+  partnerName?: string;
   createdBy: string;
 }
 
@@ -126,6 +140,8 @@ export async function createSupplierOrder(input: CreateSupplierOrderInput) {
     lotNo: input.lotNo ?? "",
     linkedPurchaseOrderId: input.linkedPurchaseOrderId ?? "",
     linkedPurchaseOrderNo: input.linkedPurchaseOrderNo ?? "",
+    partnerId: input.partnerId ?? "",
+    partnerName: input.partnerName ?? "",
     status: "draft" as SupplierOrderStatus,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -152,6 +168,8 @@ export type SupplierOrderPatch = Partial<
     | "lotNo"
     | "linkedPurchaseOrderId"
     | "linkedPurchaseOrderNo"
+    | "partnerId"
+    | "partnerName"
   >
 >;
 

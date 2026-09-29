@@ -51,6 +51,11 @@ export interface Project {
   nameZh?: string; // 중국 업체 협력사용 사전 번역 캐시(저장 시 미리 번역) — 없으면 즉석 번역으로 대체
   description?: string;
   descriptionZh?: string;
+  // 협력사 계정은 clients 컬렉션 자체를 읽을 권한이 없다(사업자등록번호 등 민감 정보 포함) —
+  // 로고·표시명만 이 프로젝트 문서에 그대로 복사해둬서, 새 컬렉션 접근 권한 없이도 "이 프로젝트가
+  // 어느 고객사 것인지"만 보여줄 수 있게 한다. createClient/updateClient에서 동기화한다.
+  clientDisplayName?: string;
+  clientLogoUrl?: string;
   projectType?: ProjectType[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
@@ -695,6 +700,10 @@ export interface SupplierOrder {
   // 거꾸로 걸어두면 관리자 화면에서만 조회된다.
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
+  // 이 발주서를 실제로 받는 협력사 계정(uid) — 연동해두면 그 협력사 계정이 자기 발주
+  // 내역으로 직접 조회할 수 있다(firestore.rules에서 partnerId == 본인 uid로 허용).
+  partnerId?: string;
+  partnerName?: string;
   status: SupplierOrderStatus;
   issuedAt?: number;
   createdAt: number;

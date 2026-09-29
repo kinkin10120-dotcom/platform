@@ -45,6 +45,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: isClient },
     { href: "/my-contracts", label: "계약", icon: FileSignature, show: isClient },
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
+    { href: "/my-supplier-orders", label: zh(isZh, "발주 목록"), icon: ShoppingCart, show: isPartner },
     { href: "/notification-settings", label: zh(isZh, "알림 설정"), icon: Bell, show: true },
     { href: "/notices", label: zh(isZh, "공지사항"), icon: Megaphone, show: true },
   ];

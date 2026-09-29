@@ -301,19 +301,28 @@ export default function ProjectWorkspacePage() {
     return <p className="text-sm text-[#86868b]">프로젝트를 찾을 수 없습니다.</p>;
   }
 
+  // 협력사 계정은 clients 컬렉션을 못 읽어 client가 항상 null이다 — 대신 프로젝트 문서에
+  // 미리 복사해둔 clientDisplayName/clientLogoUrl로 로고·표시명을 보여준다(고객 요청).
+  // 실제 clients 문서(사업자등록번호 등 민감 정보 포함)에는 여전히 접근 경로가 없다.
+  const displayClientName = client?.name ?? project.clientDisplayName;
+  const displayClientLogoUrl = client?.logoUrl ?? project.clientLogoUrl;
+  // 파트너는 로고가 실제로 있을 때만 박스를 보여준다 — 관리자처럼 빈 업로드 자리(placeholder)를
+  // 보여줄 이유가 없다(파트너는 업로드 권한이 없어 눌러도 아무 일도 안 일어난다).
+  const showClientBlock = !!client || (isPartner && !!displayClientLogoUrl);
+
   return (
     <div className="space-y-6">
       <div className="rounded-3xl bg-white p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
           <div className="flex min-w-0 flex-1 items-stretch gap-4">
             {/* 클라이언트 로고 */}
-            {client && (
+            {showClientBlock && (
               <div className="group relative shrink-0 self-start">
-                {client.logoUrl ? (
+                {displayClientLogoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={client.logoUrl}
-                    alt={`${client.name} 로고`}
+                    src={displayClientLogoUrl}
+                    alt={`${displayClientName} 로고`}
                     className="aspect-square h-24 sm:h-32 rounded-2xl border border-[#e5e5e5] bg-white object-cover"
                   />
                 ) : (
@@ -335,8 +344,8 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
             <div>
-              {client && (
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{client.name}</p>
+              {displayClientName && (
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{displayClientName}</p>
               )}
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-[#1d1d1f]">{project.nameZh || zhProjectName[project.name] || project.name}</h1>

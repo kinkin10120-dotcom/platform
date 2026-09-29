@@ -14,6 +14,7 @@ import {
   uploadSupplierProductImage,
 } from "@/lib/firestore/supplierProducts";
 import { listenClients } from "@/lib/firestore/clients";
+import { listenPartners } from "@/lib/firestore/users";
 import { listenAllProjects } from "@/lib/firestore/projects";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
 import {
@@ -32,6 +33,7 @@ import { downloadCsv } from "@/lib/csvExport";
 import NumberInput from "@/components/NumberInput";
 import { usePrintFileName } from "@/lib/usePrintFileName";
 import {
+  AppUser,
   Client,
   ClientProduct,
   Project,
@@ -111,6 +113,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [clientOrders, setClientOrders] = useState<PurchaseOrder[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [partners, setPartners] = useState<AppUser[]>([]);
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [selected, setSelected] = useState<SupplierOrder | null>(null);
   const [composing, setComposing] = useState(false);
@@ -128,6 +131,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   useEffect(() => listenSupplierOrders(setOrders), []);
   useEffect(() => listenAllPurchaseOrders(setClientOrders), []);
   useEffect(() => listenAllProjects(setProjects), []);
+  useEffect(() => listenPartners(setPartners), []);
   useEffect(() => listenSupplierProducts(setSupplierProducts), []);
 
   useEffect(() => {
@@ -274,6 +278,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         clientNameById={clientNameById}
         clientOrders={clientOrders}
         projects={projects}
+        partners={partners}
         existingOrders={orders}
         onClose={() => { setComposing(false); setEditingOrder(null); }}
         onCreated={() => { setComposing(false); setEditingOrder(null); }}
@@ -1069,6 +1074,7 @@ function SupplierOrderComposer({
   clientNameById,
   clientOrders,
   projects,
+  partners,
   existingOrders,
   onClose,
   onCreated,
@@ -1080,6 +1086,7 @@ function SupplierOrderComposer({
   clientNameById: Record<string, string>;
   clientOrders: PurchaseOrder[];
   projects: Project[];
+  partners: AppUser[];
   existingOrders: SupplierOrder[];
   onClose: () => void;
   onCreated: () => void;
@@ -1132,6 +1139,8 @@ function SupplierOrderComposer({
   const effectiveLotNo = lotNo.trim() || (editing ? "" : autoLotNo);
   const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
   const [linkedProjectId, setLinkedProjectId] = useState(editing?.linkedProjectId ?? "");
+  // 이 발주서를 실제로 받는 협력사 계정 — 연동해두면 그 계정이 플랫폼에서 직접 조회 가능.
+  const [partnerId, setPartnerId] = useState(editing?.partnerId ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -1219,6 +1228,7 @@ function SupplierOrderComposer({
   const total = calcSupplierOrderTotal(finalItems);
   const linkedPo = clientOrders.find((o) => o.id === linkedPoId);
   const linkedProject = projects.find((p) => p.id === linkedProjectId);
+  const linkedPartner = partners.find((p) => p.uid === partnerId);
 
   usePrintFileName([supplierName, "구매발주서", items.map((it) => it.name).filter(Boolean).join(",")], previewOpen);
   // 미리보기 중에는 위쪽 "발주 관리" 헤더·탭을 감춰서 문서만 꽉 차게 보이게 한다.
@@ -1328,6 +1338,8 @@ function SupplierOrderComposer({
           linkedPurchaseOrderNo: linkedPoId ? linkedPo?.poNumber ?? editing.linkedPurchaseOrderNo : undefined,
           linkedProjectId: linkedProjectId ? linkedProject?.id ?? editing.linkedProjectId : undefined,
           linkedProjectName: linkedProjectId ? linkedProject?.name ?? editing.linkedProjectName : undefined,
+          partnerId: partnerId ? linkedPartner?.uid ?? editing.partnerId : undefined,
+          partnerName: partnerId ? linkedPartner?.name ?? editing.partnerName : undefined,
         });
         onCreated();
         return;
@@ -1347,6 +1359,8 @@ function SupplierOrderComposer({
         linkedPurchaseOrderId: linkedPo?.id,
         linkedPurchaseOrderNo: linkedPo?.poNumber,
         linkedProjectId: linkedProject?.id,
+        partnerId: linkedPartner?.uid,
+        partnerName: linkedPartner?.name,
         linkedProjectName: linkedProject?.name,
         createdBy,
       });
@@ -1820,6 +1834,22 @@ function SupplierOrderComposer({
             ))}
           </select>
 
+          {/* 협력사 계정 연동 — 연결해두면 그 협력사 계정이 플랫폼에서 이 발주서를 직접
+              조회할 수 있다(발주 목록). 링크 없이 이메일로만 보내던 발주서도 이제 계정에
+              연동해두면 플랫폼 안에서 바로 확인 가능하다. */}
+          <select
+            value={partnerId}
+            onChange={(e) => setPartnerId(e.target.value)}
+            className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+          >
+            <option value="">협력사 계정 연동 없음</option>
+            {partners.map((p) => (
+              <option key={p.uid} value={p.uid}>
+                {p.name} ({p.email})
+              </option>
+            ))}
+          </select>
+
           <textarea
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
@@ -1909,7 +1939,7 @@ function SupplierOrderDetail({
         </div>
       </div>
 
-      {(order.linkedPurchaseOrderNo || order.linkedProjectName) && (
+      {(order.linkedPurchaseOrderNo || order.linkedProjectName || order.partnerName) && (
         <div className="space-y-1 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-xs text-[#1d1d1f]">
           {order.linkedPurchaseOrderNo && (
             <p>
@@ -1919,6 +1949,11 @@ function SupplierOrderDetail({
           {order.linkedProjectName && (
             <p>
               프로젝트 <span className="font-semibold">{order.linkedProjectName}</span>에 연결됨 — 원가 집계에 포함됩니다.
+            </p>
+          )}
+          {order.partnerName && (
+            <p>
+              협력사 계정 <span className="font-semibold">{order.partnerName}</span>에 연동됨 — 그 계정에서 발주 목록으로 조회 가능합니다.
             </p>
           )}
         </div>

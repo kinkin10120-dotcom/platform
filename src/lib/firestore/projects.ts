@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -27,6 +28,8 @@ function fromDoc(d: any): Project {
     nameZh: data.nameZh ?? undefined,
     description: data.description ?? "",
     descriptionZh: data.descriptionZh ?? undefined,
+    clientDisplayName: data.clientDisplayName ?? undefined,
+    clientLogoUrl: data.clientLogoUrl ?? undefined,
     startDate: data.startDate,
     endDate: data.endDate,
     status: data.status,
@@ -84,10 +87,15 @@ export async function createProject(input: {
   // 협력사(중국 업체) 계정이 볼 때 즉석 번역 대신 바로 중국어가 뜨도록, 저장 시점에 미리
   // 번역해둔다 — 실패해도 nameZh/descriptionZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
   const [nameZh, descriptionZh] = await translateForCache([input.name, input.description ?? ""]);
+  // 협력사 계정은 clients 컬렉션을 못 읽으므로, 로고·표시명을 프로젝트 문서에 그대로 복사해둔다.
+  const clientSnap = await getDoc(doc(db, "clients", input.clientId));
+  const clientData = clientSnap.exists() ? clientSnap.data() : null;
   return addDoc(colRef, {
     ...input,
     ...(nameZh ? { nameZh } : {}),
     ...(input.description && descriptionZh ? { descriptionZh } : {}),
+    clientDisplayName: clientData?.name ?? "",
+    clientLogoUrl: clientData?.logoUrl ?? null,
     status: "active" as ProjectStatus,
     // 세팅이 끝나기 전엔 고객에게 안 보이게 기본 비공개로 시작한다 — 상세 화면에서 관리자가
     // 직접 "고객에게 공개" 토글을 켜야 그 순간부터 firestore.rules상 조회가 허용된다.

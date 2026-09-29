@@ -59,6 +59,7 @@ export function listenFiles(taskId: string, cb: (files: TaskFile[]) => void) {
           uploadedAt: data.uploadedAt?.toMillis ? data.uploadedAt.toMillis() : Date.now(),
           version: data.version ?? 1,
           aiAnalysis: data.aiAnalysis,
+          visibleToClient: data.visibleToClient ?? true,
         } as TaskFile;
       })
     );
@@ -70,7 +71,8 @@ export async function uploadTaskFile(
   taskId: string,
   file: File,
   uploadedBy: string,
-  uploadedByName: string
+  uploadedByName: string,
+  uploaderRole?: string
 ) {
   const storagePath = `projects/${projectId}/tasks/${taskId}/${Date.now()}_${file.name}`;
   const storageRef = ref(storage, storagePath);
@@ -83,6 +85,11 @@ export async function uploadTaskFile(
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   const isCad = CAD_EXTS.includes(ext);
 
+  // 협력사(외부 제조사)가 올린 자료는 관리자가 확인하기 전까지 클라이언트(고객)에게 바로
+  // 노출되면 안 된다 — 기본값을 비공개로 두고, 관리자가 확인 후 setFileVisibleToClient로
+  // 공개 전환한다. 관리자·클라이언트가 직접 올린 자료는 지금까지처럼 바로 공개된다.
+  const visibleToClient = uploaderRole !== "partner";
+
   const docRef = await addDoc(colRef(taskId), {
     name: file.name,
     url,
@@ -93,6 +100,7 @@ export async function uploadTaskFile(
     uploadedByName,
     uploadedAt: serverTimestamp(),
     version,
+    visibleToClient,
     ...(isCad ? { aiAnalysis: { status: "pending" } } : {}),
   });
 
@@ -101,6 +109,10 @@ export async function uploadTaskFile(
   }
 
   return docRef;
+}
+
+export async function setFileVisibleToClient(taskId: string, fileId: string, visible: boolean) {
+  return updateDoc(doc(db, "tasks", taskId, "files", fileId), { visibleToClient: visible });
 }
 
 export async function deleteTaskFile(taskId: string, fileId: string, storagePath: string) {

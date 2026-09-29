@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Paperclip, Download, Eye, EyeOff, Trash2, ChevronDown, ChevronRight, ChevronUp, History, Sparkles, Loader2 } from "lucide-react";
-import { listenFiles, deleteTaskFile } from "@/lib/firestore/files";
+import { listenFiles, deleteTaskFile, setFileVisibleToClient } from "@/lib/firestore/files";
 import { Task, TaskFile } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
@@ -89,11 +89,13 @@ function FileRow({
   canDelete,
   badge,
   hideAi,
+  isAdmin,
 }: {
   f: TaskFile;
   canDelete: boolean;
   badge?: React.ReactNode;
   hideAi: boolean;
+  isAdmin: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [showAi, setShowAi] = useState(false);
@@ -130,6 +132,15 @@ function FileRow({
               AI 분석
             </button>
           )}
+          {isAdmin && f.visibleToClient === false && (
+            <button
+              onClick={() => setFileVisibleToClient(f.taskId, f.id, true)}
+              title="협력사가 올린 자료입니다 — 눌러서 고객에게 공개"
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+            >
+              <EyeOff size={11} /> 고객 비공개
+            </button>
+          )}
         </div>
         <div className="ml-2 flex shrink-0 items-center gap-2">
           {hasPreview && (
@@ -164,11 +175,13 @@ function FileGroupRow({
   older,
   canDelete,
   hideAi,
+  isAdmin,
 }: {
   latest: TaskFile;
   older: TaskFile[];
   canDelete: (f: TaskFile) => boolean;
   hideAi: boolean;
+  isAdmin: boolean;
 }) {
   const [showOlder, setShowOlder] = useState(false);
 
@@ -178,6 +191,7 @@ function FileGroupRow({
         f={latest}
         canDelete={canDelete(latest)}
         hideAi={hideAi}
+        isAdmin={isAdmin}
         badge={
           older.length > 0 ? (
             <button
@@ -199,6 +213,7 @@ function FileGroupRow({
               f={f}
               canDelete={canDelete(f)}
               hideAi={hideAi}
+              isAdmin={isAdmin}
               badge={
                 <span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">
                   v{f.version}
@@ -218,7 +233,12 @@ function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid
   const [files, setFiles] = useState<TaskFile[]>([]);
   const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => listenFiles(task.id, setFiles), [task.id]);
+  useEffect(() => listenFiles(task.id, (fs) => {
+    // visibleToClient는 firestore.rules의 list에서 걸러줄 수 없어(hiddenFromPartner와 같은
+    // 함정) 쿼리는 전체를 받아온 뒤 여기서 클라이언트 계정에 한해 필터링한다 — 협력사가 올린
+    // 자료는 관리자가 승인(공개 전환)하기 전까지 고객에게 안 보여야 한다.
+    setFiles(appUser?.role === "client" ? fs.filter((f) => f.visibleToClient !== false) : fs);
+  }), [task.id, appUser?.role]);
 
   if (files.length === 0) return null;
 
@@ -248,6 +268,7 @@ function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid
               latest={latest}
               older={older}
               hideAi={hideAi}
+              isAdmin={appUser?.role === "admin"}
               canDelete={(f) => appUser?.role === "admin" || appUser?.uid === f.uploadedBy}
             />
           ))}

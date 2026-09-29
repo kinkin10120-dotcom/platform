@@ -152,18 +152,29 @@ service cloud.firestore {
 
       match /files/{fileId} {
         allow list: if isAdmin();
-        allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
+        // list는 visibleToClient를 검사하지 않는다 — hiddenFromPartner와 같은 함정(쿼리 결과
+        // 문서 중 하나라도 조건을 못 넘으면 쿼리 전체가 거부됨)이라, 협력사가 올린 비공개
+        // 자료가 하나만 있어도 클라이언트의 파일 목록 전체가 사라지는 사고가 난다. 목록에서
+        // 숨기는 건 앱 쪽(ProjectFilesTab.tsx, FileUploader.tsx)에서 필터링한다.
+        allow list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
+          || belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId);
+        allow get: if isAdmin();
+        // get(단건 조회)에서는 visibleToClient를 그대로 적용해, 직접 URL 등으로 비공개 자료에
+        // 접근하는 것까지 막는다 — 협력사가 올렸지만 관리자가 아직 승인 전인 자료.
+        allow get: if (belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
+              && resource.data.get('visibleToClient', true) != false)
           || (belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId)
               && get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false) != true);
-        allow get: if isAdmin();
         allow create: if (adminOrClientOrPartnerOf(
             get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId,
             get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId,
             get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false)
           )) && request.resource.data.uploadedBy == request.auth.uid;
-        // AI 형상 분석 결과 기록용 — aiAnalysis 필드만 수정 가능(다른 필드 변조 방지)
-        allow update: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiAnalysis']);
+        // AI 형상 분석 결과 기록용(aiAnalysis)과, 협력사 자료를 고객에게 공개 전환하는 용도
+        // (visibleToClient)만 수정 가능 — 후자는 관리자만 건드릴 수 있다.
+        allow update: if (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiAnalysis', 'visibleToClient']))
+          || (belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aiAnalysis']));
         allow delete: if isAdmin() || resource.data.uploadedBy == request.auth.uid;
 
         // 3D 모델 위 리뷰 핀 — 같은 파일의 핀들은 전부 같은 소속 업무(clientId)를 공유하므로,

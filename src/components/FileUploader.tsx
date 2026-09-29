@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Paperclip, Download, Trash2, Eye, EyeOff, Maximize2, X, History, ChevronDown, ChevronUp, Sparkles, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenFiles, uploadTaskFile, deleteTaskFile } from "@/lib/firestore/files";
+import { listenFiles, uploadTaskFile, deleteTaskFile, setFileVisibleToClient } from "@/lib/firestore/files";
 import { TaskFile } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
 
@@ -115,7 +115,7 @@ function ExpandModal({ f, onClose }: { f: TaskFile; onClose: () => void }) {
   );
 }
 
-function FileRow({ f, canDelete, onDelete, badge, hideAi, isZh }: { f: TaskFile; canDelete: boolean; onDelete: () => void; badge?: React.ReactNode; hideAi: boolean; isZh: boolean }) {
+function FileRow({ f, canDelete, onDelete, badge, hideAi, isZh, isAdmin }: { f: TaskFile; canDelete: boolean; onDelete: () => void; badge?: React.ReactNode; hideAi: boolean; isZh: boolean; isAdmin: boolean }) {
   const [preview, setPreview] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showAi, setShowAi] = useState(false);
@@ -153,6 +153,15 @@ function FileRow({ f, canDelete, onDelete, badge, hideAi, isZh }: { f: TaskFile;
               >
                 {f.aiAnalysis.status === "pending" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
                 {zh(isZh, "AI 분석")}
+              </button>
+            )}
+            {isAdmin && f.visibleToClient === false && (
+              <button
+                onClick={() => setFileVisibleToClient(f.taskId, f.id, true)}
+                title="협력사가 올린 자료입니다 — 눌러서 고객에게 공개"
+                className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 hover:bg-amber-100"
+              >
+                <EyeOff size={11} /> 고객 비공개
               </button>
             )}
           </div>
@@ -194,6 +203,7 @@ function FileGroupRow({
   onDelete,
   hideAi,
   isZh,
+  isAdmin,
 }: {
   latest: TaskFile;
   older: TaskFile[];
@@ -201,6 +211,7 @@ function FileGroupRow({
   onDelete: (f: TaskFile) => void;
   hideAi: boolean;
   isZh: boolean;
+  isAdmin: boolean;
 }) {
   const [showOlder, setShowOlder] = useState(false);
 
@@ -212,6 +223,7 @@ function FileGroupRow({
         onDelete={() => onDelete(latest)}
         hideAi={hideAi}
         isZh={isZh}
+        isAdmin={isAdmin}
         badge={
           older.length > 0 ? (
             <button
@@ -235,6 +247,7 @@ function FileGroupRow({
               onDelete={() => onDelete(f)}
               hideAi={hideAi}
               isZh={isZh}
+              isAdmin={isAdmin}
               badge={
                 <span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">
                   v{f.version}
@@ -250,6 +263,7 @@ function FileGroupRow({
 
 export default function FileUploader({ projectId, taskId }: { projectId: string; taskId: string }) {
   const { appUser } = useAuth();
+  const isAdmin = appUser?.role === "admin";
   // AI 형상 분석은 원가 수준(초기투자/개당단가) 추정까지 함께 보여주는데, 협력사(외부 제조사)
   // 에게 노출할 이유가 없어 감춘다 — ProjectFilesTab.tsx의 hideAi와 동일한 정책.
   const hideAi = appUser?.role === "partner";
@@ -258,7 +272,11 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
-  useEffect(() => listenFiles(taskId, setFiles), [taskId]);
+  useEffect(() => listenFiles(taskId, (fs) => {
+    // visibleToClient는 규칙의 list에서 걸러줄 수 없어 앱 쪽에서 클라이언트 계정에 한해
+    // 필터링한다 — 협력사가 올린 자료는 관리자 승인 전까지 고객에게 안 보여야 한다.
+    setFiles(appUser?.role === "client" ? fs.filter((f) => f.visibleToClient !== false) : fs);
+  }), [taskId, appUser?.role]);
 
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -266,7 +284,7 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
     setUploading(true);
     setUploadError("");
     try {
-      await uploadTaskFile(projectId, taskId, file, appUser.uid, appUser.name);
+      await uploadTaskFile(projectId, taskId, file, appUser.uid, appUser.name, appUser.role);
     } catch (err) {
       // 예전엔 에러를 그냥 삼켜서, 업로드가 실패해도 "업로드 중..."이 잠깐 떴다 사라질 뿐
       // 화면에 아무 표시가 없었다 — 왜 실패했는지 알 방법이 없었다.
@@ -296,6 +314,7 @@ export default function FileUploader({ projectId, taskId }: { projectId: string;
             onDelete={(f) => deleteTaskFile(taskId, f.id, f.storagePath)}
             hideAi={hideAi}
             isZh={isZh}
+            isAdmin={isAdmin}
           />
         ))}
         {files.length === 0 && <p className="text-sm text-[#86868b]">{zh(isZh, "첨부된 자료가 없습니다.")}</p>}

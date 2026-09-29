@@ -182,6 +182,7 @@ export interface TaskFile {
   uploadedAt: number;
   version: number;
   aiAnalysis?: TaskFileAiAnalysis;
+  visibleToClient?: boolean; // false면 클라이언트(고객)에게는 안 보임 — 협력사가 올린 자료의 기본값(관리자 승인 전 비공개)
 }
 
 // 3D(STEP) 모델 위의 특정 지점에 꽂는 리뷰 핀 — position은 모델 로컬 좌표(StepViewer가

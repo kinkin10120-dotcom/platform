@@ -48,6 +48,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
   const [decisionNote, setDecisionNote] = useState("");
   const [responseNote, setResponseNote] = useState("");
   const [decisionError, setDecisionError] = useState("");
+  const [hiddenToggleError, setHiddenToggleError] = useState("");
   const [editingNote, setEditingNote] = useState(false);
   const [editNoteText, setEditNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -116,7 +117,13 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
   }
 
   async function handleToggleHiddenFromPartner() {
-    await updateTaskFields(task.id, { hiddenFromPartner: !task.hiddenFromPartner });
+    setHiddenToggleError("");
+    try {
+      await updateTaskFields(task.id, { hiddenFromPartner: !task.hiddenFromPartner });
+    } catch (e) {
+      console.error("협력사 숨김 토글 실패:", e);
+      setHiddenToggleError(e instanceof Error ? e.message : "저장에 실패했습니다.");
+    }
   }
 
   async function handleSaveBasics() {
@@ -404,6 +411,12 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               </button>
             )}
           </div>
+
+          {hiddenToggleError && (
+            <p className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">
+              협력사 숨김 설정 저장 실패: {hiddenToggleError}
+            </p>
+          )}
 
           {isAdmin && showDecisionForm && !task.needsDecision && (
             <div className="mb-4 space-y-2 rounded-2xl bg-violet-50 px-4 py-3">

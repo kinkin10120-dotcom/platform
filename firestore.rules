@@ -47,11 +47,11 @@ service cloud.firestore {
       return p.role == 'partner' && projectId in p.get('projectIds', []);
     }
 
-    function adminOrClientOrPartnerOf(clientId, projectId) {
+    function adminOrClientOrPartnerOf(clientId, projectId, hiddenFromPartner) {
       let p = myProfile();
       return p.role == 'admin'
         || (p.role == 'client' && p.clientId == clientId)
-        || (p.role == 'partner' && projectId in p.get('projectIds', []));
+        || (p.role == 'partner' && projectId in p.get('projectIds', []) && hiddenFromPartner != true);
     }
 
     // ---- users ----
@@ -109,7 +109,7 @@ service cloud.firestore {
       allow get: if isAdmin() || (
         belongsToClient(resource.data.clientId) &&
         get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.get('clientVisible', true) != false
-      ) || belongsToPartnerProject(resource.data.projectId);
+      ) || (belongsToPartnerProject(resource.data.projectId) && resource.data.get('hiddenFromPartner', false) != true);
       // list에서는 clientVisible을 검사하지 않는다(위 get과 다른 점). list 규칙은 쿼리
       // 제약조건만으로 판정되므로 부모 projects 문서를 들여다보는 조건은 쿼리로 증명할 수
       // 없다 — projects의 list가 같은 이유로 clientVisible을 앱에서 거르는 것과 동일하다.
@@ -117,7 +117,9 @@ service cloud.firestore {
       // 클라이언트 쿼리는 반드시 where('clientId','==',내clientId)를 포함해야 한다
       // (listenTasksByProject가 clientId 인자를 받는 이유). 협력사는 clientId가 없으므로
       // where('projectId','==',...)만으로 조회한다(관리자와 동일한 쿼리 형태).
-      allow list: if isSignedIn() && (adminOrClientOf(resource.data.clientId) || belongsToPartnerProject(resource.data.projectId));
+      // hiddenFromPartner는 resource.data 필드라 list에서도(clientVisible과 달리) 문서별로
+      // 바로 검사할 수 있다 — "계약체결"처럼 협력사에게 개별적으로 숨기고 싶은 업무용.
+      allow list: if isSignedIn() && (adminOrClientOf(resource.data.clientId) || (belongsToPartnerProject(resource.data.projectId) && resource.data.get('hiddenFromPartner', false) != true));
       allow create, delete: if isAdmin();
       // 상태/진행률/체크리스트는 관리자 전용 관리 지표라 클라이언트는 못 건드리게 막고,
       // 확인/승인 요청 응답에 필요한 필드만 예외적으로 열어둔다.
@@ -133,11 +135,13 @@ service cloud.firestore {
         // 파일 하단의 별도 {pathSegs=**} 와일드카드 규칙으로만 판단된다(Firestore 공식 동작).
         allow list: if isAdmin();
         allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
-          || belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId);
+          || (belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId)
+              && get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false) != true);
         allow get: if isAdmin();
         allow create: if (adminOrClientOrPartnerOf(
             get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId,
-            get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId
+            get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId,
+            get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false)
           )) && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
       }
@@ -145,11 +149,13 @@ service cloud.firestore {
       match /files/{fileId} {
         allow list: if isAdmin();
         allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
-          || belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId);
+          || (belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId)
+              && get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false) != true);
         allow get: if isAdmin();
         allow create: if (adminOrClientOrPartnerOf(
             get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId,
-            get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId
+            get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId,
+            get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false)
           )) && request.resource.data.uploadedBy == request.auth.uid;
         // AI 형상 분석 결과 기록용 — aiAnalysis 필드만 수정 가능(다른 필드 변조 방지)
         allow update: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))

@@ -20,6 +20,7 @@ function TodayDate() {
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
   const { firebaseUser, appUser, loading } = useAuth();
+  const isZh = usePartnerZh();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -29,6 +30,13 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
       router.replace("/login");
     }
   }, [loading, firebaseUser, router]);
+
+  // 중국 협력사 계정이면 <html lang>을 zh-CN으로 바꿔, globals.css의 :lang(zh) 서체
+  // 지정이 적용되게 한다(Pretendard가 한자 글리프를 자체 포함해 폴백이 안 일어나던 문제).
+  useEffect(() => {
+    document.documentElement.lang = isZh ? "zh-CN" : "ko";
+    return () => { document.documentElement.lang = "ko"; };
+  }, [isZh]);
 
   // html/body 기본 배경은 마케팅 사이트의 검정 히어로 섹션 오버스크롤 대응용(#000000)이라
   // 밝은 배경인 내부 앱 화면에서는 스크롤 바운스 시 검은 화면이 번쩍이는 원인이 된다.

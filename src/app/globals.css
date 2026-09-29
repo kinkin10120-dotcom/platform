@@ -105,6 +105,15 @@ body {
   scrollbar-width: none;
 }
 
+/* Pretendard는 한자 글리프를 자체적으로 포함하고 있어(한국식 모양), 브라우저가 다음
+   폰트로 폴백하지 않고 그대로 그려버린다 — 중국어 사용자 눈엔 모양이 어색하고 획이
+   얇아 가독성이 떨어져 보인다. lang="zh"가 걸린 범위(AppLayoutClient에서 협력사 계정이
+   partnerLang=zh일 때 설정)에서는 중국어 서체를 우선하도록 별도 지정한다. */
+:lang(zh) {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  word-break: normal;
+}
+
 body::-webkit-scrollbar {
   display: none;
 }

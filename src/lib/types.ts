@@ -128,6 +128,7 @@ export interface Task {
   dependsOn: string[]; // 선행 업무 taskId 목록
   templateId?: string;
   group?: string; // 업무 목록에서 묶어 보기 위한 자유 태그(관리자가 직접 지정)
+  hiddenFromPartner?: boolean; // true면 협력사 계정에게는 이 업무 자체가 안 보임(firestore.rules에서 강제)
   statusHistory: StatusHistoryEntry[];
   dateHistory?: DateChangeEntry[];
   createdAt: number;

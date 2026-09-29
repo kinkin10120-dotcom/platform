@@ -160,7 +160,7 @@ export async function createTask(input: {
 export async function updateTaskFields(
   taskId: string,
   patch: Partial<
-    Pick<Task, "name" | "description" | "assigneeId" | "assigneeName" | "startDate" | "dueDate" | "progress" | "group">
+    Pick<Task, "name" | "description" | "assigneeId" | "assigneeName" | "startDate" | "dueDate" | "progress" | "group" | "hiddenFromPartner">
   >
 ) {
   const { group, ...rest } = patch;

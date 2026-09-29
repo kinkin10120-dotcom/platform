@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, Plus, Trash2, CalendarDays, UserRound, Flag, ListTodo, GitBranch, Paperclip, MessageSquare, History, AlertCircle, ChevronDown } from "lucide-react";
+import { X, Plus, Trash2, CalendarDays, UserRound, Flag, ListTodo, GitBranch, Paperclip, MessageSquare, History, AlertCircle, ChevronDown, EyeOff } from "lucide-react";
 import { ChecklistItem, Task, TaskStatus, TASK_STATUS_LABEL, TASK_STATUS_ORDER, AppUser } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { updateTaskFields, updateTaskDates, updateTaskStatus, assignTask, updateChecklist, deleteTask, requestTaskDecision, resolveTaskDecision, updateOpenDecisionNote, deleteDecisionHistoryEntry, updateTaskDependsOn } from "@/lib/firestore/tasks";
@@ -110,6 +110,10 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
     if (!confirm(`"${task.name}" 업무를 삭제하시겠습니까?\n첨부파일과 댓글도 함께 삭제되며 복구할 수 없습니다.`)) return;
     await deleteTask(task);
     onClose();
+  }
+
+  async function handleToggleHiddenFromPartner() {
+    await updateTaskFields(task.id, { hiddenFromPartner: !task.hiddenFromPartner });
   }
 
   async function handleSaveBasics() {
@@ -371,8 +375,22 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
             )}
             {isAdmin && (
               <button
-                onClick={() => (task.needsDecision ? handleCancelDecision() : setShowDecisionForm((v) => !v))}
+                onClick={handleToggleHiddenFromPartner}
+                title="협력사(파트너) 계정에게는 이 업무 자체가 안 보이게 됩니다 — 계약체결처럼 노출하면 안 되는 업무에 사용하세요"
                 className={`ml-auto inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                  task.hiddenFromPartner
+                    ? "bg-[#1d1d1f] text-white hover:bg-black"
+                    : "border border-[#d1d1d6] text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"
+                }`}
+              >
+                <EyeOff size={12} />
+                {task.hiddenFromPartner ? "협력사에게 숨김" : "협력사에게 숨기기"}
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => (task.needsDecision ? handleCancelDecision() : setShowDecisionForm((v) => !v))}
+                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
                   task.needsDecision
                     ? "bg-violet-600 text-white hover:bg-violet-700"
                     : "border border-[#d1d1d6] text-[#86868b] hover:border-violet-400 hover:text-violet-600"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, ChevronUp, ChevronDown } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, EyeOff } from "lucide-react";
 import { Task, TaskStatus, TASK_STATUS_LABEL, TASK_STATUS_ORDER } from "@/lib/types";
 import { isOverdue, isDueSoon } from "@/lib/bottleneck";
 import { useAuth } from "@/lib/auth-context";
@@ -97,6 +97,9 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
               {task.needsDecision && (
                 <span className="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">{zh(isZh, "확인필요")}</span>
               )}
+              {isAdmin && task.hiddenFromPartner && (
+                <EyeOff size={12} className="shrink-0 text-[#d1d1d6]" aria-label="협력사에게 숨김" />
+              )}
               <span className="truncate">{task.name}</span>
             </p>
             {activeDependsOnCount(task) > 0 && (
@@ -175,6 +178,9 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
         <td className={`px-4 py-3 font-medium text-[#1d1d1f] ${indented ? "pl-8" : ""}`} onClick={() => onSelectTask(task)}>
           {task.needsDecision && (
             <span className="mr-1.5 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">{zh(isZh, "확인필요")}</span>
+          )}
+          {isAdmin && task.hiddenFromPartner && (
+            <EyeOff size={12} className="mr-1.5 inline text-[#d1d1d6]" aria-label="협력사에게 숨김" />
           )}
           {task.name}
           {activeDependsOnCount(task) > 0 && (

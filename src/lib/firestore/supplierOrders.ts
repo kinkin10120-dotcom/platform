@@ -86,11 +86,24 @@ export function listenSupplierOrder(id: string, cb: (order: SupplierOrder | null
 }
 
 // 협력사 계정 전용 — 자기 앞으로 연동된 발주서만 조회한다(firestore.rules 참고).
-export function listenSupplierOrdersByPartner(partnerId: string, cb: (orders: SupplierOrder[]) => void) {
+// onError를 안 넘기면 permission-denied 같은 실패가 조용히 삼켜져 화면이 "불러오는 중..."에
+// 무한정 멈춘다(listenTasksByProject와 같은 이유로 반드시 받는다).
+export function listenSupplierOrdersByPartner(
+  partnerId: string,
+  cb: (orders: SupplierOrder[]) => void,
+  onError?: (e: Error) => void
+) {
   const q = query(colRef, where("partnerId", "==", partnerId));
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map(fromDoc).sort((a, b) => b.createdAt - a.createdAt));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      cb(snap.docs.map(fromDoc).sort((a, b) => b.createdAt - a.createdAt));
+    },
+    (e) => {
+      console.error("[listenSupplierOrdersByPartner] 발주 목록 조회 실패", e);
+      onError?.(e);
+    }
+  );
 }
 
 export interface CreateSupplierOrderInput {

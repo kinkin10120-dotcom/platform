@@ -21,13 +21,22 @@ export default function MySupplierOrdersPage() {
   const isZh = usePartnerZh();
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
-    return listenSupplierOrdersByPartner(appUser.uid, (o) => {
-      setOrders(o);
-      setLoaded(true);
-    });
+    return listenSupplierOrdersByPartner(
+      appUser.uid,
+      (o) => {
+        setLoadError("");
+        setOrders(o);
+        setLoaded(true);
+      },
+      (e) => {
+        setLoadError(e.message);
+        setLoaded(true);
+      }
+    );
   }, [appUser, isPartner]);
 
   const zhNotes = useZhAutoTranslate(isZh, orders.flatMap((o) => [o.memo ?? "", o.packingNote ?? ""]));
@@ -50,7 +59,13 @@ export default function MySupplierOrdersPage() {
 
       {!loaded && <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>}
 
-      {loaded && orders.length === 0 && (
+      {loadError && (
+        <p className="rounded-2xl bg-red-50 px-4 py-3 text-xs text-red-600">
+          {zh(isZh, "불러오지 못했습니다")}: {loadError}
+        </p>
+      )}
+
+      {loaded && !loadError && orders.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[#d1d1d6] bg-white py-16 text-center">
           <Package size={32} className="mb-3 text-[#d1d1d6]" />
           <p className="text-sm text-[#86868b]">{zh(isZh, "등록된 발주서가 없습니다.")}</p>

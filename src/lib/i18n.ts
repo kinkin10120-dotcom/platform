@@ -210,6 +210,7 @@ const ZH_DICT: Record<string, string> = {
 
   // My supplier orders (협력사 발주 목록)
   "발주 목록": "订单列表",
+  "불러오지 못했습니다": "加载失败",
   "HANDYHAND에서 발행한 발주서 내역입니다.": "这里是 HANDYHAND 发出的采购订单记录。",
   "등록된 발주서가 없습니다.": "暂无采购订单。",
   "선적항": "装运港",

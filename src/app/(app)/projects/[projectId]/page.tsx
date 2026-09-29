@@ -150,6 +150,15 @@ export default function ProjectWorkspacePage() {
     return listenClient(projectClientId, setClient);
   }, [projectClientId, isPartner]);
 
+  // clientDisplayName/clientLogoUrl(협력사에게 고객 로고를 보여주기 위한 캐시)는 이 기능을
+  // 추가하기 전에 만들어진 기존 프로젝트에는 없다 — 관리자가 여는 시점에 최신 client 값과
+  // 비교해서 어긋나 있으면 그때 채워 넣는다. 매번 다시 쓰지 않도록 값이 실제로 다를 때만 쓴다.
+  useEffect(() => {
+    if (!isAdmin || !project || !client) return;
+    if (project.clientDisplayName === client.name && project.clientLogoUrl === client.logoUrl) return;
+    updateProject(project.id, { clientDisplayName: client.name, clientLogoUrl: client.logoUrl });
+  }, [isAdmin, project, client]);
+
   useEffect(() => {
     // 담당자 배정 UI는 관리자 전용 기능이라 협력사에게는 필요 없고, listenUsersByClient는
     // 협력사 계정으로 호출하면 권한 오류가 난다(협력사는 clientId가 없음).

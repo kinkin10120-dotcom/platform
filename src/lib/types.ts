@@ -50,6 +50,7 @@ export interface Project {
   name: string;
   nameZh?: string; // 중국 업체 협력사용 사전 번역 캐시(저장 시 미리 번역) — 없으면 즉석 번역으로 대체
   description?: string;
+  descriptionZh?: string;
   projectType?: ProjectType[];
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD

@@ -26,6 +26,7 @@ function fromDoc(d: any): Project {
     name: data.name,
     nameZh: data.nameZh ?? undefined,
     description: data.description ?? "",
+    descriptionZh: data.descriptionZh ?? undefined,
     startDate: data.startDate,
     endDate: data.endDate,
     status: data.status,
@@ -81,11 +82,12 @@ export async function createProject(input: {
   createdBy: string;
 }) {
   // 협력사(중국 업체) 계정이 볼 때 즉석 번역 대신 바로 중국어가 뜨도록, 저장 시점에 미리
-  // 번역해둔다 — 실패해도 nameZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
-  const [nameZh] = await translateForCache([input.name]);
+  // 번역해둔다 — 실패해도 nameZh/descriptionZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
+  const [nameZh, descriptionZh] = await translateForCache([input.name, input.description ?? ""]);
   return addDoc(colRef, {
     ...input,
     ...(nameZh ? { nameZh } : {}),
+    ...(input.description && descriptionZh ? { descriptionZh } : {}),
     status: "active" as ProjectStatus,
     // 세팅이 끝나기 전엔 고객에게 안 보이게 기본 비공개로 시작한다 — 상세 화면에서 관리자가
     // 직접 "고객에게 공개" 토글을 켜야 그 순간부터 firestore.rules상 조회가 허용된다.
@@ -96,9 +98,10 @@ export async function createProject(input: {
 
 export async function updateProject(id: string, patch: Partial<Project>) {
   const { id: _omit, ...rest } = patch as any;
-  if (rest.name) {
-    const [nameZh] = await translateForCache([rest.name]);
-    if (nameZh) rest.nameZh = nameZh;
+  if (rest.name || rest.description) {
+    const [nameZh, descriptionZh] = await translateForCache([rest.name ?? "", rest.description ?? ""]);
+    if (rest.name && nameZh) rest.nameZh = nameZh;
+    if (rest.description && descriptionZh) rest.descriptionZh = descriptionZh;
   }
   return updateDoc(doc(db, "projects", id), rest);
 }

@@ -75,10 +75,11 @@ export default function ProjectWorkspacePage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [tab, setTab] = useState<Tab>("gantt");
   const [tabOrder, setTabOrder] = useState<Tab[]>(DEFAULT_TAB_ORDER);
-  // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다. project가 아직
-  // 로딩 전(undefined)이거나 없음(null)이어도 훅은 항상 같은 순서로 호출되어야 하므로
+  // 프로젝트명·설명은 관리자가 직접 입력한 자유 텍스트라, nameZh/descriptionZh(저장 시
+  // 미리 번역된 캐시)가 없는 기존 데이터에 한해 여기서 즉석 번역으로 대체한다. project가
+  // 아직 로딩 전(undefined)이거나 없음(null)이어도 훅은 항상 같은 순서로 호출되어야 하므로
   // 조건 없이 여기서 호출한다.
-  const zhProjectName = useZhAutoTranslate(isZh, project ? [project.name] : []);
+  const zhProjectName = useZhAutoTranslate(isZh, project ? [project.name, project.description ?? ""] : []);
 
   useEffect(() => {
     try {
@@ -359,7 +360,11 @@ export default function ProjectWorkspacePage() {
                   </button>
                 )}
               </div>
-              {project.description && <p className="mt-1 text-sm text-[#86868b]">{project.description}</p>}
+              {project.description && (
+                <p className="mt-1 text-sm text-[#86868b]">
+                  {project.descriptionZh || zhProjectName[project.description] || project.description}
+                </p>
+              )}
               <div className="mt-2.5 flex flex-wrap items-center gap-1">
                 {project.projectType?.map((t) => (
                   <span key={t} className="whitespace-nowrap rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs font-medium text-[#1d1d1f]">

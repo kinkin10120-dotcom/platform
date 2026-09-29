@@ -33,7 +33,9 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
     ...task.checklist.map((i) => i.text),
     ...dependsOnTasks.map((t) => t.name),
   ].filter(Boolean));
-  const trName = (s: string) => zhNames[s] ?? s;
+  // cached는 저장 시점에 미리 번역해둔 값(nameZh/groupZh/textZh) — 있으면 그걸 우선 쓰고,
+  // 없으면 화면에서 즉석 번역(zhNames)으로 대체한다.
+  const trName = (s: string, cached?: string) => cached || zhNames[s] || s;
 
   const [name, setName] = useState(task.name);
   const [description, setDescription] = useState(task.description ?? "");
@@ -346,7 +348,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               className="mb-2 w-full rounded-xl border border-transparent px-1 py-1 text-xl font-bold text-[#1d1d1f] hover:border-[#e5e5e5] focus:border-[#86868b] focus:outline-none"
             />
           ) : (
-            <h2 className="mb-2 px-1 text-xl font-bold text-[#1d1d1f]">{trName(task.name)}</h2>
+            <h2 className="mb-2 px-1 text-xl font-bold text-[#1d1d1f]">{trName(task.name, task.nameZh)}</h2>
           )}
 
           <div className="mb-4 flex flex-wrap items-center gap-2 px-1">
@@ -380,7 +382,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
               </>
             ) : (
               task.group && (
-                <span className="inline-flex items-center rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-xs font-medium text-white">{trName(task.group)}</span>
+                <span className="inline-flex items-center rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-xs font-medium text-white">{trName(task.group, task.groupZh)}</span>
               )
             )}
             {overdue && (
@@ -667,7 +669,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                       className="h-4 w-4 shrink-0 accent-[#1d1d1f] disabled:cursor-default"
                     />
                     <span className={`flex-1 text-sm ${item.done ? "text-[#86868b] line-through" : "text-[#1d1d1f]"}`}>
-                      {trName(item.text)}
+                      {trName(item.text, item.textZh)}
                     </span>
                     {isAdmin && (
                       <button
@@ -720,7 +722,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                   {dependsOnEntries.map((entry) => (
                     <li key={entry.id} className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm text-[#1d1d1f]">
                       <StatusBadge status={entry.task.status} />
-                      <span className="min-w-0 flex-1 truncate">{trName(entry.task.name)}</span>
+                      <span className="min-w-0 flex-1 truncate">{trName(entry.task.name, entry.task.nameZh)}</span>
                       {isAdmin && (
                         <button
                           onClick={() => handleRemoveDependency(entry.id)}

@@ -14,6 +14,7 @@ import {
 import { deleteObject, ref, listAll } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { Project, ProjectStatus, ProjectType } from "@/lib/types";
+import { translateForCache } from "@/lib/i18n";
 
 const colRef = collection(db, "projects");
 
@@ -23,6 +24,7 @@ function fromDoc(d: any): Project {
     id: d.id,
     clientId: data.clientId,
     name: data.name,
+    nameZh: data.nameZh ?? undefined,
     description: data.description ?? "",
     startDate: data.startDate,
     endDate: data.endDate,
@@ -78,8 +80,12 @@ export async function createProject(input: {
   endDate: string;
   createdBy: string;
 }) {
+  // 협력사(중국 업체) 계정이 볼 때 즉석 번역 대신 바로 중국어가 뜨도록, 저장 시점에 미리
+  // 번역해둔다 — 실패해도 nameZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
+  const [nameZh] = await translateForCache([input.name]);
   return addDoc(colRef, {
     ...input,
+    ...(nameZh ? { nameZh } : {}),
     status: "active" as ProjectStatus,
     // 세팅이 끝나기 전엔 고객에게 안 보이게 기본 비공개로 시작한다 — 상세 화면에서 관리자가
     // 직접 "고객에게 공개" 토글을 켜야 그 순간부터 firestore.rules상 조회가 허용된다.
@@ -90,6 +96,10 @@ export async function createProject(input: {
 
 export async function updateProject(id: string, patch: Partial<Project>) {
   const { id: _omit, ...rest } = patch as any;
+  if (rest.name) {
+    const [nameZh] = await translateForCache([rest.name]);
+    if (nameZh) rest.nameZh = nameZh;
+  }
   return updateDoc(doc(db, "projects", id), rest);
 }
 

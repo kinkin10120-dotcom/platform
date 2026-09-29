@@ -19,6 +19,7 @@ import { db, storage } from "@/lib/firebase";
 import { ChecklistItem, DateChangeEntry, DecisionEntry, Task, TaskStatus, TASK_STATUS_LABEL } from "@/lib/types";
 import { createNotification } from "@/lib/firestore/notifications";
 import { getUsersByClient, getAdmins } from "@/lib/firestore/users";
+import { translateForCache } from "@/lib/i18n";
 
 const colRef = collection(db, "tasks");
 
@@ -59,6 +60,8 @@ function fromDoc(d: any): Task {
     templateId: data.templateId ?? undefined,
     group: data.group ?? undefined,
     hiddenFromPartner: !!data.hiddenFromPartner,
+    nameZh: data.nameZh ?? undefined,
+    groupZh: data.groupZh ?? undefined,
     statusHistory: (data.statusHistory ?? []).map((h: any) => ({
       status: h.status,
       enteredAt: toMillis(h.enteredAt),
@@ -136,10 +139,21 @@ export async function createTask(input: {
   group?: string;
 }) {
   const initialStatus: TaskStatus = input.dependsOn && input.dependsOn.length > 0 ? "pending" : "todo";
+  const trimmedGroup = input.group?.trim() || "";
+  // 협력사(중국 업체) 계정이 볼 때 즉석 번역 대신 바로 중국어가 뜨도록, 저장 시점에 미리
+  // 번역해둔다 — 실패해도 nameZh/groupZh/textZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
+  const initialChecklist = input.checklist ?? [];
+  const [nameZh, groupZh, ...checklistZh] = await translateForCache([
+    input.name,
+    trimmedGroup,
+    ...initialChecklist.map((i) => i.text),
+  ]);
+  const checklistWithZh = initialChecklist.map((i, idx) => (checklistZh[idx] ? { ...i, textZh: checklistZh[idx]! } : i));
   return addDoc(colRef, {
     projectId: input.projectId,
     clientId: input.clientId,
     name: input.name,
+    ...(nameZh ? { nameZh } : {}),
     description: input.description ?? "",
     assigneeId: input.assigneeId ?? "",
     assigneeName: input.assigneeName ?? "",
@@ -147,11 +161,12 @@ export async function createTask(input: {
     dueDate: input.dueDate,
     status: initialStatus,
     progress: 0,
-    checklist: input.checklist ?? [],
+    checklist: checklistWithZh,
     order: input.order ?? Date.now(),
     dependsOn: input.dependsOn ?? [],
     templateId: input.templateId ?? null,
-    group: input.group?.trim() || null,
+    group: trimmedGroup || null,
+    ...(trimmedGroup && groupZh ? { groupZh } : {}),
     statusHistory: [{ status: initialStatus, enteredAt: Timestamp.now() }],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -165,9 +180,14 @@ export async function updateTaskFields(
   >
 ) {
   const { group, ...rest } = patch;
+  const trimmedGroup = group?.trim() || "";
+  // 협력사용 번역 캐시(translateForCache)는 이미 번역된 문구면 API를 다시 호출하지 않으므로,
+  // 이름/그룹이 실제로는 안 바뀐 채 다른 필드 때문에 저장이 다시 일어나도 비용이 들지 않는다.
+  const [nameZh, groupZh] = await translateForCache([patch.name ?? "", trimmedGroup]);
   return updateDoc(doc(db, "tasks", taskId), {
     ...rest,
-    ...("group" in patch ? { group: group?.trim() || null } : {}),
+    ...(patch.name && nameZh ? { nameZh } : {}),
+    ...("group" in patch ? { group: trimmedGroup || null, groupZh: trimmedGroup && groupZh ? groupZh : null } : {}),
     updatedAt: serverTimestamp(),
   });
 }
@@ -178,10 +198,22 @@ export async function updateTaskFields(
  * 기존처럼 수동 진행률 입력을 그대로 쓴다.
  */
 export async function updateChecklist(taskId: string, checklist: ChecklistItem[]) {
-  const patch: Record<string, unknown> = { checklist, updatedAt: serverTimestamp() };
-  if (checklist.length > 0) {
-    const done = checklist.filter((i) => i.done).length;
-    patch.progress = Math.round((done / checklist.length) * 100);
+  // 이미 textZh가 있는 항목(체크 토글만 한 기존 항목)은 다시 번역하지 않는다 — 새로 추가된
+  // 항목만 번역해서 매 체크박스 클릭마다 불필요한 API 호출이 생기지 않게 한다.
+  const needsTranslation = checklist.filter((i) => i.text && i.textZh === undefined);
+  let checklistWithZh = checklist;
+  if (needsTranslation.length > 0) {
+    const translations = await translateForCache(needsTranslation.map((i) => i.text));
+    const zhById = new Map(needsTranslation.map((i, idx) => [i.id, translations[idx]]));
+    checklistWithZh = checklist.map((i) => {
+      const zh = zhById.get(i.id);
+      return zh ? { ...i, textZh: zh } : i;
+    });
+  }
+  const patch: Record<string, unknown> = { checklist: checklistWithZh, updatedAt: serverTimestamp() };
+  if (checklistWithZh.length > 0) {
+    const done = checklistWithZh.filter((i) => i.done).length;
+    patch.progress = Math.round((done / checklistWithZh.length) * 100);
   }
   return updateDoc(doc(db, "tasks", taskId), patch);
 }

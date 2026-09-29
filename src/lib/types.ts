@@ -48,6 +48,7 @@ export interface Project {
   id: string;
   clientId: string;
   name: string;
+  nameZh?: string; // 중국 업체 협력사용 사전 번역 캐시(저장 시 미리 번역) — 없으면 즉석 번역으로 대체
   description?: string;
   projectType?: ProjectType[];
   startDate: string; // YYYY-MM-DD
@@ -86,6 +87,7 @@ export interface StatusHistoryEntry {
 export interface ChecklistItem {
   id: string;
   text: string;
+  textZh?: string; // 중국 업체 협력사용 사전 번역 캐시 — 없으면 화면에서 즉석 번역(useZhAutoTranslate)으로 대체
   done: boolean;
 }
 
@@ -129,6 +131,8 @@ export interface Task {
   templateId?: string;
   group?: string; // 업무 목록에서 묶어 보기 위한 자유 태그(관리자가 직접 지정)
   hiddenFromPartner?: boolean; // true면 협력사 계정에게는 이 업무 자체가 안 보임(firestore.rules에서 강제)
+  nameZh?: string; // 중국 업체 협력사용 사전 번역 캐시(저장 시 미리 번역) — 없으면 즉석 번역으로 대체
+  groupZh?: string;
   statusHistory: StatusHistoryEntry[];
   dateHistory?: DateChangeEntry[];
   createdAt: number;
@@ -146,6 +150,7 @@ export interface TaskComment {
   authorName: string;
   authorRole: CommentAuthorRole;
   text: string;
+  textZh?: string; // 중국 업체 협력사용 사전 번역 캐시(등록 시 미리 번역) — 없으면 즉석 번역으로 대체
   createdAt: number;
 }
 

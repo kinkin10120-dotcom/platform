@@ -254,7 +254,7 @@ function TaskFileSection({ task, appUser, hideAi }: { task: Task; appUser: { uid
         ) : (
           <ChevronDown size={15} className="shrink-0 text-[#86868b]" />
         )}
-        <span className="font-medium text-[#1d1d1f] text-sm">{zhNames[task.name] ?? task.name}</span>
+        <span className="font-medium text-[#1d1d1f] text-sm">{task.nameZh || zhNames[task.name] || task.name}</span>
         <StatusBadge status={task.status} />
         <span className="ml-auto text-xs text-[#86868b]">{files.length}{isZh ? "个" : "개"}</span>
       </button>

@@ -42,7 +42,9 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
     isZh,
     Array.from(new Set([...tasks.map((t) => t.name), ...tasks.map((t) => t.group?.trim()).filter((g): g is string => !!g)]))
   );
-  const trName = (s: string) => zhNames[s] ?? s;
+  // cached는 저장 시점에 미리 번역해둔 값(nameZh/groupZh) — 있으면 그걸 우선 쓰고, 없으면
+  // 화면에서 즉석 번역(zhNames)으로 대체한다.
+  const trName = (s: string, cached?: string) => cached || zhNames[s] || s;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -107,7 +109,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
               {isAdmin && task.hiddenFromPartner && (
                 <EyeOff size={12} className="shrink-0 text-[#d1d1d6]" aria-label="협력사에게 숨김" />
               )}
-              <span className="truncate">{trName(task.name)}</span>
+              <span className="truncate">{trName(task.name, task.nameZh)}</span>
             </p>
             {activeDependsOnCount(task) > 0 && (
               <p className="text-xs text-[#86868b] mt-0.5">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</p>
@@ -189,7 +191,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
           {isAdmin && task.hiddenFromPartner && (
             <EyeOff size={12} className="mr-1.5 inline text-[#d1d1d6]" aria-label="협력사에게 숨김" />
           )}
-          {trName(task.name)}
+          {trName(task.name, task.nameZh)}
           {activeDependsOnCount(task) > 0 && (
             <span className="ml-2 text-xs text-[#86868b]">{zh(isZh, "선행")} {activeDependsOnCount(task)}{zh(isZh, "건")}</span>
           )}
@@ -282,7 +284,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                     className="flex w-full items-center justify-between rounded-2xl bg-[#1d1d1f] px-4 py-3 text-left"
                   >
                     <span className="font-medium text-white">
-                      {trName(item.name)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
+                      {trName(item.name, item.tasks[0]?.groupZh)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                     </span>
                     <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -316,7 +318,7 @@ export default function TaskList({ tasks, onSelectTask }: Props) {
                         <td colSpan={canReorder ? 7 : 6} className="px-4 py-3 font-medium text-white">
                           <span className="flex items-center gap-2">
                             <ChevronDown size={14} className={`shrink-0 text-white/70 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            {trName(item.name)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
+                            {trName(item.name, item.tasks[0]?.groupZh)} <span className="text-xs font-normal text-white/60">({item.tasks.length}{zh(isZh, "건")})</span>
                           </span>
                         </td>
                       </tr>

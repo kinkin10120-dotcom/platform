@@ -41,7 +41,9 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
     isZh,
     Array.from(new Set([...tasks.map((t) => t.name), ...tasks.map((t) => t.group?.trim()).filter((g): g is string => !!g)]))
   );
-  const trName = (s: string) => zhNames[s] ?? s;
+  // cached는 저장 시점에 미리 번역해둔 값(nameZh/groupZh) — 있으면 그걸 우선 쓰고, 없으면
+  // 화면에서 즉석 번역(zhNames)으로 대체한다.
+  const trName = (s: string, cached?: string) => cached || zhNames[s] || s;
   const scrollRef = useRef<HTMLDivElement>(null);
   const [labelWidth, setLabelWidth] = useState(LABEL_WIDTH_DESKTOP);
   const [isMobile, setIsMobile] = useState(false);
@@ -255,21 +257,21 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
               key={row.kind === "task" ? `${row.task.id}${row.indent ? "-nested" : ""}` : `group:${row.name}`}
               className={`flex items-center border-b border-[#f0f0f0] pr-3 text-sm text-[#1d1d1f] ${row.kind === "task" && row.indent ? "pl-9 sm:pl-11" : "pl-6 sm:pl-8"}`}
               style={{ height: ROW_HEIGHT }}
-              title={row.kind === "task" ? trName(row.task.name) : `${trName(row.name)} (${row.tasks.length}${zh(isZh, "건")})`}
+              title={row.kind === "task" ? trName(row.task.name, row.task.nameZh) : `${trName(row.name, row.tasks[0]?.groupZh)} (${row.tasks.length}${zh(isZh, "건")})`}
             >
               {row.kind === "task" ? (
                 <button onClick={() => onSelectTask?.(row.task)} className="flex min-w-0 flex-1 items-center gap-1 truncate text-left font-medium text-[#1d1d1f] hover:underline">
                   {isAdmin && row.task.hiddenFromPartner && (
                     <EyeOff size={12} className="shrink-0 text-[#d1d1d6]" aria-label="협력사에게 숨김" />
                   )}
-                  <span className="truncate">{trName(row.task.name)}</span>
+                  <span className="truncate">{trName(row.task.name, row.task.nameZh)}</span>
                 </button>
               ) : (
                 <button
                   onClick={() => toggleGroup(row.name)}
                   className="min-w-0 flex-1 truncate text-left font-medium text-[#1d1d1f] hover:underline"
                 >
-                  {trName(row.name)} <span className="text-xs font-normal text-[#86868b]">({row.tasks.length}{zh(isZh, "건")})</span>
+                  {trName(row.name, row.tasks[0]?.groupZh)} <span className="text-xs font-normal text-[#86868b]">({row.tasks.length}{zh(isZh, "건")})</span>
                 </button>
               )}
             </div>
@@ -337,7 +339,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
                         overdue ? "ring-2 ring-red-400" : ""
                       }`}
                       style={{ left: rect.x, top: rect.y, width: rect.width, height: BAR_HEIGHT }}
-                      title={`${trName(task.name)} (${task.startDate} ~ ${task.dueDate})`}
+                      title={`${trName(task.name, task.nameZh)} (${task.startDate} ~ ${task.dueDate})`}
                     >
                       {dayWidth >= 16 && <span className="truncate">{task.progress}%</span>}
                     </button>
@@ -360,7 +362,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
                   <div
                     className="absolute"
                     style={{ left: groupRect.x, top: groupRect.y, width: groupRect.width, height: BAR_HEIGHT }}
-                    title={`${trName(row.name)} (${row.startDate} ~ ${row.dueDate})`}
+                    title={`${trName(row.name, row.tasks[0]?.groupZh)} (${row.startDate} ~ ${row.dueDate})`}
                   >
                     {row.tasks.map((m) => {
                       const segX = offsetOf(m.startDate) * dayWidth - groupRect.x;
@@ -375,7 +377,7 @@ export default function GanttChart({ tasks, onSelectTask }: Props) {
                             overdue ? "ring-2 ring-inset ring-red-400" : ""
                           }`}
                           style={{ left: segX + GAP / 2, width: Math.max(rawWidth - GAP, 6) }}
-                          title={`${trName(m.name)} (${m.startDate} ~ ${m.dueDate})`}
+                          title={`${trName(m.name, m.nameZh)} (${m.startDate} ~ ${m.dueDate})`}
                         >
                           {dayWidth >= 16 && <span className="truncate">{m.progress}%</span>}
                         </button>

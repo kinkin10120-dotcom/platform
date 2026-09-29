@@ -294,6 +294,22 @@ async function translateBatch(texts: string[]): Promise<void> {
 }
 
 /**
+ * 저장 시점에 미리 번역해두기 위한 일회성 호출(훅이 아님) — Firestore 쓰기 헬퍼(tasks.ts,
+ * projects.ts, comments.ts 등)에서 값을 저장한 직후 fire-and-forget으로 호출해, 결과를
+ * nameZh/textZh 같은 필드에 함께 저장한다. 뷰 쪽의 useZhAutoTranslate와 캐시를 공유하므로,
+ * 같은 문구를 화면에서 다시 보게 되면 이미 캐시된 값을 즉시 재사용한다. 실패하면 null을
+ * 반환하고 호출 쪽은 그냥 필드를 비워둔다 — 화면에서 즉석 번역(useZhAutoTranslate)으로
+ * 대체되므로 사용자에게 보이는 실패는 없다.
+ */
+export async function translateForCache(texts: string[]): Promise<(string | null)[]> {
+  const missing = Array.from(new Set(texts.filter((t) => t && !autoTranslateCache.has(t)))).slice(0, 50);
+  if (missing.length > 0) {
+    await translateBatch(missing);
+  }
+  return texts.map((t) => autoTranslateCache.get(t) ?? null);
+}
+
+/**
  * 협력사(중국 업체) 계정에게 texts(예: 업무명 목록)를 자동 번역해서 보여준다.
  * useZh가 false면 빈 맵을 반환한다(호출 쪽에서 map[text] ?? text로 원문 폴백).
  * 반환값은 { [원문]: 번역문 } — 아직 번역 중이거나 실패한 항목은 키가 없다.

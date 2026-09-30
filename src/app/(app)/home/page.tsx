@@ -619,7 +619,7 @@ export default function HomePage() {
             )}
             <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin ? "pt-0.5" : "pt-6"}`}>
               <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-[#1d1d1f]">{p.nameZh || zhProjectNames[p.name] || p.name}</p>
+                  <p className="font-semibold text-[#1d1d1f]">{(isZh && p.nameZh) || zhProjectNames[p.name] || p.name}</p>
                   {p.projectType && p.projectType.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       {p.projectType.map((t) => (

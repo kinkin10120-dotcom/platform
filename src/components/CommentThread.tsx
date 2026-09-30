@@ -64,7 +64,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh, trText }: {
           </div>
         </div>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.textZh || trText(c.text)}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{(isZh && c.textZh) || trText(c.text)}</p>
       )}
     </div>
   );

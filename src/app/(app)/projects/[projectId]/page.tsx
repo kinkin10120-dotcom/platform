@@ -373,7 +373,7 @@ export default function ProjectWorkspacePage() {
                 <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{displayClientName}</p>
               )}
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-[#1d1d1f]">{project.nameZh || zhProjectName[project.name] || project.name}</h1>
+                <h1 className="text-2xl font-bold text-[#1d1d1f]">{(isZh && project.nameZh) || zhProjectName[project.name] || project.name}</h1>
                 {isAdmin && (
                   <button onClick={openEdit} className="text-[#d1d1d6] hover:text-[#86868b]">
                     <Pencil size={15} />
@@ -396,7 +396,7 @@ export default function ProjectWorkspacePage() {
               </div>
               {project.description && (
                 <p className="mt-1 text-sm text-[#86868b]">
-                  {project.descriptionZh || zhProjectName[project.description] || project.description}
+                  {(isZh && project.descriptionZh) || zhProjectName[project.description] || project.description}
                 </p>
               )}
               <div className="mt-2.5 flex flex-wrap items-center gap-1">

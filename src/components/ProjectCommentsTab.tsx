@@ -63,14 +63,14 @@ export default function ProjectCommentsTab({ tasks, onSelectTask }: { tasks: Tas
                 {formatDistanceToNow(c.createdAt, { addSuffix: true, locale: isZh ? zhCN : ko })}
               </span>
             </div>
-            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.textZh || zhNames[c.text] || c.text}</p>
+            <p className="mt-1.5 whitespace-pre-wrap text-sm text-[#1d1d1f]">{(isZh && c.textZh) || zhNames[c.text] || c.text}</p>
             <button
               onClick={() => task && onSelectTask(task)}
               disabled={!task}
               className="mt-2.5 inline-flex items-center gap-1 rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs font-medium text-[#86868b] transition hover:bg-[#eeeef0] hover:text-[#1d1d1f] disabled:opacity-40"
             >
               <MessageSquare size={11} />
-              {c.taskNameZh || zhNames[c.taskName] || c.taskName}
+              {(isZh && c.taskNameZh) || zhNames[c.taskName] || c.taskName}
               <ArrowUpRight size={11} />
             </button>
           </div>

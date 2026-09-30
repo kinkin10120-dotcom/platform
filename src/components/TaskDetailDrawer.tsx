@@ -35,7 +35,10 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
   ].filter(Boolean));
   // cached는 저장 시점에 미리 번역해둔 값(nameZh/groupZh/textZh) — 있으면 그걸 우선 쓰고,
   // 없으면 화면에서 즉석 번역(zhNames)으로 대체한다.
-  const trName = (s: string, cached?: string) => cached || zhNames[s] || s;
+  // isZh를 먼저 체크해야 한다 — cached(nameZh 등)는 문서 자체에 저장된 필드라 관리자·
+  // 클라이언트가 봐도 값이 존재한다. isZh 체크 없이 cached부터 반환하면 한국 계정에도
+  // 중국어가 그대로 보이는 버그가 된다.
+  const trName = (s: string, cached?: string) => (isZh && cached) || zhNames[s] || s;
 
   const [name, setName] = useState(task.name);
   const [description, setDescription] = useState(task.description ?? "");

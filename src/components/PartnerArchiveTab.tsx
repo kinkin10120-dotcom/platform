@@ -76,7 +76,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
           </div>
         </div>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{c.textZh || zh(isZh, c.text)}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{(isZh && c.textZh) || c.text}</p>
       )}
     </div>
   );

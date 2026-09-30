@@ -23,7 +23,7 @@ function fromDoc(d: any): Project {
   const data = d.data();
   return {
     id: d.id,
-    clientId: data.clientId,
+    clientId: data.clientId ?? undefined,
     name: data.name,
     nameZh: data.nameZh ?? undefined,
     description: data.description ?? "",
@@ -76,7 +76,9 @@ export function listenProject(projectId: string, cb: (project: Project | null) =
 }
 
 export async function createProject(input: {
-  clientId: string;
+  // 협력사와 먼저 자료 공유를 시작해야 하는 경우가 있어, 고객사를 정하지 않고도 프로젝트를
+  // 만들 수 있게 clientId를 선택값으로 뺐다 — 나중에 updateProject로 지정/변경한다.
+  clientId?: string;
   name: string;
   description?: string;
   projectType?: ProjectType[];
@@ -88,14 +90,14 @@ export async function createProject(input: {
   // 번역해둔다 — 실패해도 nameZh/descriptionZh 없이 그냥 저장되고 화면에서 즉석 번역으로 대체된다.
   const [nameZh, descriptionZh] = await translateForCache([input.name, input.description ?? ""]);
   // 협력사 계정은 clients 컬렉션을 못 읽으므로, 로고·표시명을 프로젝트 문서에 그대로 복사해둔다.
-  const clientSnap = await getDoc(doc(db, "clients", input.clientId));
-  const clientData = clientSnap.exists() ? clientSnap.data() : null;
+  const clientData = input.clientId ? (await getDoc(doc(db, "clients", input.clientId))).data() ?? null : null;
+  const { clientId, ...rest } = input;
   return addDoc(colRef, {
-    ...input,
+    ...rest,
+    ...(clientId ? { clientId } : {}),
     ...(nameZh ? { nameZh } : {}),
     ...(input.description && descriptionZh ? { descriptionZh } : {}),
-    clientDisplayName: clientData?.name ?? "",
-    clientLogoUrl: clientData?.logoUrl ?? null,
+    ...(clientId ? { clientDisplayName: clientData?.name ?? "", clientLogoUrl: clientData?.logoUrl ?? null } : {}),
     status: "active" as ProjectStatus,
     // 세팅이 끝나기 전엔 고객에게 안 보이게 기본 비공개로 시작한다 — 상세 화면에서 관리자가
     // 직접 "고객에게 공개" 토글을 켜야 그 순간부터 firestore.rules상 조회가 허용된다.
@@ -110,6 +112,13 @@ export async function updateProject(id: string, patch: Partial<Project>) {
     const [nameZh, descriptionZh] = await translateForCache([rest.name ?? "", rest.description ?? ""]);
     if (rest.name && nameZh) rest.nameZh = nameZh;
     if (rest.description && descriptionZh) rest.descriptionZh = descriptionZh;
+  }
+  // 고객사를 나중에 지정/변경하는 경우 — createProject 때와 똑같이 로고·표시명을 복사해둔다.
+  if ("clientId" in rest && rest.clientId) {
+    const clientSnap = await getDoc(doc(db, "clients", rest.clientId));
+    const clientData = clientSnap.exists() ? clientSnap.data() : null;
+    rest.clientDisplayName = clientData?.name ?? "";
+    rest.clientLogoUrl = clientData?.logoUrl ?? null;
   }
   return updateDoc(doc(db, "projects", id), rest);
 }

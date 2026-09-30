@@ -22,7 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import { listenProject, updateProject } from "@/lib/firestore/projects";
-import { listenClient, uploadClientLogo } from "@/lib/firestore/clients";
+import { listenClient, listenClients, uploadClientLogo } from "@/lib/firestore/clients";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenUsersByClient, listenAdmins } from "@/lib/firestore/users";
 import { Project, Task, AppUser, ProjectType, PROJECT_TYPE_LABEL, ALL_PROJECT_TYPES, Client, TASK_STATUS_LABEL } from "@/lib/types";
@@ -73,6 +73,8 @@ export default function ProjectWorkspacePage() {
 
   const [project, setProject] = useState<Project | null | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
+  // 고객사를 나중에 지정/변경할 수 있게 하는 수정 화면 드롭다운용 — 관리자만 필요하다.
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assigneeOptions, setAssigneeOptions] = useState<AppUser[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -113,7 +115,7 @@ export default function ProjectWorkspacePage() {
     });
   }
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", description: "", startDate: "", endDate: "", status: "", projectType: [] as ProjectType[] });
+  const [editForm, setEditForm] = useState({ name: "", description: "", startDate: "", endDate: "", status: "", projectType: [] as ProjectType[], clientId: "" });
   const [saving, setSaving] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
 
@@ -152,6 +154,12 @@ export default function ProjectWorkspacePage() {
     if (!projectClientId || isPartner) return;
     return listenClient(projectClientId, setClient);
   }, [projectClientId, isPartner]);
+
+  useEffect(() => {
+    // 고객사 지정/변경 드롭다운용 — 관리자만 전체 고객 목록이 필요하다.
+    if (!isAdmin) return;
+    return listenClients(setAllClients);
+  }, [isAdmin]);
 
   useEffect(() => {
     // 담당자 배정 UI는 관리자 전용 기능이라 협력사에게는 필요 없고, listenUsersByClient는
@@ -205,7 +213,7 @@ export default function ProjectWorkspacePage() {
 
   function openEdit() {
     if (!project) return;
-    setEditForm({ name: project.name, description: project.description ?? "", startDate: project.startDate, endDate: project.endDate, status: project.status, projectType: project.projectType ?? [] });
+    setEditForm({ name: project.name, description: project.description ?? "", startDate: project.startDate, endDate: project.endDate, status: project.status, projectType: project.projectType ?? [], clientId: project.clientId ?? "" });
     setEditOpen(true);
   }
 
@@ -213,7 +221,17 @@ export default function ProjectWorkspacePage() {
     if (!project) return;
     setSaving(true);
     try {
-      await updateProject(project.id, { name: editForm.name, description: editForm.description, startDate: editForm.startDate, endDate: editForm.endDate, status: editForm.status as any, projectType: editForm.projectType.length > 0 ? editForm.projectType : undefined });
+      await updateProject(project.id, {
+        name: editForm.name,
+        description: editForm.description,
+        startDate: editForm.startDate,
+        endDate: editForm.endDate,
+        status: editForm.status as any,
+        projectType: editForm.projectType.length > 0 ? editForm.projectType : undefined,
+        // Firestore는 undefined 필드값을 거부한다 — 선택 안 함(빈 값)일 땐 아예 키를 빼서
+        // 기존 clientId를 그대로 둔다(비우는 기능은 없음, 지정만 가능).
+        ...(editForm.clientId ? { clientId: editForm.clientId } : {}),
+      });
       setEditOpen(false);
     } finally {
       setSaving(false);
@@ -562,6 +580,21 @@ export default function ProjectWorkspacePage() {
               <div>
                 <label className="block text-xs font-medium text-[#86868b] mb-1.5">설명</label>
                 <textarea className="w-full rounded-xl border border-[#e5e5e5] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b] resize-none" rows={3} value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#86868b] mb-1.5">
+                  고객사{!editForm.clientId && " (아직 미지정)"}
+                </label>
+                <select
+                  className="w-full appearance-none rounded-xl border border-[#e5e5e5] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none"
+                  value={editForm.clientId}
+                  onChange={e => setEditForm(f => ({ ...f, clientId: e.target.value }))}
+                >
+                  <option value="">나중에 지정</option>
+                  {allClients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">

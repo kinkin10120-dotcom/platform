@@ -162,7 +162,7 @@ export default function GlobalSearch() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? "";
+  const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? "" : "");
   const projectName = (projectId: string) => projects.find((p) => p.id === projectId)?.name ?? "";
   const taskName = (taskId: string) => tasks.find((t) => t.id === taskId)?.name ?? "";
   const taskProjectId = (taskId: string) => tasks.find((t) => t.id === taskId)?.projectId ?? "";

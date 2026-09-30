@@ -37,7 +37,7 @@ export default function PartnersPage() {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, [isAdmin]);
 
-  const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
+  const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? clientId : "미지정");
 
   function toggleProject(id: string) {
     setSelectedProjectIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));

@@ -52,7 +52,7 @@ export async function deleteTemplate(id: string) {
 export async function applyTemplateToProject(
   template: WorkflowTemplate,
   projectId: string,
-  clientId: string,
+  clientId: string | undefined,
   baseDate: string // YYYY-MM-DD, 보통 프로젝트 시작일
 ) {
   const base = parseISO(baseDate);

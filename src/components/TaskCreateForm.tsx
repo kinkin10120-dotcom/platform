@@ -7,7 +7,7 @@ import { createTask } from "@/lib/firestore/tasks";
 
 interface Props {
   projectId: string;
-  clientId: string;
+  clientId?: string;
   existingTasks: Task[];
   assigneeOptions: AppUser[];
   compact?: boolean;

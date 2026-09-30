@@ -35,7 +35,7 @@ function fromDoc(d: any): Task {
   return {
     id: d.id,
     projectId: data.projectId,
-    clientId: data.clientId,
+    clientId: data.clientId ?? undefined,
     name: data.name,
     description: data.description ?? "",
     assigneeId: data.assigneeId ?? "",
@@ -125,7 +125,7 @@ export async function getTask(taskId: string): Promise<Task | null> {
 
 export async function createTask(input: {
   projectId: string;
-  clientId: string;
+  clientId?: string; // 소속 프로젝트가 고객 미지정 상태면 이것도 비운다
   name: string;
   description?: string;
   assigneeId?: string;
@@ -151,7 +151,7 @@ export async function createTask(input: {
   const checklistWithZh = initialChecklist.map((i, idx) => (checklistZh[idx] ? { ...i, textZh: checklistZh[idx]! } : i));
   return addDoc(colRef, {
     projectId: input.projectId,
-    clientId: input.clientId,
+    ...(input.clientId ? { clientId: input.clientId } : {}),
     name: input.name,
     ...(nameZh ? { nameZh } : {}),
     description: input.description ?? "",
@@ -550,6 +550,9 @@ export async function requestTaskDecision(task: Task, note: string, actorId: str
     decisionHistory: [...toStoredDecisionHistory(task.decisionHistory), entry],
     updatedAt: serverTimestamp(),
   });
+
+  // 고객 미지정 프로젝트(clientId 없음)의 업무는 알릴 클라이언트 계정 자체가 없다.
+  if (!task.clientId) return;
 
   try {
     const clientUsers = await getUsersByClient(task.clientId);

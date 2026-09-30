@@ -85,7 +85,7 @@ export default function ScheduleReportPage() {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
   }
 
-  const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
+  const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? clientId : "미지정");
 
   async function handleDeleteEntry(task: Task, originalIndex: number) {
     if (!confirm("이 일정 변경 이력을 삭제하시겠습니까?\n삭제해도 업무의 현재 일정은 바뀌지 않고, 이력에서만 사라집니다.")) return;

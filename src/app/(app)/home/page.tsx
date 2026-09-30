@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle } from "lucide-react";
+import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
-import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject } from "@/lib/firestore/projects";
+import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject, createProject } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
 import { listenNotices, markNoticeRead } from "@/lib/firestore/notices";
@@ -81,6 +81,15 @@ export default function HomePage() {
   const [hiddenProjectCount, setHiddenProjectCount] = useState(0);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  // 협력사와 먼저 자료 공유를 시작해야 하는 경우가 있어, 고객사를 정하지 않고도 여기서 바로
+  // 프로젝트를 만들 수 있게 한다 — 지금까지는 클라이언트 상세 화면에서만 만들 수 있어서
+  // 반드시 고객사를 먼저 골라야 했다. 고객사는 나중에 프로젝트 수정에서 지정하면 된다.
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [npName, setNpName] = useState("");
+  const [npClientId, setNpClientId] = useState("");
+  const [npStart, setNpStart] = useState("");
+  const [npEnd, setNpEnd] = useState("");
+  const [savingNewProject, setSavingNewProject] = useState(false);
 
   const isAdmin = appUser?.role === "admin";
   // 협력사(파트너) 계정 — clients 컬렉션 접근 권한이 없어 clientId로 묶어 조회할 수 없다.
@@ -178,8 +187,8 @@ export default function HomePage() {
     return () => unsubs.forEach((u) => u());
   }, [isPartner, projects]);
 
-  const clientName = (clientId: string) => clients.find((c) => c.id === clientId)?.name ?? clientId;
-  const clientLogo = (clientId: string) => clients.find((c) => c.id === clientId)?.logoUrl;
+  const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? clientId : "");
+  const clientLogo = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.logoUrl : undefined);
 
   const sortedProjects = [...projects].sort((a, b) => {
     const ao = a.sortOrder ?? a.createdAt;
@@ -248,6 +257,29 @@ export default function HomePage() {
     setDeleteInput("");
   }
 
+  async function handleCreateNewProject(e: FormEvent) {
+    e.preventDefault();
+    if (!appUser || !npName.trim() || !npStart || !npEnd) return;
+    setSavingNewProject(true);
+    try {
+      const ref = await createProject({
+        clientId: npClientId || undefined,
+        name: npName.trim(),
+        startDate: npStart,
+        endDate: npEnd,
+        createdBy: appUser.uid,
+      });
+      setNpName("");
+      setNpClientId("");
+      setNpStart("");
+      setNpEnd("");
+      setShowNewProjectForm(false);
+      router.push(`/projects/${ref.id}`);
+    } finally {
+      setSavingNewProject(false);
+    }
+  }
+
   if (!loaded) {
     return <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>;
   }
@@ -266,7 +298,7 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
@@ -276,7 +308,82 @@ export default function HomePage() {
             {isAdmin ? "진행 중인 프로젝트와 마감 임박 업무를 한눈에 확인하세요." : zh(isZh, "내가 참여 중인 프로젝트의 진행 상황을 확인하세요.")}
           </p>
         </div>
+        {isAdmin && (
+          <button
+            onClick={() => setShowNewProjectForm((v) => !v)}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full bg-[#1d1d1f] px-4 text-sm font-medium text-white transition hover:bg-black"
+          >
+            <Plus size={16} /> 새 프로젝트
+          </button>
+        )}
       </div>
+
+      {isAdmin && showNewProjectForm && (
+        <form onSubmit={handleCreateNewProject} className="space-y-3 rounded-3xl bg-white p-5">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[#86868b]">프로젝트명</label>
+            <input
+              required
+              value={npName}
+              onChange={(e) => setNpName(e.target.value)}
+              className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[#86868b]">
+              고객사 (지금 안 정해도 됩니다 — 나중에 프로젝트 수정에서 지정할 수 있어요)
+            </label>
+            <select
+              value={npClientId}
+              onChange={(e) => setNpClientId(e.target.value)}
+              className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            >
+              <option value="">나중에 지정</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs font-medium text-[#86868b]">시작일</label>
+              <input
+                required
+                type="date"
+                value={npStart}
+                onChange={(e) => setNpStart(e.target.value)}
+                className="w-full appearance-none rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs font-medium text-[#86868b]">종료일</label>
+              <input
+                required
+                type="date"
+                value={npEnd}
+                onChange={(e) => setNpEnd(e.target.value)}
+                className="w-full appearance-none rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={savingNewProject}
+              className="rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white transition hover:bg-black disabled:opacity-50"
+            >
+              {savingNewProject ? "생성 중..." : "프로젝트 생성"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewProjectForm(false)}
+              className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]"
+            >
+              취소
+            </button>
+          </div>
+        </form>
+      )}
 
       {isAdmin && projects.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
@@ -486,7 +593,7 @@ export default function HomePage() {
                 <button onClick={() => setDeleteConfirm(p.id)} className="rounded-lg p-1 text-[#86868b] hover:bg-red-50 hover:text-red-500"><Trash2 size={14} /></button>
               </div>
             )}
-            {isAdmin && (
+            {isAdmin && p.clientId && (
               <Link
                 href={`/clients/${p.clientId}`}
                 onClick={(e) => e.stopPropagation()}
@@ -504,6 +611,11 @@ export default function HomePage() {
                 )}
                 <span className="truncate text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">{clientName(p.clientId)}</span>
               </Link>
+            )}
+            {isAdmin && !p.clientId && (
+              <span className="ml-[18px] mr-6 mt-3 inline-flex w-fit items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                고객 미지정
+              </span>
             )}
             <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin ? "pt-0.5" : "pt-6"}`}>
               <div className="min-w-0 flex-1">

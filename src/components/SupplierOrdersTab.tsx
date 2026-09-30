@@ -1829,7 +1829,7 @@ function SupplierOrderComposer({
             <option value="">연결할 프로젝트 없음</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} · {clientNameById[p.clientId] ?? "-"}
+                {p.name} · {(p.clientId ? clientNameById[p.clientId] : undefined) ?? "-"}
               </option>
             ))}
           </select>

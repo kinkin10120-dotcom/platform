@@ -46,7 +46,11 @@ export const ALL_PROJECT_TYPES: ProjectType[] = ["dev", "mass", "package", "deta
 
 export interface Project {
   id: string;
-  clientId: string;
+  // 협력사와 먼저 자료 공유를 시작해야 하는 경우가 있어, 고객사를 아직 못 정한 채로도
+  // 프로젝트를 만들 수 있어야 한다 — 나중에 프로젝트 수정 화면에서 지정/변경 가능하다.
+  // clientId가 없으면 어떤 고객 계정에도 안 보인다(where('clientId','==',...) 쿼리 자체가
+  // 매칭될 방법이 없으므로 규칙을 따로 손댈 필요가 없다).
+  clientId?: string;
   name: string;
   nameZh?: string; // 중국 업체 협력사용 사전 번역 캐시(저장 시 미리 번역) — 없으면 즉석 번역으로 대체
   description?: string;
@@ -120,7 +124,7 @@ export interface DecisionEntry {
 export interface Task {
   id: string;
   projectId: string;
-  clientId: string;
+  clientId?: string; // 소속 프로젝트에 clientId가 없으면(고객 미지정) 이것도 없다
   name: string;
   description?: string;
   assigneeId?: string;

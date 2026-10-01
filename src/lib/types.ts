@@ -447,6 +447,12 @@ export interface ClientProductInternal {
   orderKind?: SupplierOrderKind;
   // 발주서에 찍힐 영문/중문 품명 — 공장은 한글 품명을 못 읽는다. 비워두면 한글 품명이 그대로 간다.
   nameEn?: string;
+  // 제품 카탈로그 화면에서 참고용으로 기록하는 구성 부품별 단가 — 통화도 위 purchaseCurrency와
+  // 별개다. 반드시 parts/purchasePrice와 분리해서 둔다: 저 둘은 SupplierOrdersTab에서 실제
+  // 공급사 발주서 품목을 담을 때(addEntry) 그대로 복사되는 템플릿 값이라, 여기에 내부 참고용
+  // 숫자를 섞으면 엉뚱한 금액·통화가 실제 발주서 초안에 그대로 들어가 버린다.
+  refParts?: SupplierPartItem[];
+  refCurrency?: SupplierCurrency;
   updatedAt: number;
 }
 

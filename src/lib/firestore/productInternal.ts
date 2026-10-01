@@ -19,6 +19,8 @@ function fromDoc(d: any): ClientProductInternal {
     costItems: Array.isArray(data.costItems) ? data.costItems : undefined,
     parts: Array.isArray(data.parts) ? data.parts : undefined,
     orderKind: data.orderKind || undefined,
+    refParts: Array.isArray(data.refParts) ? data.refParts : undefined,
+    refCurrency: data.refCurrency || undefined,
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
 }
@@ -61,6 +63,8 @@ export async function setClientProductInternal(
     costItems?: SupplierCostItem[];
     parts?: SupplierPartItem[];
     orderKind?: SupplierOrderKind;
+    refParts?: SupplierPartItem[];
+    refCurrency?: SupplierCurrency;
   }
 ) {
   const payload: Record<string, unknown> = { clientId, updatedAt: serverTimestamp() };
@@ -74,6 +78,8 @@ export async function setClientProductInternal(
   if ("costItems" in input) payload.costItems = input.costItems ?? [];
   if ("parts" in input) payload.parts = input.parts ?? [];
   if ("orderKind" in input) payload.orderKind = input.orderKind ?? null;
+  if ("refParts" in input) payload.refParts = input.refParts ?? [];
+  if ("refCurrency" in input) payload.refCurrency = input.refCurrency ?? null;
   return setDoc(doc(db, "clientProductInternal", productId), payload, { merge: true });
 }
 

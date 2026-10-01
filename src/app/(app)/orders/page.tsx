@@ -1597,11 +1597,12 @@ function ProductRow({
   const [unitPrice, setUnitPrice] = useState(String(product.unitPrice));
   const [unit, setUnit] = useState(product.unit ?? "");
   const [shippingTerm, setShippingTerm] = useState<ShippingTerm | "">(internal?.shippingTerm ?? "");
-  // 구성 부품별 매입 단가 — SupplierOrdersTab의 "매입 정보" 편집과 같은 필드
-  // (ClientProductInternal.parts)를 그대로 쓴다. 통관 메모에 품목·가격을 줄글로 적어두던
-  // 것을 구조화된 입력으로 바꾼 것뿐, 탭이 어디든 같은 데이터를 보고 고친다.
-  const [parts, setParts] = useState<SupplierPartItem[]>(internal?.parts ?? []);
-  const [partsCurrency, setPartsCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
+  // 구성 부품별 "참고용" 단가 — 공급사에게 실제로 내는 발주서의 parts/purchasePrice와는
+  // 완전히 별개 필드(refParts/refCurrency)다. 통화도 다를 수 있어 분리했다: 이 값은
+  // addEntry() 등 발주서 작성 경로에서 절대 읽지 않는다 — 섞으면 엉뚱한 금액이 실제
+  // 발주서 초안에 들어간다.
+  const [parts, setParts] = useState<SupplierPartItem[]>(internal?.refParts ?? []);
+  const [partsCurrency, setPartsCurrency] = useState<SupplierCurrency>(internal?.refCurrency ?? "USD");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -1614,8 +1615,8 @@ function ProductRow({
     setPurchaseType(product.currency === "USD" ? "overseas" : "domestic");
     setVatApplicable(!!product.vatApplicable);
     setCustomsNote(internal?.customsNote ?? "");
-    setParts(internal?.parts ?? []);
-    setPartsCurrency(internal?.purchaseCurrency ?? "USD");
+    setParts(internal?.refParts ?? []);
+    setPartsCurrency(internal?.refCurrency ?? "USD");
     setUnitPrice(String(product.unitPrice));
     setUnit(product.unit ?? "");
     setShippingTerm(internal?.shippingTerm ?? "");
@@ -1658,10 +1659,8 @@ function ProductRow({
         purchaseType,
         shippingTerm: shippingTerm || undefined,
         customsNote: customsNote.trim() || undefined,
-        parts: cleanParts,
-        // 부품을 하나라도 넣으면 그 합계가 매입 단가가 된다 — SupplierOrdersTab의 매입 정보
-        // 편집과 동일한 규칙(두 값을 따로 관리하면 언젠가 어긋난다).
-        ...(cleanParts.length > 0 ? { purchasePrice: partsTotal, purchaseCurrency: partsCurrency } : {}),
+        refParts: cleanParts,
+        refCurrency: partsCurrency,
       });
       setExpanded(false);
     } finally {
@@ -1688,7 +1687,7 @@ function ProductRow({
               {formatMoney(product.unitPrice, product.currency)} (1{product.unit || "개"} 기준)
               {product.currency === "KRW" && product.vatApplicable && <span className="ml-1">(VAT별도)</span>}
               {internal?.shippingTerm && <span className="ml-1">· {internal.shippingTerm}</span>}
-              {internal?.parts && internal.parts.length > 0 && <span className="ml-1">· 부품 {internal.parts.length}개</span>}
+              {internal?.refParts && internal.refParts.length > 0 && <span className="ml-1">· 부품 {internal.refParts.length}개</span>}
             </p>
           </div>
         </div>
@@ -1767,12 +1766,11 @@ function ProductRow({
             </p>
           )}
 
-          {/* 구성 부품별 매입 단가 — 조립품이면 부품마다 단가를 넣는다. 합계가 매입 단가가
-              되고(판매가인 unitPrice와는 별개), SupplierOrdersTab의 "매입 정보" 탭에서 봐도
-              같은 데이터다. */}
+          {/* 구성 부품별 참고 단가 — 내부 기록용으로, 공급사에게 실제로 내는 발주서의
+              부품 단가(SupplierOrdersTab)와는 별개 데이터다. 화폐 단위도 따로 고를 수 있다. */}
           <div className="space-y-1.5 rounded-xl border border-[#e5e5e5] bg-white p-2.5">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-[#86868b]">구성 부품별 매입 단가 (조립품이면 부품마다 입력)</p>
+              <p className="text-xs text-[#86868b]">구성 부품별 참고 단가 (내부 기록용, 실제 발주서와 별개)</p>
               <select
                 value={partsCurrency}
                 onChange={(e) => setPartsCurrency(e.target.value as SupplierCurrency)}

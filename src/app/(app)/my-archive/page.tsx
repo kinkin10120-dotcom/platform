@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenProject } from "@/lib/firestore/projects";
-import { Project } from "@/lib/types";
+import { listenTasksByProject } from "@/lib/firestore/tasks";
+import { Project, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import PartnerArchiveTab from "@/components/PartnerArchiveTab";
 
@@ -18,6 +19,7 @@ export default function MyArchivePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
     if (!appUser) return;
@@ -45,6 +47,12 @@ export default function MyArchivePage() {
   useEffect(() => {
     if (projects.length > 0 && !selectedId) setSelectedId(projects[0].id);
   }, [projects, selectedId]);
+
+  // 자료함의 "관련 업무" 선택지용 — hiddenFromPartner는 list 규칙에서 걸러줄 수 없어 앱에서 거른다.
+  useEffect(() => {
+    if (!selectedId) return;
+    return listenTasksByProject(selectedId, (ts) => setTasks(ts.filter((t) => !t.hiddenFromPartner)));
+  }, [selectedId]);
 
   if (!loaded) {
     return <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>;
@@ -91,7 +99,7 @@ export default function MyArchivePage() {
               {trName(projects.find((p) => p.id === selectedId)!)}
             </p>
           )}
-          <PartnerArchiveTab projectId={selectedId} />
+          <PartnerArchiveTab projectId={selectedId} tasks={tasks} />
         </div>
       )}
     </div>

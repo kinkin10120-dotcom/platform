@@ -566,7 +566,7 @@ export default function ProjectWorkspacePage() {
       {tab === "dashboard" && <ProjectDashboard project={project} tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "files" && <ProjectFilesTab tasks={tasks} />}
       {tab === "comments" && <ProjectCommentsTab tasks={tasks} onSelectTask={setSelectedTask} />}
-      {tab === "partner" && (isAdmin || isPartner) && <PartnerArchiveTab projectId={project.id} />}
+      {tab === "partner" && (isAdmin || isPartner) && <PartnerArchiveTab projectId={project.id} tasks={tasks} />}
 
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">

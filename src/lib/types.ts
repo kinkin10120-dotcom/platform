@@ -208,6 +208,10 @@ export interface TaskFile {
 export interface PartnerArchiveFile {
   id: string;
   projectId: string;
+  // 어떤 업무 관련 자료인지 표시용(선택) — 클라이언트에겐 절대 연동하지 않는다. tasks 컬렉션에
+  // 아무 것도 쓰지 않고, 이 문서에 taskId/taskName을 그대로 복사해두기만 하는 라벨일 뿐이다.
+  taskId?: string;
+  taskName?: string;
   name: string;
   url: string;
   storagePath: string;
@@ -222,6 +226,8 @@ export interface PartnerArchiveFile {
 export interface PartnerArchiveComment {
   id: string;
   projectId: string;
+  taskId?: string;
+  taskName?: string;
   authorId: string;
   authorName: string;
   authorRole: CommentAuthorRole;

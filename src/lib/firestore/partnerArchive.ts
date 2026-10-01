@@ -30,6 +30,8 @@ function fileFromDoc(d: any): PartnerArchiveFile {
   return {
     id: d.id,
     projectId: data.projectId,
+    taskId: data.taskId ?? undefined,
+    taskName: data.taskName ?? undefined,
     name: data.name,
     url: data.url,
     storagePath: data.storagePath,
@@ -47,6 +49,8 @@ function commentFromDoc(d: any): PartnerArchiveComment {
   return {
     id: d.id,
     projectId: data.projectId,
+    taskId: data.taskId ?? undefined,
+    taskName: data.taskName ?? undefined,
     authorId: data.authorId,
     authorName: data.authorName,
     authorRole: data.authorRole,
@@ -95,7 +99,9 @@ export async function uploadPartnerArchiveFile(
   file: File,
   uploadedBy: string,
   uploadedByName: string,
-  onProgress?: (ratio: number) => void
+  onProgress?: (ratio: number) => void,
+  // 어떤 업무 자료인지 라벨 — 고객 쪽 tasks 컬렉션에는 아무 것도 쓰지 않는다.
+  task?: { taskId: string; taskName: string }
 ) {
   if (file.size > PARTNER_ARCHIVE_MAX_FILE_SIZE) {
     throw new Error(`파일이 너무 큽니다 (${Math.round(file.size / 1024 / 1024)}MB). 100MB 이하만 올릴 수 있습니다.`);
@@ -119,6 +125,7 @@ export async function uploadPartnerArchiveFile(
 
   return addDoc(filesColRef, {
     projectId,
+    ...(task ? { taskId: task.taskId, taskName: task.taskName } : {}),
     name: file.name,
     url,
     storagePath,
@@ -145,12 +152,14 @@ export async function addPartnerArchiveComment(
   authorId: string,
   authorName: string,
   authorRole: CommentAuthorRole,
-  text: string
+  text: string,
+  task?: { taskId: string; taskName: string }
 ) {
   // 저장 시점에 미리 번역해서 중국 업체 협력사가 볼 때 즉석 번역 없이 바로 뜨게 한다.
   const [textZh] = await translateForCache([text]);
   return addDoc(commentsColRef, {
     projectId,
+    ...(task ? { taskId: task.taskId, taskName: task.taskName } : {}),
     authorId,
     authorName,
     authorRole,

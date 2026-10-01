@@ -17,7 +17,7 @@ import {
 } from "@/lib/firestore/partnerArchive";
 import { getAdmins, getPartnersByProject } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
-import { PartnerArchiveFile, PartnerArchiveComment } from "@/lib/types";
+import { PartnerArchiveFile, PartnerArchiveComment, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 // 관리자가 올리면 이 프로젝트에 배정된 협력사 계정에게, 협력사가 올리면 관리자 전원에게
@@ -128,6 +128,9 @@ function FileRow({
             )}
             <span className="truncate text-[#1d1d1f]">{displayName}</span>
             <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
+            {f.taskName && (
+              <span className="shrink-0 truncate rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">{f.taskName}</span>
+            )}
             {badge}
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -231,11 +234,16 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
   return (
     <div className="group rounded-2xl bg-[#f5f5f7] p-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-[#1d1d1f]">
-          {zh(isZh, c.authorName)}
-          <span className="ml-1 text-xs text-[#86868b]">
-            {zh(isZh, c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "partner" ? "(협력사)" : "(운영팀)")}
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-[#1d1d1f]">
+          <span className="truncate">
+            {zh(isZh, c.authorName)}
+            <span className="ml-1 text-xs text-[#86868b]">
+              {zh(isZh, c.authorRole === "admin" ? "(운영팀)" : c.authorRole === "partner" ? "(협력사)" : "(운영팀)")}
+            </span>
           </span>
+          {c.taskName && (
+            <span className="shrink-0 truncate rounded-full bg-white px-2 py-0.5 text-xs text-[#86868b]">{c.taskName}</span>
+          )}
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-[#d1d1d6]">{formatDistanceToNow(c.createdAt, { addSuffix: true, locale: isZh ? zhCN : ko })}</span>
@@ -271,7 +279,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
 // 관리자 ↔ 협력사 전용 프로젝트 단위 자료함 — 업무(task)와 무관하다. 클라이언트(고객)는
 // 이 탭 자체를 볼 수 없고(project page에서 렌더 조건으로 막음), firestore.rules에도 client
 // 관련 함수를 아예 쓰지 않아 접근 경로 자체가 없다.
-export default function PartnerArchiveTab({ projectId }: { projectId: string }) {
+export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId: string; tasks?: Task[] }) {
   const { appUser } = useAuth();
   const isZh = usePartnerZh();
   const [files, setFiles] = useState<PartnerArchiveFile[]>([]);
@@ -281,6 +289,11 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
   const [uploadProgress, setUploadProgress] = useState<{ name: string; index: number; total: number; pct: number } | null>(null);
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // 이 자료함은 업무와 무관한 공간이지만, 어떤 업무 건인지 알아두면 찾기 편하다는 요청으로
+  // 선택적 라벨만 붙인다 — tasks 컬렉션에는 아무 것도 쓰지 않고(고객과는 절대 연동 안 함),
+  // 이 문서에 taskId/taskName을 그대로 복사해두기만 한다.
+  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
   useEffect(() => listenPartnerArchiveFiles(projectId, setFiles), [projectId]);
   useEffect(() => listenPartnerArchiveComments(projectId, setComments), [projectId]);
@@ -306,8 +319,13 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
       for (let i = 0; i < uploadable.length; i++) {
         const file = uploadable[i];
         setUploadProgress({ name: file.name, index: i + 1, total: uploadable.length, pct: 0 });
-        await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name, (ratio) =>
-          setUploadProgress({ name: file.name, index: i + 1, total: uploadable.length, pct: Math.round(ratio * 100) })
+        await uploadPartnerArchiveFile(
+          projectId,
+          file,
+          appUser.uid,
+          appUser.name,
+          (ratio) => setUploadProgress({ name: file.name, index: i + 1, total: uploadable.length, pct: Math.round(ratio * 100) }),
+          selectedTask ? { taskId: selectedTask.id, taskName: selectedTask.name } : undefined
         );
       }
       if (uploadable.length > 0) {
@@ -335,7 +353,14 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
     if (!appUser || !text.trim()) return;
     setSubmitting(true);
     try {
-      await addPartnerArchiveComment(projectId, appUser.uid, appUser.name, appUser.role, text.trim());
+      await addPartnerArchiveComment(
+        projectId,
+        appUser.uid,
+        appUser.name,
+        appUser.role,
+        text.trim(),
+        selectedTask ? { taskId: selectedTask.id, taskName: selectedTask.name } : undefined
+      );
       setText("");
       notifyPartnerArchiveTargets(
         projectId,
@@ -357,6 +382,22 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
         <Lock size={13} className="mt-0.5 shrink-0" />
         <p>{zh(isZh, "이 탭은 관리자와 협력사만 볼 수 있습니다. 고객에게는 노출되지 않습니다.")}</p>
       </div>
+
+      {tasks.length > 0 && (
+        <div className="flex items-center gap-2">
+          <label className="shrink-0 text-xs font-medium text-[#86868b]">{zh(isZh, "관련 업무 (선택)")}</label>
+          <select
+            value={selectedTaskId}
+            onChange={(e) => setSelectedTaskId(e.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+          >
+            <option value="">{zh(isZh, "미지정")}</option>
+            {tasks.map((t) => (
+              <option key={t.id} value={t.id}>{(isZh && t.nameZh) || t.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <section>
         <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-[#86868b]">

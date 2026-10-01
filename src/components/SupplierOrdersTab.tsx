@@ -25,6 +25,7 @@ import {
   deleteSupplierOrder,
   formatSupplierMoney,
   listenSupplierOrders,
+  setSupplierOrderStatus,
   updateSupplierOrder,
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
@@ -1905,6 +1906,8 @@ function SupplierOrderDetail({
   onEdit: () => void;
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [revertConfirm, setRevertConfirm] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const kinds = Array.from(new Set(order.items.map((it) => it.orderKind ?? "production")));
   const singleKind = kinds.length === 1 ? kinds[0] : null;
 
@@ -2030,6 +2033,35 @@ function SupplierOrderDetail({
         {/* 발행 처리 버튼은 두지 않는다 — 발주서를 실제로 뽑는 시점이 곧 보내는 시점이라,
             인쇄 페이지를 열면 자동으로 "발행됨"이 된다. 버튼을 따로 누르게 하면 누르는 걸
             잊어버려서 상태가 실제와 어긋난다. */}
+        {/* 미리보기를 열기만 해도 자동으로 "발행됨"이 되다 보니, 실제로 공장에 보내지 않은
+            건인데도 이 상태가 되어 아래 삭제 버튼이 막히는 경우가 있다 — 그럴 때만 쓰라고
+            "초안으로 되돌리기"를 둔다. 실제로 발행해 보낸 건은 절대 여기로 되돌리면 안 된다. */}
+        {order.status === "issued" &&
+          (revertConfirm ? (
+            <button
+              onClick={async () => {
+                setReverting(true);
+                try {
+                  await setSupplierOrderStatus(order.id, "draft");
+                } finally {
+                  setReverting(false);
+                  setRevertConfirm(false);
+                }
+              }}
+              disabled={reverting}
+              className="ml-auto rounded-full bg-amber-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-amber-600 disabled:opacity-50"
+            >
+              {reverting ? "되돌리는 중..." : "정말 초안으로 되돌리기"}
+            </button>
+          ) : (
+            <button
+              onClick={() => setRevertConfirm(true)}
+              className="ml-auto flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#86868b] transition hover:border-amber-500 hover:text-amber-600"
+              title="실제로 공장에 보내지 않은 건만 — 삭제하려면 먼저 초안으로 되돌려야 한다"
+            >
+              <RefreshCw size={13} /> 초안으로 되돌리기
+            </button>
+          ))}
         {/* 이미 공장에 나간 발주서는 지울 수 없다 — 서명 완료된 계약서를 못 지우는 것과 같은
             이유로, 실제로 주고받은 문서가 기록에서 사라지면 안 된다. 작성만 해둔 건은 지운다. */}
         {order.status === "draft" &&

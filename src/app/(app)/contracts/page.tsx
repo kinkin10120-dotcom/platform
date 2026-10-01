@@ -49,6 +49,7 @@ export default function ContractsPage() {
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [prefill, setPrefill] = useState<{ companyName?: string; contactName?: string; contactEmail?: string; bizRegCertUrl?: string } | null>(null);
+  const [showDone, setShowDone] = useState(false);
 
   useEffect(() => listenAllContracts(setContracts), []);
 
@@ -106,6 +107,9 @@ export default function ContractsPage() {
   }
 
   const canDelete = selected && selected.status !== "signed" && selected.status !== "linked";
+  // 서명완료/계정연결됨은 끝난 건이라 기본으로 접어둔다 — 견적/발주 관리와 같은 패턴.
+  const activeContracts = contracts.filter((c) => c.status !== "signed" && c.status !== "linked");
+  const doneContracts = contracts.filter((c) => c.status === "signed" || c.status === "linked");
 
   return (
     <div className="space-y-6">
@@ -133,7 +137,26 @@ export default function ContractsPage() {
               작성된 계약이 없습니다.
             </div>
           )}
-          {contracts.map((c) => (
+          {activeContracts.map((c) => (
+            <ContractCard
+              key={c.id}
+              contract={c}
+              selected={selected?.id === c.id}
+              onClick={() => setSelected(c)}
+              onDelete={() => { setSelected(c); setDeleteConfirmOpen(true); }}
+              onDuplicate={() => handleDuplicate(c)}
+            />
+          ))}
+
+          {doneContracts.length > 0 && (
+            <button
+              onClick={() => setShowDone((v) => !v)}
+              className="mt-4 block text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]"
+            >
+              {showDone ? "완료 계약 숨기기" : `완료 계약 ${doneContracts.length}건 숨겨짐 · 보기`}
+            </button>
+          )}
+          {showDone && doneContracts.map((c) => (
             <ContractCard
               key={c.id}
               contract={c}

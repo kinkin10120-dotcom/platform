@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+// 최상위 index.js에는 module.parent가 없으면(웹팩 번들 환경이 늘 그렇다) 존재하지 않는
+// 테스트 PDF를 읽으려는 디버그 코드가 있어 빌드가 깨진다 — 실제 구현체를 직접 가져온다.
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 // 협력사용 "정리 도구"(/organize)에서 쓴다 — 텍스트/사진을 보고 후보 프로젝트·업무 중
 // 가장 관련 깊은 것을 고르고, 담당자가 남길 법한 코멘트를 대신 써준다. 분류 결과 자체는
@@ -32,6 +35,8 @@ export async function POST(req: NextRequest) {
     fileName,
     fileType,
     imageBase64,
+    fileTextExcerpt,
+    pdfBase64,
     groupFiles,
     candidates,
     fixedProjectName,
@@ -43,6 +48,11 @@ export async function POST(req: NextRequest) {
     fileName?: string;
     fileType?: string;
     imageBase64?: string;
+    // 엑셀처럼 이미지로 못 보내는 파일에서 미리 추출해온 텍스트 일부(lib/extractFileText.ts)
+    fileTextExcerpt?: string;
+    // PDF 원본(base64) — pdfjs 계열을 브라우저 번들에 넣으면 Next.js 빌드가 깨져서, 여기
+    // 서버에서 pdf-parse로 텍스트를 뽑는다.
+    pdfBase64?: string;
     groupFiles?: { fileName: string; fileType?: string; imageBase64?: string }[];
     candidates: ProjectCandidate[];
     fixedProjectName?: string;
@@ -82,6 +92,18 @@ export async function POST(req: NextRequest) {
   if (groupFiles && groupFiles.length > 0) {
     const fileListText = groupFiles.map((f) => `- ${f.fileName} (${f.fileType || "알 수 없는 형식"})`).join("\n");
     contextText += `[첨부 자료 묶음 — 총 ${groupFiles.length}개, 사용자가 모두 같은 내용/현장을 촬영한 자료로 직접 묶었다]\n${fileListText}\n\n`;
+  }
+  if (fileTextExcerpt) contextText += `[파일에서 추출한 내용 일부]\n${fileTextExcerpt}\n\n`;
+  if (pdfBase64) {
+    try {
+      const pdfResult = await pdfParse(Buffer.from(pdfBase64, "base64"));
+      if (pdfResult.text.trim()) {
+        contextText += `[PDF에서 추출한 내용 일부]\n${pdfResult.text.trim().slice(0, 4000)}\n\n`;
+      }
+    } catch (e) {
+      console.error("pdf-parse error:", e);
+      // 추출 실패해도 분류 자체는 파일명만으로 계속 진행한다.
+    }
   }
 
   contextText +=

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   collection,
   documentId,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -17,7 +18,9 @@ import {
   FileBarChart,
   Mic,
   Paperclip,
+  Scissors,
   Trash2,
+  X,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -32,6 +35,7 @@ import {
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { compressImage } from "@/lib/imageCompress";
+import { extractFileText } from "@/lib/extractFileText";
 import { sortProjectsByUsage, recordProjectUsage } from "@/lib/projectUsage";
 import { downloadCsv } from "@/lib/csvExport";
 
@@ -48,6 +52,7 @@ interface TaskCandidate {
   taskId: string;
   taskName: string;
   status: string;
+  description?: string;
 }
 interface ProjectCandidate {
   projectId: string;
@@ -82,6 +87,15 @@ interface RecentLog {
   ownerId: string;
 }
 
+// 업로드 직후 "취소" 토스트가 되돌리는 데 필요한 최소 정보.
+interface UploadToast {
+  id: string;
+  label: string;
+  fileDocId?: string;
+  storagePath?: string;
+  commentDocId?: string;
+}
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -110,6 +124,15 @@ async function prepareImagePayload(file: File | null) {
   return { imageBase64, imageFileType: "image/jpeg" as string | undefined };
 }
 
+const PDF_MAX_BYTES = 4 * 1024 * 1024;
+
+async function preparePdfPayload(file: File | null) {
+  if (!file || file.type !== "application/pdf" || file.size > PDF_MAX_BYTES) {
+    return { pdfBase64: undefined as string | undefined };
+  }
+  return { pdfBase64: await blobToBase64(file) };
+}
+
 async function callClassify(
   group: { file: File | null; text: string }[],
   candidates: ProjectCandidate[],
@@ -126,6 +149,11 @@ async function callClassify(
   );
   const text = group.map((it) => it.text.trim()).filter(Boolean).join("\n\n") || undefined;
   const single = group.length === 1 ? group[0] : null;
+  // 이미지가 아닌 단일 파일(엑셀 등)은 AI가 내용을 볼 수 없으므로 미리 텍스트를 추출해 같이
+  // 보낸다. PDF는 클라이언트에서 파싱하지 않고(웹팩 번들링 문제) 서버에서 추출한다.
+  const fileTextExcerpt =
+    single?.file && !single.file.type.startsWith("image/") ? await extractFileText(single.file) : null;
+  const { pdfBase64 } = groupFiles.length > 1 ? { pdfBase64: undefined } : await preparePdfPayload(single?.file ?? null);
   const body =
     groupFiles.length > 1
       ? { text, groupFiles, candidates, lang, ...fixed }
@@ -134,6 +162,8 @@ async function callClassify(
           fileName: single?.file?.name,
           fileType: groupFiles[0]?.fileType ?? single?.file?.type,
           imageBase64: groupFiles[0]?.imageBase64,
+          fileTextExcerpt: fileTextExcerpt ?? undefined,
+          pdfBase64,
           candidates,
           lang,
           ...fixed,
@@ -203,7 +233,22 @@ export default function OrganizePage() {
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
   const [globalError, setGlobalError] = useState("");
   const [stickyTarget, setStickyTarget] = useState<{ projectId: string; taskId: string } | null>(null);
+  const [splittingBriefing, setSplittingBriefing] = useState(false);
+  const [toasts, setToasts] = useState<UploadToast[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+  function addToast(toast: UploadToast) {
+    setToasts((prev) => [...prev, toast]);
+    setTimeout(() => dismissToast(toast.id), 6000);
+  }
+  async function handleUndoToast(toast: UploadToast) {
+    dismissToast(toast.id);
+    if (toast.fileDocId && toast.storagePath) await deletePartnerArchiveFile(toast.fileDocId, toast.storagePath);
+    if (toast.commentDocId) await deletePartnerArchiveComment(toast.commentDocId);
+  }
 
   useEffect(() => {
     const ids = appUser?.projectIds ?? [];
@@ -227,7 +272,7 @@ export default function OrganizePage() {
             clientName: pd.clientDisplayName ?? "",
             tasks: tasksSnap.docs
               .filter((t) => !t.data().hiddenFromPartner)
-              .map((t) => ({ taskId: t.id, taskName: t.data().name, status: t.data().status })),
+              .map((t) => ({ taskId: t.id, taskName: t.data().name, status: t.data().status, description: t.data().description || undefined })),
           });
         }
       }
@@ -282,6 +327,49 @@ export default function OrganizePage() {
     };
     setItems((prev) => [...prev, item]);
     setDraftText("");
+  }
+
+  // 회의/현장에서 여러 프로젝트를 한 번에 언급한 긴 메모 하나를, 프로젝트/업무별로 이미
+  // 분류·코멘트까지 끝난 "ready" 상태의 여러 항목으로 바로 쪼개 담는다.
+  async function handleSplitBriefing() {
+    if (!draftText.trim()) return;
+    setSplittingBriefing(true);
+    setGlobalError("");
+    try {
+      const res = await fetch("/api/split-briefing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draftText.trim(), candidates, lang: appUser?.partnerLang ?? "ko" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "나누기에 실패했습니다.");
+      const segments: { text?: string; projectId?: string | null; taskId?: string | null; confidence?: "high" | "medium" | "low"; comment?: string }[] =
+        Array.isArray(data.segments) ? data.segments : [];
+      if (segments.length === 0) {
+        setGlobalError(zh(isZh, "나눌 내용을 찾지 못했습니다."));
+        return;
+      }
+      const newItems: IntakeItem[] = segments.map((seg) => ({
+        id: newId(),
+        file: null,
+        text: seg.text ?? "",
+        previewUrl: null,
+        status: "ready",
+        selectedProjectId: seg.projectId ?? "",
+        selectedTaskId: seg.taskId ?? "",
+        commentText: seg.comment ?? "",
+        confidence: seg.confidence,
+        errorMessage: "",
+        uploadProgress: 0,
+        groupId: null,
+      }));
+      setItems((prev) => [...prev, ...newItems]);
+      setDraftText("");
+    } catch (e) {
+      setGlobalError(e instanceof Error ? e.message : zh(isZh, "나누기에 실패했습니다."));
+    } finally {
+      setSplittingBriefing(false);
+    }
   }
 
   function addFileItems(fileList: FileList | null) {
@@ -411,8 +499,10 @@ export default function OrganizePage() {
       const task = project?.tasks.find((t) => t.taskId === item.selectedTaskId);
       const taskTag = task ? { taskId: task.taskId, taskName: task.taskName } : undefined;
 
+      let fileDocId: string | undefined;
+      let storagePath: string | undefined;
       if (item.file) {
-        await uploadPartnerArchiveFile(
+        const fileRef = await uploadPartnerArchiveFile(
           item.selectedProjectId,
           item.file,
           appUser.uid,
@@ -420,17 +510,30 @@ export default function OrganizePage() {
           (ratio) => updateItem(item.id, { uploadProgress: Math.round(ratio * 100) }),
           taskTag
         );
+        fileDocId = fileRef.id;
+        const fileSnap = await getDoc(fileRef);
+        storagePath = fileSnap.data()?.storagePath;
       }
 
       const commentBody = item.commentText.trim() || (item.file ? "" : item.text.trim());
+      let commentDocId: string | undefined;
       if (commentBody) {
-        await addPartnerArchiveComment(item.selectedProjectId, appUser.uid, actorName, "partner", commentBody, taskTag, appUser.partnerLang);
+        const commentRef = await addPartnerArchiveComment(item.selectedProjectId, appUser.uid, actorName, "partner", commentBody, taskTag, appUser.partnerLang);
+        commentDocId = commentRef.id;
       }
 
       notifyAdmins(
         `${actorName}님이 협력사 자료함에 ${item.file ? `"${item.file.name}" 파일을` : "코멘트를"} 올렸습니다${task ? ` (업무: ${task.taskName})` : ""}.`,
         item.selectedProjectId
       ).catch(() => {});
+
+      addToast({
+        id: newId(),
+        label: item.file ? item.file.name : task ? `${task.taskName} 코멘트` : "코멘트",
+        fileDocId,
+        storagePath,
+        commentDocId,
+      });
 
       updateItem(item.id, { status: "done" });
     } catch (e) {
@@ -533,6 +636,16 @@ export default function OrganizePage() {
                         {recording ? (<><span className="h-2 w-2 rounded-full bg-red-500" />{zh(isZh, "듣는 중... (탭하여 종료)")}</>) : (<><Mic size={14} />{zh(isZh, "음성으로 입력")}</>)}
                       </button>
                     </div>
+                    {draftText.trim() && (
+                      <button
+                        onClick={handleSplitBriefing}
+                        disabled={splittingBriefing || loadingCandidates}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-[#d1d1d6] py-2 text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f] disabled:opacity-50"
+                      >
+                        <Scissors size={14} />
+                        {splittingBriefing ? zh(isZh, "나누는 중...") : zh(isZh, "회의 브리핑 — 여러 업무로 나누기")}
+                      </button>
+                    )}
                   </div>
                   <div>
                     <label className="mb-1.5 block text-xs text-[#86868b]">
@@ -608,6 +721,20 @@ export default function OrganizePage() {
             </>
           )}
         </>
+      )}
+
+      {toasts.length > 0 && (
+        <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 space-y-2">
+          {toasts.map((t) => (
+            <div key={t.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#1d1d1f] px-4 py-3 text-sm text-white shadow-lg">
+              <span className="min-w-0 flex-1 truncate">{t.label} {zh(isZh, "업로드됨")}</span>
+              <button onClick={() => handleUndoToast(t)} className="shrink-0 text-xs font-medium text-white/80 underline underline-offset-2 hover:text-white">
+                {zh(isZh, "취소")}
+              </button>
+              <button onClick={() => dismissToast(t.id)} className="shrink-0 text-white/60 hover:text-white"><X size={14} /></button>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

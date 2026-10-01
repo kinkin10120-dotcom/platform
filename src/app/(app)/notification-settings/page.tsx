@@ -28,6 +28,7 @@ const ALL_TYPES: NotificationType[] = [
   "contract_signed",
   "contract_revision_requested",
   "contract_expiring",
+  "partner_archive",
 ];
 
 const TYPE_DESC: Record<NotificationType, string> = {
@@ -51,6 +52,7 @@ const TYPE_DESC: Record<NotificationType, string> = {
   contract_signed: "보낸 계약서에 상대방이 서명을 완료했을 때",
   contract_revision_requested: "보낸 계약서에 상대방이 수정을 요청했을 때",
   contract_expiring: "서명 완료된 계약의 용역기간 만료가 임박했을 때(재계약·연장 검토용, 14일 전 1회)",
+  partner_archive: "협력사 자료함에 새 파일이 올라오거나 코멘트가 달렸을 때",
 };
 
 export default function NotificationSettingsPage() {

@@ -14,8 +14,35 @@ import {
   updatePartnerArchiveComment,
   deletePartnerArchiveComment,
 } from "@/lib/firestore/partnerArchive";
+import { getAdmins, getPartnersByProject } from "@/lib/firestore/users";
+import { createNotification } from "@/lib/firestore/notifications";
 import { PartnerArchiveFile, PartnerArchiveComment } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+
+// 관리자가 올리면 이 프로젝트에 배정된 협력사 계정에게, 협력사가 올리면 관리자 전원에게
+// 알린다 — 지금까지는 자료함에 새 파일·코멘트가 생겨도 상대쪽에 아무 알림이 안 가서,
+// 들어가 보기 전까진 올라온 줄 몰랐다.
+async function notifyPartnerArchiveTargets(
+  projectId: string,
+  actorUid: string,
+  actorName: string,
+  actorRole: string | undefined,
+  message: string
+) {
+  const targets = actorRole === "admin" ? await getPartnersByProject(projectId) : await getAdmins();
+  await Promise.all(
+    targets
+      .filter((u) => u.uid !== actorUid)
+      .map((u) =>
+        createNotification({
+          userId: u.uid,
+          projectId,
+          type: "partner_archive",
+          message,
+        })
+      )
+  );
+}
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes}B`;
@@ -101,12 +128,22 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
   const zhFileNames = useZhAutoTranslate(isZh, files.map((f) => f.name));
 
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !appUser) return;
+    const fileList = Array.from(e.target.files ?? []);
+    if (fileList.length === 0 || !appUser) return;
     setUploading(true);
     setUploadError("");
     try {
-      await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name);
+      // 한 장씩 업로드해 하나가 실패해도 나머지는 그대로 반영되게 한다.
+      for (const file of fileList) {
+        await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name);
+      }
+      // 알림 발송 실패는 업로드 자체의 실패가 아니다 — 여기서 던지면 업로드는 됐는데
+      // "업로드에 실패했습니다"로 잘못 뜬다.
+      const message = fileList.length === 1
+        ? `${appUser.name}님이 협력사 자료함에 "${fileList[0].name}" 파일을 올렸습니다.`
+        : `${appUser.name}님이 협력사 자료함에 파일 ${fileList.length}개를 올렸습니다.`;
+      notifyPartnerArchiveTargets(projectId, appUser.uid, appUser.name, appUser.role, message)
+        .catch((e) => console.warn("협력사 자료함 업로드 알림 발송 실패", e));
     } catch (err) {
       console.error("협력사 자료함 업로드 실패:", err);
       const detail = err instanceof Error ? err.message : String(err);
@@ -124,6 +161,13 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
     try {
       await addPartnerArchiveComment(projectId, appUser.uid, appUser.name, appUser.role, text.trim());
       setText("");
+      notifyPartnerArchiveTargets(
+        projectId,
+        appUser.uid,
+        appUser.name,
+        appUser.role,
+        `${appUser.name}님이 협력사 자료함에 코멘트를 남겼습니다.`
+      ).catch((e) => console.warn("협력사 자료함 코멘트 알림 발송 실패", e));
     } finally {
       setSubmitting(false);
     }
@@ -169,7 +213,7 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
         <label className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] hover:bg-[#f5f5f7]">
           <Paperclip size={12} />
           {uploading ? zh(isZh, "업로드 중...") : zh(isZh, "자료 업로드")}
-          <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+          <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
         {uploadError && <p className="mt-1 text-xs text-red-500">{uploadError}</p>}
       </section>

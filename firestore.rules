@@ -220,7 +220,7 @@ service cloud.firestore {
         "rescheduled", "weekly_summary", "notice", "decision_needed", "inquiry",
         "inquiry_answered", "quote_request", "quote_response", "purchase_order",
         "order_status_change", "order_cancel_request", "contract_signed",
-        "contract_revision_requested", "contract_expiring"
+        "contract_revision_requested", "contract_expiring", "partner_archive"
       ];
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);

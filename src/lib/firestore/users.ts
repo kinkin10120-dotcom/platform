@@ -42,6 +42,23 @@ export async function getUsersByClient(clientId: string): Promise<AppUser[]> {
   });
 }
 
+// 특정 프로젝트에 배정된 협력사 계정들 — 협력사 자료함에 관리자가 글을 남겼을 때 알림 대상을
+// 찾는 데 쓴다. isAdmin() 호출 경로에서만 쓴다(firestore.rules의 users list 규칙은 role=='admin'
+// 조회만 누구에게나 허용하고, role=='partner' 조회는 admin만 허용한다).
+export async function getPartnersByProject(projectId: string): Promise<AppUser[]> {
+  const snap = await getDocs(query(colRef, where("role", "==", "partner"), where("projectIds", "array-contains", projectId)));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      uid: d.id,
+      email: data.email,
+      name: data.name,
+      role: data.role,
+      createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+    } as AppUser;
+  });
+}
+
 export async function getAdmins(): Promise<AppUser[]> {
   const snap = await getDocs(query(colRef, where("role", "==", "admin")));
   return snap.docs.map((d) => {

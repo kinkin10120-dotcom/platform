@@ -422,6 +422,25 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* 협력사는 여러 프로젝트를 동시에 진행하는 경우가 많아, 계약·발주 금액 같은 민감한
+          항목은 빼고 프로젝트·업무 현황만 요약해서 보여준다. */}
+      {isPartner && projects.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="rounded-3xl bg-white p-4">
+            <p className="text-xs text-[#86868b]">{zh(isZh, "진행 중")}</p>
+            <p className="mt-1 text-2xl font-semibold text-[#1d1d1f]">{activeProjectCount}{zh(isZh, "건")}</p>
+          </div>
+          <div className="rounded-3xl bg-white p-4">
+            <p className="text-xs text-[#86868b]">{zh(isZh, "지연 업무")}</p>
+            <p className={`mt-1 text-2xl font-semibold ${overdueTaskCount > 0 ? "text-red-500" : "text-[#1d1d1f]"}`}>{overdueTaskCount}{zh(isZh, "건")}</p>
+          </div>
+          <div className="rounded-3xl bg-white p-4">
+            <p className="text-xs text-[#86868b]">{zh(isZh, "마감 임박")}</p>
+            <p className={`mt-1 text-2xl font-semibold ${dueSoonTaskCount > 0 ? "text-amber-500" : "text-[#1d1d1f]"}`}>{dueSoonTaskCount}{zh(isZh, "건")}</p>
+          </div>
+        </div>
+      )}
+
       {decisionTasks.length > 0 && (
         <div className="rounded-3xl border border-violet-200 bg-violet-100/70 p-5">
           <p className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-violet-700">
@@ -457,9 +476,9 @@ export default function HomePage() {
         </div>
       )}
 
-      {isAdmin && upcomingTasks.length > 0 && (
+      {(isAdmin || isPartner) && upcomingTasks.length > 0 && (
         <div className="rounded-3xl bg-white p-5">
-          <p className="mb-3 text-sm font-semibold text-[#1d1d1f]">마감 임박·지연 업무</p>
+          <p className="mb-3 text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "마감 임박·지연 업무")}</p>
           <div className="space-y-1">
             {upcomingTasks.slice(0, 8).map((t) => {
               const overdue = isOverdue(t);
@@ -471,17 +490,17 @@ export default function HomePage() {
                   className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-[#f5f5f7]"
                 >
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${overdue ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-600"}`}>
-                    {overdue ? "지연" : "임박"}
+                    {zh(isZh, overdue ? "지연" : "임박")}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{t.name}</span>
-                  <span className="hidden shrink-0 truncate text-xs text-[#86868b] sm:block">{project?.name ?? "-"}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{(isZh && t.nameZh) || t.name}</span>
+                  <span className="hidden shrink-0 truncate text-xs text-[#86868b] sm:block">{(isZh && project?.nameZh) || project?.name || "-"}</span>
                   <span className={`shrink-0 text-xs ${overdue ? "font-semibold text-red-500" : "text-[#86868b]"}`}>{t.dueDate}</span>
                 </Link>
               );
             })}
           </div>
           {upcomingTasks.length > 8 && (
-            <p className="mt-2 px-3 text-xs text-[#86868b]">외 {upcomingTasks.length - 8}건 더 있음</p>
+            <p className="mt-2 px-3 text-xs text-[#86868b]">{zh(isZh, "외")} {upcomingTasks.length - 8}{zh(isZh, "건 더 있음")}</p>
           )}
         </div>
       )}

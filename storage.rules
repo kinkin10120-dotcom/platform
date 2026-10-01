@@ -22,6 +22,15 @@ service firebase.storage {
       allow read, write: if isSignedIn();
     }
 
+    // 협력사 자료함(관리자 ↔ 협력사 전용) 첨부 파일: partnerArchive/{projectId}/{fileName}
+    // 다른 경로들과 같은 이유로 소유권/역할 검사는 Storage 규칙에서 할 수 없으니 로그인
+    // 여부만 확인하고, "누가 이 프로젝트의 자료함에 접근할 수 있는지"는 실제 파일 목록을
+    // 제공하는 Firestore 쪽 규칙(partnerArchiveFiles)이 가른다 — URL을 모르면 애초에
+    // 접근할 방법이 없다.
+    match /partnerArchive/{projectId}/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
     // 클라이언트 브랜드 로고
     match /clients/{clientId}/logo {
       allow read: if true;

@@ -109,7 +109,8 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
       await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name);
     } catch (err) {
       console.error("협력사 자료함 업로드 실패:", err);
-      setUploadError(zh(isZh, "업로드에 실패했습니다. 잠시 후 다시 시도해주세요."));
+      const detail = err instanceof Error ? err.message : String(err);
+      setUploadError(`${zh(isZh, "업로드에 실패했습니다.")} (${detail})`);
     } finally {
       setUploading(false);
       e.target.value = "";

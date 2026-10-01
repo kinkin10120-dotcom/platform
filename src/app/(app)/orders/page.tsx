@@ -56,7 +56,9 @@ import {
   SupplierCurrency,
   SupplierCostItem,
   SupplierOrder,
+  SupplierPartItem,
 } from "@/lib/types";
+import NumberInput from "@/components/NumberInput";
 
 const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
   received: "bg-amber-50 text-amber-600",
@@ -1595,16 +1597,25 @@ function ProductRow({
   const [unitPrice, setUnitPrice] = useState(String(product.unitPrice));
   const [unit, setUnit] = useState(product.unit ?? "");
   const [shippingTerm, setShippingTerm] = useState<ShippingTerm | "">(internal?.shippingTerm ?? "");
+  // 구성 부품별 매입 단가 — SupplierOrdersTab의 "매입 정보" 편집과 같은 필드
+  // (ClientProductInternal.parts)를 그대로 쓴다. 통관 메모에 품목·가격을 줄글로 적어두던
+  // 것을 구조화된 입력으로 바꾼 것뿐, 탭이 어디든 같은 데이터를 보고 고친다.
+  const [parts, setParts] = useState<SupplierPartItem[]>(internal?.parts ?? []);
+  const [partsCurrency, setPartsCurrency] = useState<SupplierCurrency>(internal?.purchaseCurrency ?? "USD");
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const currency: Currency = purchaseType === "overseas" ? "USD" : "KRW";
+  const namedParts = parts.filter((p) => p.name.trim());
+  const partsTotal = namedParts.reduce((sum, p) => sum + (p.unitPrice || 0) * (p.quantity || 0), 0);
 
   function startEdit() {
     setName(product.name);
     setPurchaseType(product.currency === "USD" ? "overseas" : "domestic");
     setVatApplicable(!!product.vatApplicable);
     setCustomsNote(internal?.customsNote ?? "");
+    setParts(internal?.parts ?? []);
+    setPartsCurrency(internal?.purchaseCurrency ?? "USD");
     setUnitPrice(String(product.unitPrice));
     setUnit(product.unit ?? "");
     setShippingTerm(internal?.shippingTerm ?? "");
@@ -1637,10 +1648,20 @@ function ProductRow({
         vatApplicable: purchaseType === "domestic" ? vatApplicable : false,
         unit: unit.trim() || "",
       });
+      // Firestore는 undefined 필드값을 거부한다 — 영문명을 안 적은 행은 그 키를 아예 뺀다.
+      const cleanParts: SupplierPartItem[] = namedParts.map((p) => {
+        const part: SupplierPartItem = { name: p.name.trim(), unitPrice: Number(p.unitPrice) || 0, quantity: Number(p.quantity) || 0 };
+        if (p.nameEn?.trim()) part.nameEn = p.nameEn.trim();
+        return part;
+      });
       await setClientProductInternal(product.id, clientId, {
         purchaseType,
         shippingTerm: shippingTerm || undefined,
         customsNote: customsNote.trim() || undefined,
+        parts: cleanParts,
+        // 부품을 하나라도 넣으면 그 합계가 매입 단가가 된다 — SupplierOrdersTab의 매입 정보
+        // 편집과 동일한 규칙(두 값을 따로 관리하면 언젠가 어긋난다).
+        ...(cleanParts.length > 0 ? { purchasePrice: partsTotal, purchaseCurrency: partsCurrency } : {}),
       });
       setExpanded(false);
     } finally {
@@ -1667,6 +1688,7 @@ function ProductRow({
               {formatMoney(product.unitPrice, product.currency)} (1{product.unit || "개"} 기준)
               {product.currency === "KRW" && product.vatApplicable && <span className="ml-1">(VAT별도)</span>}
               {internal?.shippingTerm && <span className="ml-1">· {internal.shippingTerm}</span>}
+              {internal?.parts && internal.parts.length > 0 && <span className="ml-1">· 부품 {internal.parts.length}개</span>}
             </p>
           </div>
         </div>
@@ -1744,6 +1766,74 @@ function ProductRow({
               = 단가 합계 {Math.round(Number(unitPrice) * 1.1).toLocaleString()}원
             </p>
           )}
+
+          {/* 구성 부품별 매입 단가 — 조립품이면 부품마다 단가를 넣는다. 합계가 매입 단가가
+              되고(판매가인 unitPrice와는 별개), SupplierOrdersTab의 "매입 정보" 탭에서 봐도
+              같은 데이터다. */}
+          <div className="space-y-1.5 rounded-xl border border-[#e5e5e5] bg-white p-2.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-[#86868b]">구성 부품별 매입 단가 (조립품이면 부품마다 입력)</p>
+              <select
+                value={partsCurrency}
+                onChange={(e) => setPartsCurrency(e.target.value as SupplierCurrency)}
+                className="rounded-lg border border-[#d1d1d6] bg-white px-2 py-1 text-[10px] outline-none focus:border-[#86868b]"
+              >
+                <option value="USD">USD $</option>
+                <option value="CNY">CNY ¥</option>
+                <option value="KRW">KRW 원</option>
+              </select>
+            </div>
+            {parts.map((pt, i) => (
+              <div key={i} className="flex flex-wrap gap-1.5">
+                <input
+                  value={pt.name}
+                  onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, name: e.target.value } : it)))}
+                  placeholder="부품명"
+                  className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
+                <input
+                  value={pt.nameEn ?? ""}
+                  onChange={(e) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, nameEn: e.target.value } : it)))}
+                  placeholder="영문/중문"
+                  className="min-w-[6rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
+                <NumberInput
+                  value={pt.unitPrice}
+                  onChange={(n) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, unitPrice: n } : it)))}
+                  placeholder="단가"
+                  className="w-20 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
+                <NumberInput
+                  value={pt.quantity}
+                  onChange={(n) => setParts((prev) => prev.map((it, idx) => (idx === i ? { ...it, quantity: n } : it)))}
+                  decimal={false}
+                  placeholder="수량"
+                  className="w-14 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+                />
+                <button
+                  onClick={() => setParts((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="rounded-full p-1 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500"
+                  title="삭제"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setParts((prev) => [...prev, { name: "", unitPrice: 0, quantity: 1 }])}
+                className="flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f]"
+              >
+                <Plus size={12} /> 부품 추가
+              </button>
+              {namedParts.length > 0 && (
+                <span className="text-xs text-[#86868b]">
+                  부품 합계 <span className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(partsTotal, partsCurrency)}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
           <textarea
             value={customsNote}
             onChange={(e) => setCustomsNote(e.target.value)}

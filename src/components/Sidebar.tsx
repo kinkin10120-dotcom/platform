@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, ExternalLink } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
@@ -47,8 +47,9 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
     { href: "/my-supplier-orders", label: zh(isZh, "발주 목록"), icon: ShoppingCart, show: isPartner },
     { href: "/my-archive", label: zh(isZh, "자료함"), icon: Lock, show: isPartner },
-    // 별도 앱(work-intake, intake.handyhand.co.kr) — 사진·메모를 빠르게 자료함에 올리는 용도.
-    { href: "https://intake.handyhand.co.kr", label: zh(isZh, "정리 도구"), icon: ExternalLink, show: isPartner },
+    // 별도 앱(work-intake)으로 두면 이미 로그인된 세션인데도 새 탭+재로그인이 필요해서,
+    // 같은 기능을 사이트 내부 페이지로 옮겼다 — 다른 메뉴와 동일하게 이 화면 안에서 열린다.
+    { href: "/organize", label: zh(isZh, "정리 도구"), icon: ListChecks, show: isPartner },
     { href: "/notification-settings", label: zh(isZh, "알림 설정"), icon: Bell, show: true },
     { href: "/notices", label: zh(isZh, "공지사항"), icon: Megaphone, show: true },
   ];

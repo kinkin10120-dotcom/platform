@@ -270,7 +270,7 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
           </div>
         </div>
       ) : (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{(isZh && c.textZh) || c.text}</p>
+        <p className="mt-1 whitespace-pre-wrap text-sm text-[#1d1d1f]">{isZh ? c.textZh || c.text : c.textKo || c.text}</p>
       )}
     </div>
   );
@@ -359,7 +359,8 @@ export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId
         appUser.name,
         appUser.role,
         text.trim(),
-        selectedTask ? { taskId: selectedTask.id, taskName: selectedTask.name } : undefined
+        selectedTask ? { taskId: selectedTask.id, taskName: selectedTask.name } : undefined,
+        appUser.role === "partner" ? appUser.partnerLang : undefined
       );
       setText("");
       notifyPartnerArchiveTargets(
@@ -448,7 +449,7 @@ export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId
               key={c.id}
               comment={c}
               isMine={c.authorId === appUser?.uid}
-              onUpdate={(t) => updatePartnerArchiveComment(c.id, t)}
+              onUpdate={(t) => updatePartnerArchiveComment(c.id, t, appUser?.role === "partner" ? appUser.partnerLang : undefined)}
               onDelete={() => deletePartnerArchiveComment(c.id)}
               isZh={isZh}
             />

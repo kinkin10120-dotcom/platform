@@ -232,7 +232,11 @@ export interface PartnerArchiveComment {
   authorName: string;
   authorRole: CommentAuthorRole;
   text: string;
+  // 둘 중 하나만 채워진다: 관리자가 쓴 한국어 코멘트는 textZh(중국 협력사용), 협력사가
+  // 중국어로 쓴 코멘트는 textKo(관리자용)에 번역이 들어간다 — text 자체가 이미 그 언어라
+  // 반대쪽 번역만 필요하다.
   textZh?: string;
+  textKo?: string;
   createdAt: number;
 }
 

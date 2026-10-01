@@ -13,7 +13,7 @@ import {
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { CommentAuthorRole, PartnerArchiveComment, PartnerArchiveFile } from "@/lib/types";
-import { translateForCache } from "@/lib/i18n";
+import { translateForCache, translateToKoreanForCache } from "@/lib/i18n";
 
 // 관리자 ↔ 협력사 전용 프로젝트 단위 자료함 — 업무(task)와 무관하다. 클라이언트(고객)는
 // firestore.rules에 이 컬렉션을 아예 허용하지 않아 접근 경로 자체가 없다.
@@ -56,6 +56,7 @@ function commentFromDoc(d: any): PartnerArchiveComment {
     authorRole: data.authorRole,
     text: data.text,
     textZh: data.textZh ?? undefined,
+    textKo: data.textKo ?? undefined,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
   };
 }
@@ -153,10 +154,13 @@ export async function addPartnerArchiveComment(
   authorName: string,
   authorRole: CommentAuthorRole,
   text: string,
-  task?: { taskId: string; taskName: string }
+  task?: { taskId: string; taskName: string },
+  // 글쓴이가 쓴 언어 — 중국 협력사(zh)면 반대 방향(중국어→한국어)으로 번역해 관리자가
+  // 바로 한국어로 읽게 한다. 관리자/한국어 협력사는 기존대로 한국어→중국어.
+  authorLang?: "ko" | "zh"
 ) {
-  // 저장 시점에 미리 번역해서 중국 업체 협력사가 볼 때 즉석 번역 없이 바로 뜨게 한다.
-  const [textZh] = await translateForCache([text]);
+  const [translated] =
+    authorLang === "zh" ? await translateToKoreanForCache([text]) : await translateForCache([text]);
   return addDoc(commentsColRef, {
     projectId,
     ...(task ? { taskId: task.taskId, taskName: task.taskName } : {}),
@@ -164,14 +168,18 @@ export async function addPartnerArchiveComment(
     authorName,
     authorRole,
     text,
-    ...(textZh ? { textZh } : {}),
+    ...(translated ? (authorLang === "zh" ? { textKo: translated } : { textZh: translated }) : {}),
     createdAt: serverTimestamp(),
   });
 }
 
-export async function updatePartnerArchiveComment(commentId: string, text: string) {
-  const [textZh] = await translateForCache([text]);
-  return updateDoc(doc(db, "partnerArchiveComments", commentId), { text, textZh: textZh ?? null });
+export async function updatePartnerArchiveComment(commentId: string, text: string, authorLang?: "ko" | "zh") {
+  const [translated] =
+    authorLang === "zh" ? await translateToKoreanForCache([text]) : await translateForCache([text]);
+  return updateDoc(
+    doc(db, "partnerArchiveComments", commentId),
+    authorLang === "zh" ? { text, textKo: translated ?? null } : { text, textZh: translated ?? null }
+  );
 }
 
 export async function deletePartnerArchiveComment(commentId: string) {

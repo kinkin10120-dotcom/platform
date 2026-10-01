@@ -147,7 +147,7 @@ export default function NotificationSettingsPage() {
             >
               <div className="min-w-0">
                 <p className="font-medium text-[#1d1d1f]">{zh(isZh, NOTIFICATION_TYPE_LABEL[type])}</p>
-                <p className="mt-0.5 text-xs text-[#86868b]">{TYPE_DESC[type]}</p>
+                <p className="mt-0.5 text-xs text-[#86868b]">{zh(isZh, TYPE_DESC[type])}</p>
               </div>
               <button
                 onClick={() => toggle(type)}

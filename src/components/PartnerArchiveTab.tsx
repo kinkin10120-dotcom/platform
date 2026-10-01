@@ -3,7 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ko, zhCN } from "date-fns/locale";
-import { Paperclip, Download, Trash2, Pencil, Check, X, Lock } from "lucide-react";
+import { Paperclip, Download, Trash2, Pencil, Check, X, Lock, Eye, EyeOff, Maximize2, History, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   listenPartnerArchiveFiles,
@@ -13,6 +13,7 @@ import {
   addPartnerArchiveComment,
   updatePartnerArchiveComment,
   deletePartnerArchiveComment,
+  PARTNER_ARCHIVE_MAX_FILE_SIZE,
 } from "@/lib/firestore/partnerArchive";
 import { getAdmins, getPartnersByProject } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
@@ -48,6 +49,164 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+// FileUploader.tsx(업무별 자료)와 같은 버전 묶음 방식 — 같은 이름으로 다시 올리면 새 버전으로
+// 쌓이는데, 그냥 나열하면 서로 다른 파일처럼 보여 뭐가 최신인지 헷갈린다.
+function groupByName(files: PartnerArchiveFile[]) {
+  const groups = new Map<string, PartnerArchiveFile[]>();
+  for (const f of files) {
+    const list = groups.get(f.name) ?? [];
+    list.push(f);
+    groups.set(f.name, list);
+  }
+  return Array.from(groups.values()).map((versions) => {
+    const sorted = [...versions].sort((a, b) => b.version - a.version);
+    return { latest: sorted[0], older: sorted.slice(1) };
+  });
+}
+
+function ExpandModal({ f, onClose }: { f: PartnerArchiveFile; onClose: () => void }) {
+  const isImage = f.contentType.startsWith("image/");
+  const isPdf = f.contentType === "application/pdf";
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex items-center justify-between px-5 py-3" onClick={(e) => e.stopPropagation()}>
+        <span className="truncate text-sm font-medium text-white/80">{f.name}</span>
+        <button onClick={onClose} className="rounded-full p-2 text-white/60 hover:bg-white/10 hover:text-white">
+          <X size={20} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
+        {isImage && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={f.url} alt={f.name} className="h-full w-full object-contain" />
+        )}
+        {isPdf && <iframe src={f.url} className="h-full w-full rounded-xl bg-white" title={f.name} />}
+      </div>
+    </div>
+  );
+}
+
+function FileRow({
+  f,
+  displayName,
+  canDelete,
+  onDelete,
+  badge,
+}: {
+  f: PartnerArchiveFile;
+  displayName: string;
+  canDelete: boolean;
+  onDelete: () => void;
+  badge?: React.ReactNode;
+}) {
+  const [preview, setPreview] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const isImage = f.contentType.startsWith("image/");
+  const isPdf = f.contentType === "application/pdf";
+  const hasPreview = isImage || isPdf;
+
+  return (
+    <>
+      {expanded && <ExpandModal f={f} onClose={() => setExpanded(false)} />}
+      <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white">
+        {preview && isImage && (
+          <a href={f.url} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={f.url} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
+          </a>
+        )}
+        {preview && isPdf && <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />}
+        <div className="flex items-center justify-between px-3 py-2 text-sm">
+          <div className="flex min-w-0 items-center gap-2">
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={f.url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+            ) : (
+              <Paperclip size={13} className="shrink-0 text-[#86868b]" />
+            )}
+            <span className="truncate text-[#1d1d1f]">{displayName}</span>
+            <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
+            {badge}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {hasPreview && (
+              <>
+                <button onClick={() => setPreview((v) => !v)} className="text-[#86868b] hover:text-[#1d1d1f]">
+                  {preview ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+                <button onClick={() => setExpanded(true)} className="text-[#86868b] hover:text-[#1d1d1f]">
+                  <Maximize2 size={14} />
+                </button>
+              </>
+            )}
+            <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
+              <Download size={14} />
+            </a>
+            {canDelete && (
+              <button onClick={onDelete} className="text-[#86868b] hover:text-red-500">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function FileGroupRow({
+  latest,
+  older,
+  displayName,
+  canDelete,
+  onDelete,
+}: {
+  latest: PartnerArchiveFile;
+  older: PartnerArchiveFile[];
+  displayName: (f: PartnerArchiveFile) => string;
+  canDelete: (f: PartnerArchiveFile) => boolean;
+  onDelete: (f: PartnerArchiveFile) => void;
+}) {
+  const [showOlder, setShowOlder] = useState(false);
+
+  return (
+    <div className="space-y-1.5">
+      <FileRow
+        f={latest}
+        displayName={displayName(latest)}
+        canDelete={canDelete(latest)}
+        onDelete={() => onDelete(latest)}
+        badge={
+          older.length > 0 ? (
+            <button
+              onClick={() => setShowOlder((v) => !v)}
+              className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b] hover:bg-[#e5e5e5]"
+            >
+              <History size={11} />
+              v{latest.version}
+              {showOlder ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+            </button>
+          ) : undefined
+        }
+      />
+      {showOlder && older.length > 0 && (
+        <div className="ml-4 space-y-1.5 border-l border-[#e5e5e5] pl-3">
+          {older.map((f) => (
+            <FileRow
+              key={f.id}
+              f={f}
+              displayName={displayName(f)}
+              canDelete={canDelete(f)}
+              onDelete={() => onDelete(f)}
+              badge={<span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">v{f.version}</span>}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
@@ -119,6 +278,7 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
   const [comments, setComments] = useState<PartnerArchiveComment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{ name: string; index: number; total: number; pct: number } | null>(null);
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -130,26 +290,42 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
   async function handleUpload(e: ChangeEvent<HTMLInputElement>) {
     const fileList = Array.from(e.target.files ?? []);
     if (fileList.length === 0 || !appUser) return;
+
+    // 용량 제한을 넘는 파일은 미리 걸러내고, 나머지는 그대로 올린다.
+    const oversized = fileList.filter((f) => f.size > PARTNER_ARCHIVE_MAX_FILE_SIZE);
+    const uploadable = fileList.filter((f) => f.size <= PARTNER_ARCHIVE_MAX_FILE_SIZE);
+
     setUploading(true);
-    setUploadError("");
+    setUploadError(
+      oversized.length > 0
+        ? `${zh(isZh, "100MB가 넘는 파일은 제외했습니다:")} ${oversized.map((f) => f.name).join(", ")}`
+        : ""
+    );
     try {
       // 한 장씩 업로드해 하나가 실패해도 나머지는 그대로 반영되게 한다.
-      for (const file of fileList) {
-        await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name);
+      for (let i = 0; i < uploadable.length; i++) {
+        const file = uploadable[i];
+        setUploadProgress({ name: file.name, index: i + 1, total: uploadable.length, pct: 0 });
+        await uploadPartnerArchiveFile(projectId, file, appUser.uid, appUser.name, (ratio) =>
+          setUploadProgress({ name: file.name, index: i + 1, total: uploadable.length, pct: Math.round(ratio * 100) })
+        );
       }
-      // 알림 발송 실패는 업로드 자체의 실패가 아니다 — 여기서 던지면 업로드는 됐는데
-      // "업로드에 실패했습니다"로 잘못 뜬다.
-      const message = fileList.length === 1
-        ? `${appUser.name}님이 협력사 자료함에 "${fileList[0].name}" 파일을 올렸습니다.`
-        : `${appUser.name}님이 협력사 자료함에 파일 ${fileList.length}개를 올렸습니다.`;
-      notifyPartnerArchiveTargets(projectId, appUser.uid, appUser.name, appUser.role, message)
-        .catch((e) => console.warn("협력사 자료함 업로드 알림 발송 실패", e));
+      if (uploadable.length > 0) {
+        // 알림 발송 실패는 업로드 자체의 실패가 아니다 — 여기서 던지면 업로드는 됐는데
+        // "업로드에 실패했습니다"로 잘못 뜬다.
+        const message = uploadable.length === 1
+          ? `${appUser.name}님이 협력사 자료함에 "${uploadable[0].name}" 파일을 올렸습니다.`
+          : `${appUser.name}님이 협력사 자료함에 파일 ${uploadable.length}개를 올렸습니다.`;
+        notifyPartnerArchiveTargets(projectId, appUser.uid, appUser.name, appUser.role, message)
+          .catch((e) => console.warn("협력사 자료함 업로드 알림 발송 실패", e));
+      }
     } catch (err) {
       console.error("협력사 자료함 업로드 실패:", err);
       const detail = err instanceof Error ? err.message : String(err);
       setUploadError(`${zh(isZh, "업로드에 실패했습니다.")} (${detail})`);
     } finally {
       setUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   }
@@ -188,24 +364,15 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
           {zh(isZh, "첨부 자료")}
         </p>
         <div className="space-y-2">
-          {files.map((f) => (
-            <div key={f.id} className="flex items-center justify-between rounded-2xl border border-[#f0f0f0] bg-white px-3 py-2 text-sm">
-              <div className="flex min-w-0 items-center gap-2">
-                <Paperclip size={13} className="shrink-0 text-[#86868b]" />
-                <span className="truncate text-[#1d1d1f]">{zhFileNames[f.name] ?? f.name}</span>
-                <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
-                  <Download size={14} />
-                </a>
-                {canDelete(f) && (
-                  <button onClick={() => deletePartnerArchiveFile(f.id, f.storagePath)} className="text-[#86868b] hover:text-red-500">
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
+          {groupByName(files).map(({ latest, older }) => (
+            <FileGroupRow
+              key={latest.id}
+              latest={latest}
+              older={older}
+              displayName={(f) => zhFileNames[f.name] ?? f.name}
+              canDelete={canDelete}
+              onDelete={(f) => deletePartnerArchiveFile(f.id, f.storagePath)}
+            />
           ))}
           {files.length === 0 && <p className="text-sm text-[#86868b]">{zh(isZh, "첨부된 자료가 없습니다.")}</p>}
         </div>
@@ -215,6 +382,17 @@ export default function PartnerArchiveTab({ projectId }: { projectId: string }) 
           {uploading ? zh(isZh, "업로드 중...") : zh(isZh, "자료 업로드")}
           <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
         </label>
+        {uploadProgress && (
+          <div className="mt-2 max-w-xs">
+            <p className="mb-1 truncate text-xs text-[#86868b]">
+              {uploadProgress.total > 1 ? `(${uploadProgress.index}/${uploadProgress.total}) ` : ""}
+              {uploadProgress.name} · {uploadProgress.pct}%
+            </p>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#f0f0f0]">
+              <div className="h-full rounded-full bg-[#1d1d1f] transition-all" style={{ width: `${uploadProgress.pct}%` }} />
+            </div>
+          </div>
+        )}
         {uploadError && <p className="mt-1 text-xs text-red-500">{uploadError}</p>}
       </section>
 

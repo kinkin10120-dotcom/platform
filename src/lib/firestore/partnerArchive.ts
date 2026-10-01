@@ -10,7 +10,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { CommentAuthorRole, PartnerArchiveComment, PartnerArchiveFile } from "@/lib/types";
 import { translateForCache } from "@/lib/i18n";
@@ -18,6 +18,11 @@ import { translateForCache } from "@/lib/i18n";
 // 관리자 ↔ 협력사 전용 프로젝트 단위 자료함 — 업무(task)와 무관하다. 클라이언트(고객)는
 // firestore.rules에 이 컬렉션을 아예 허용하지 않아 접근 경로 자체가 없다.
 const filesColRef = collection(db, "partnerArchiveFiles");
+
+// 공장 현장에서 생산 과정 동영상·고화질 사진을 올리는 경우를 감안한 한도 — 중국 등 해외
+// 협력사의 느린 네트워크 환경에서 큰 파일이 끝없이 업로드되다 실패하는 걸 막기 위해 업로드
+// 전에 미리 걸러낸다.
+export const PARTNER_ARCHIVE_MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const commentsColRef = collection(db, "partnerArchiveComments");
 
 function fileFromDoc(d: any): PartnerArchiveFile {
@@ -89,12 +94,23 @@ export async function uploadPartnerArchiveFile(
   projectId: string,
   file: File,
   uploadedBy: string,
-  uploadedByName: string
+  uploadedByName: string,
+  onProgress?: (ratio: number) => void
 ) {
+  if (file.size > PARTNER_ARCHIVE_MAX_FILE_SIZE) {
+    throw new Error(`파일이 너무 큽니다 (${Math.round(file.size / 1024 / 1024)}MB). 100MB 이하만 올릴 수 있습니다.`);
+  }
   const storagePath = `partnerArchive/${projectId}/${Date.now()}_${file.name}`;
   const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
+  const url = await new Promise<string>((resolve, reject) => {
+    const uploadTask = uploadBytesResumable(storageRef, file);
+    uploadTask.on(
+      "state_changed",
+      (snap) => onProgress?.(snap.bytesTransferred / snap.totalBytes),
+      reject,
+      () => getDownloadURL(uploadTask.snapshot.ref).then(resolve, reject)
+    );
+  });
 
   const existingSnap = await getDocs(
     query(filesColRef, where("projectId", "==", projectId), where("name", "==", file.name))

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, ExternalLink } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
@@ -47,6 +47,8 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
     { href: "/my-supplier-orders", label: zh(isZh, "발주 목록"), icon: ShoppingCart, show: isPartner },
     { href: "/my-archive", label: zh(isZh, "자료함"), icon: Lock, show: isPartner },
+    // 별도 앱(work-intake, intake.handyhand.co.kr) — 사진·메모를 빠르게 자료함에 올리는 용도.
+    { href: "https://intake.handyhand.co.kr", label: zh(isZh, "정리 도구"), icon: ExternalLink, show: isPartner },
     { href: "/notification-settings", label: zh(isZh, "알림 설정"), icon: Bell, show: true },
     { href: "/notices", label: zh(isZh, "공지사항"), icon: Megaphone, show: true },
   ];
@@ -138,7 +140,8 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
 
       <nav className="flex-1 space-y-0.5 px-3 pt-4">
         {orderedItems.map((item, index) => {
-          const active = pathname?.startsWith(item.href);
+          const isExternal = item.href.startsWith("http");
+          const active = !isExternal && pathname?.startsWith(item.href);
           const Icon = item.icon;
           return (
             <div
@@ -155,9 +158,15 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
               }`}
             >
               <Icon size={16} className="shrink-0" />
-              <Link href={item.href} draggable={false} className="flex-1" onClick={() => onClose?.()}>
-                {item.label}
-              </Link>
+              {isExternal ? (
+                <a href={item.href} target="_blank" rel="noopener noreferrer" draggable={false} className="flex-1">
+                  {item.label}
+                </a>
+              ) : (
+                <Link href={item.href} draggable={false} className="flex-1" onClick={() => onClose?.()}>
+                  {item.label}
+                </Link>
+              )}
             </div>
           );
         })}

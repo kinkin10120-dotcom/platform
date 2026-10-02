@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import {
   uploadPartnerArchiveFile,
   addPartnerArchiveComment,
@@ -51,12 +51,14 @@ import { downloadCsv } from "@/lib/csvExport";
 interface TaskCandidate {
   taskId: string;
   taskName: string;
+  taskNameZh?: string;
   status: string;
   description?: string;
 }
 interface ProjectCandidate {
   projectId: string;
   projectName: string;
+  projectNameZh?: string;
   clientName: string;
   tasks: TaskCandidate[];
 }
@@ -269,10 +271,17 @@ export default function OrganizePage() {
           list.push({
             projectId: p.id,
             projectName: pd.name,
+            projectNameZh: pd.nameZh || undefined,
             clientName: pd.clientDisplayName ?? "",
             tasks: tasksSnap.docs
               .filter((t) => !t.data().hiddenFromPartner)
-              .map((t) => ({ taskId: t.id, taskName: t.data().name, status: t.data().status, description: t.data().description || undefined })),
+              .map((t) => ({
+                taskId: t.id,
+                taskName: t.data().name,
+                taskNameZh: t.data().nameZh || undefined,
+                status: t.data().status,
+                description: t.data().description || undefined,
+              })),
           });
         }
       }
@@ -766,6 +775,10 @@ function OrganizeItemCard({
   const first = items[0];
   const project = candidates.find((p) => p.projectId === first.selectedProjectId);
   const tasks = project?.tasks ?? [];
+  const zhProjectNames = useZhAutoTranslate(isZh, candidates.map((p) => p.projectName));
+  const zhTaskNames = useZhAutoTranslate(isZh, tasks.map((t) => t.taskName));
+  const trProjectName = (p: ProjectCandidate) => (isZh && p.projectNameZh) || zhProjectNames[p.projectName] || p.projectName;
+  const trTaskName = (t: TaskCandidate) => (isZh && t.taskNameZh) || zhTaskNames[t.taskName] || t.taskName;
 
   return (
     <div className="space-y-2 rounded-2xl bg-white p-4">
@@ -802,7 +815,7 @@ function OrganizeItemCard({
               <option value="">{zh(isZh, "프로젝트 선택...")}</option>
               {sortProjectsByUsage(candidates.map((p) => ({ id: p.projectId }))).map((p) => {
                 const full = candidates.find((c) => c.projectId === p.id)!;
-                return <option key={full.projectId} value={full.projectId}>{full.projectName}</option>;
+                return <option key={full.projectId} value={full.projectId}>{trProjectName(full)}</option>;
               })}
             </select>
             <select
@@ -813,7 +826,7 @@ function OrganizeItemCard({
             >
               <option value="">{zh(isZh, "업무 선택 안 함(프로젝트 전체)")}</option>
               {tasks.map((t) => (
-                <option key={t.taskId} value={t.taskId}>{t.taskName}</option>
+                <option key={t.taskId} value={t.taskId}>{trTaskName(t)}</option>
               ))}
             </select>
           </div>
@@ -970,6 +983,8 @@ function OrganizeRecentUploads({
 }
 
 function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectCandidate[]; isZh: boolean; lang: "ko" | "zh" }) {
+  const zhProjectNames = useZhAutoTranslate(isZh, candidates.map((p) => p.projectName));
+  const trProjectName = (p: ProjectCandidate) => (isZh && p.projectNameZh) || zhProjectNames[p.projectName] || p.projectName;
   const [open, setOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [days, setDays] = useState(7);
@@ -1038,7 +1053,7 @@ function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectC
           <div className="flex gap-2">
             <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} className="flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]">
               <option value="">{zh(isZh, "프로젝트 선택...")}</option>
-              {candidates.map((p) => <option key={p.projectId} value={p.projectId}>{p.projectName}</option>)}
+              {candidates.map((p) => <option key={p.projectId} value={p.projectId}>{trProjectName(p)}</option>)}
             </select>
             <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-xl border border-[#d1d1d6] px-2 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]">
               <option value={7}>{zh(isZh, "최근 7일")}</option>

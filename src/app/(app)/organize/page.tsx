@@ -660,7 +660,11 @@ export default function OrganizePage() {
                     <label className="mb-1.5 block text-xs text-[#86868b]">
                       {zh(isZh, "또는 파일 여러 개 (사진·영상 등, 한 번에 여러 개 선택 가능 — 이 영역에 끌어다 놓아도 됩니다)")}
                     </label>
-                    <input type="file" multiple onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="w-full text-sm text-[#1d1d1f]" />
+                    <label className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                      <Paperclip size={14} />
+                      {zh(isZh, "파일 선택")}
+                      <input type="file" multiple onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="hidden" />
+                    </label>
                     <label className="mt-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
                       <Camera size={14} />
                       {zh(isZh, "카메라로 바로 촬영")}

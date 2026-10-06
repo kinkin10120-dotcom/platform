@@ -33,16 +33,17 @@ export interface Client {
 }
 
 export type ProjectStatus = "active" | "on_hold" | "completed";
-export type ProjectType = "dev" | "mass" | "package" | "detail_page";
+export type ProjectType = "dev" | "mass" | "package" | "detail_page" | "mold";
 
 export const PROJECT_TYPE_LABEL: Record<ProjectType, string> = {
   dev: "개발",
   mass: "양산",
   package: "패키지",
   detail_page: "상세페이지",
+  mold: "금형",
 };
 
-export const ALL_PROJECT_TYPES: ProjectType[] = ["dev", "mass", "package", "detail_page"];
+export const ALL_PROJECT_TYPES: ProjectType[] = ["dev", "mass", "package", "detail_page", "mold"];
 
 export interface Project {
   id: string;

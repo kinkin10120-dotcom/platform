@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Package, FileText } from "lucide-react";
+import { FileText, Package, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import PdfPageScaler from "@/components/PdfPageScaler";
+import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-[#f5f5f7] text-[#86868b]",
@@ -23,6 +24,7 @@ export default function MySupplierOrdersPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [previewOrder, setPreviewOrder] = useState<SupplierOrder | null>(null);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -101,14 +103,13 @@ export default function MySupplierOrdersPage() {
                 <p className="text-xs text-[#86868b]">
                   {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
                 </p>
-                <Link
-                  href={`/supplier-orders/${o.id}/print`}
-                  target="_blank"
+                <button
+                  onClick={() => setPreviewOrder(o)}
                   className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
                 >
                   <FileText size={12} />
                   {zh(isZh, "미리보기 / PDF")}
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -155,6 +156,24 @@ export default function MySupplierOrdersPage() {
           </div>
         ))}
       </div>
+
+      {previewOrder && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setPreviewOrder(null)}>
+          <div className="mx-auto mb-4 flex w-full max-w-[210mm] items-center px-4">
+            <button
+              onClick={() => setPreviewOrder(null)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <PdfPageScaler>
+              <SupplierOrderDocument data={{ ...previewOrder, createdAt: previewOrder.createdAt }} />
+            </PdfPageScaler>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

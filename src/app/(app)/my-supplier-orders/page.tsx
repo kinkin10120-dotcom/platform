@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Package, X } from "lucide-react";
+import Link from "next/link";
+import { FileText, Package, Printer } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
@@ -24,7 +25,7 @@ export default function MySupplierOrdersPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [previewOrder, setPreviewOrder] = useState<SupplierOrder | null>(null);
+  const [previewOrderId, setPreviewOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -104,11 +105,11 @@ export default function MySupplierOrdersPage() {
                   {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
                 </p>
                 <button
-                  onClick={() => setPreviewOrder(o)}
+                  onClick={() => setPreviewOrderId((prev) => (prev === o.id ? null : o.id))}
                   className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
                 >
                   <FileText size={12} />
-                  {zh(isZh, "미리보기 / PDF")}
+                  {previewOrderId === o.id ? zh(isZh, "접기") : zh(isZh, "미리보기")}
                 </button>
               </div>
             </div>
@@ -153,27 +154,29 @@ export default function MySupplierOrdersPage() {
             {o.memo && (
               <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
             )}
+
+            {/* 모달 오버레이 대신 같은 카드 안에서 바로 펼쳐 보여준다 — 실제 인쇄/PDF 저장은
+                (app) 레이아웃(사이드바·상단바) 안에서 하면 숨긴 요소가 자리를 차지해 빈
+                두 번째 장이 생기는 문제가 있어, 여전히 전용 인쇄 페이지로 연결한다. */}
+            {previewOrderId === o.id && (
+              <div className="mt-4 overflow-x-auto rounded-2xl border border-[#f0f0f0] bg-[#f5f5f7] p-4">
+                <div className="mb-3 flex justify-end">
+                  <Link
+                    href={`/supplier-orders/${o.id}/print`}
+                    target="_blank"
+                    className="flex items-center gap-1 rounded-full bg-[#1d1d1f] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-black"
+                  >
+                    <Printer size={12} /> {zh(isZh, "인쇄 / PDF 저장")}
+                  </Link>
+                </div>
+                <PdfPageScaler>
+                  <SupplierOrderDocument data={{ ...o, createdAt: o.createdAt }} />
+                </PdfPageScaler>
+              </div>
+            )}
           </div>
         ))}
       </div>
-
-      {previewOrder && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setPreviewOrder(null)}>
-          <div className="mx-auto mb-4 flex w-full max-w-[210mm] items-center px-4">
-            <button
-              onClick={() => setPreviewOrder(null)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          <div onClick={(e) => e.stopPropagation()}>
-            <PdfPageScaler>
-              <SupplierOrderDocument data={{ ...previewOrder, createdAt: previewOrder.createdAt }} />
-            </PdfPageScaler>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

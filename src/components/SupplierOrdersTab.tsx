@@ -199,7 +199,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         costItems: sp.costItems,
         clientName: sp.clientName,
         orderKind: sp.orderKind,
-        subtitle: sp.clientName ? `매입 전용 · ${sp.clientName}` : "매입 전용",
+        subtitle: sp.clientName ?? "",
       });
     }
     return list;
@@ -430,8 +430,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                       <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
                     </div>
                     <p className="mt-0.5 truncate text-xs text-[#86868b]">
-                      {e.subtitle}
-                      {e.nameEn ? ` · ${e.nameEn}` : ""}
+                      {[e.subtitle, e.nameEn].filter(Boolean).join(" · ")}
                     </p>
                     {(e.costItems ?? []).length > 0 && (
                       <p className="mt-0.5 text-xs text-[#d1d1d6]">

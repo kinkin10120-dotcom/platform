@@ -45,7 +45,10 @@ export default function MyInvoicesPage() {
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
   const [showForm, setShowForm] = useState(false);
-  const [currency, setCurrency] = useState<SupplierCurrency>("USD");
+  const [currencyChoice, setCurrencyChoice] = useState<SupplierCurrency>("USD");
+  // 중국 협력사 계정은 결국 위안화로 받으므로 고를 필요 없이 고정한다 — 선택지를 보여주면
+  // 실수로 USD/KRW를 고를 위험만 생긴다.
+  const currency: SupplierCurrency = isZh ? "CNY" : currencyChoice;
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [customItems, setCustomItems] = useState<{ id: string; description: string; amount: number; projectId: string }[]>([]);
   const [memo, setMemo] = useState("");
@@ -221,15 +224,19 @@ export default function MyInvoicesPage() {
         <div className="space-y-4 rounded-3xl bg-white p-5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "청구서 작성")}</p>
-            <select
-              value={currency}
-              onChange={(e) => { setCurrency(e.target.value as SupplierCurrency); setSelectedOrderIds([]); }}
-              className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
-            >
-              <option value="USD">USD $</option>
-              <option value="CNY">CNY ¥</option>
-              <option value="KRW">KRW 원</option>
-            </select>
+            {isZh ? (
+              <span className="rounded-xl border border-[#d1d1d6] bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-[#1d1d1f]">CNY ¥</span>
+            ) : (
+              <select
+                value={currencyChoice}
+                onChange={(e) => { setCurrencyChoice(e.target.value as SupplierCurrency); setSelectedOrderIds([]); }}
+                className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+              >
+                <option value="USD">USD $</option>
+                <option value="CNY">CNY ¥</option>
+                <option value="KRW">KRW 원</option>
+              </select>
+            )}
           </div>
 
           <div>

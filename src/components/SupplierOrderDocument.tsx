@@ -18,6 +18,7 @@ export interface SupplierOrderDocumentData {
   memo?: string;
   lotNo?: string;
   installmentType?: "deposit" | "balance" | "full";
+  installmentPercent?: number;
   createdAt: number;
 }
 
@@ -183,6 +184,17 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
             <span>{L("合计 / Total", "합 계")}</span>
             <span>{formatSupplierMoney(total, data.currency)}</span>
           </div>
+          {/* 선금/잔금으로 나눠 이번 차수엔 전체 중 일부만 청구할 때 — 품목 표는 전체 금액
+              그대로 두고(단가×수량 합계가 "합계"와 어긋나 보이면 안 됨), 이번에 실제로
+              청구할 금액만 별도 줄로 추가한다. */}
+          {data.installmentPercent != null && data.installmentPercent < 100 && (
+            <div className="flex items-center justify-between text-sm font-semibold text-blue-600">
+              <span>
+                {L("本次请款", "이번 청구")} ({data.installmentType ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType] : ""} {data.installmentPercent}%)
+              </span>
+              <span>{formatSupplierMoney(total * (data.installmentPercent / 100), data.currency)}</span>
+            </div>
+          )}
           {/* 환율은 우리 원가 관리용이라 참고값으로만 작게 남긴다 — 공장이 받을 금액은 위 합계다. */}
           {data.exchangeRate ? (
             <p className="pt-1 text-right text-[10px] text-[#d1d1d6]">

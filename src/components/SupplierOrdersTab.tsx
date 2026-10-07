@@ -1144,9 +1144,13 @@ function SupplierOrderComposer({
   // 새로 만들 때만 자동 로트번호를 쓴다 — 로트번호 없이 저장됐던 발주를 수정하다 오늘 날짜의
   // 새 번호가 붙으면, 이미 공장에 나간 발주서와 번호가 달라진다.
   const effectiveLotNo = lotNo.trim() || (editing ? "" : autoLotNo);
-  // 개발비(금형·시제품)를 선금/잔금으로 나눠 따로 발주할 때만 쓴다 — 목록·청구서 선택
-  // 화면에 라벨로만 보이고, 결제·청구 로직에 영향은 없다.
+  // 개발비(금형·시제품)를 선금/잔금/완납으로 나눠 따로 발주할 때만 쓴다. 완납이거나 구분을
+  // 안 두면 100%(전액) 그대로고, 선금/잔금을 고르면 이번 차수에 실제로 청구할 비율을
+  // 추가로 고른다 — 기본 50%지만 30/70처럼 다르게 나눌 수도 있어 직접 입력하게 둔다.
   const [installmentType, setInstallmentType] = useState<"" | "deposit" | "balance" | "full">(editing?.installmentType ?? "");
+  const [installmentPercent, setInstallmentPercent] = useState(String(editing?.installmentPercent ?? 50));
+  const effectiveInstallmentPercent =
+    installmentType === "deposit" || installmentType === "balance" ? Math.min(100, Math.max(1, Number(installmentPercent) || 50)) : undefined;
   const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
   const [linkedProjectId, setLinkedProjectId] = useState(editing?.linkedProjectId ?? "");
   // 이 발주서를 실제로 받는 협력사 계정 — 연동해두면 그 계정이 플랫폼에서 직접 조회 가능.
@@ -1343,6 +1347,7 @@ function SupplierOrderComposer({
           memo: memo.trim() || undefined,
           lotNo: effectiveLotNo,
           installmentType: installmentType || undefined,
+          installmentPercent: effectiveInstallmentPercent,
           // 고객 발주 목록이 아직 안 왔거나 연결된 발주가 지워진 경우, 사용자가 건드리지도
           // 않은 연결이 조용히 끊기면 안 된다 — 선택값이 그대로면 원래 값을 유지한다.
           linkedPurchaseOrderId: linkedPoId ? linkedPo?.id ?? editing.linkedPurchaseOrderId : undefined,
@@ -1368,6 +1373,7 @@ function SupplierOrderComposer({
         memo: memo.trim() || undefined,
         lotNo: effectiveLotNo,
         installmentType: installmentType || undefined,
+        installmentPercent: effectiveInstallmentPercent,
         linkedPurchaseOrderId: linkedPo?.id,
         linkedPurchaseOrderNo: linkedPo?.poNumber,
         linkedProjectId: linkedProject?.id,
@@ -1403,6 +1409,7 @@ function SupplierOrderComposer({
             memo,
             lotNo: effectiveLotNo,
             installmentType: installmentType || undefined,
+            installmentPercent: effectiveInstallmentPercent,
             // 수정 중이면 원래 발주일을 그대로 보여준다 — 오늘 날짜로 보이면 실제 인쇄물과 달라진다.
             createdAt: editing?.createdAt ?? Date.now(),
           }}
@@ -1781,6 +1788,18 @@ function SupplierOrderComposer({
               <option value="balance">잔금</option>
               <option value="full">완납</option>
             </select>
+            {(installmentType === "deposit" || installmentType === "balance") && (
+              <div className="flex items-center gap-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs">
+                <input
+                  value={installmentPercent}
+                  onChange={(e) => setInstallmentPercent(e.target.value.replace(/[^0-9]/g, ""))}
+                  inputMode="numeric"
+                  title="이번 차수에 실제로 청구할 비율 — 발주서 전체 금액은 그대로 두고 청구 금액만 이 비율로 계산됩니다"
+                  className="w-10 bg-transparent text-right outline-none"
+                />
+                <span className="text-[#86868b]">% 청구</span>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

@@ -40,6 +40,7 @@ function fromDoc(d: any): SupplierOrder {
       data.installmentType === "deposit" || data.installmentType === "balance" || data.installmentType === "full"
         ? data.installmentType
         : undefined,
+    installmentPercent: typeof data.installmentPercent === "number" ? data.installmentPercent : undefined,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     partnerId: data.partnerId || undefined,
@@ -71,6 +72,13 @@ export function calcCostsTotal(costs?: SupplierCostItem[]): number {
 
 export function calcSupplierOrderTotal(items: SupplierOrderItem[]): number {
   return items.reduce((sum, it) => sum + calcSupplierItemTotal(it), 0);
+}
+
+// 이번 차수(선금/잔금)에 실제로 청구할 금액 — totalAmount(발주서 전체 금액)는 그대로 두고
+// 비율만 곱한다. installmentPercent가 없으면(완납이거나 구분 자체가 없으면) 전액 그대로.
+export function calcSupplierOrderBilledAmount(order: Pick<SupplierOrder, "totalAmount" | "installmentPercent">): number {
+  const percent = order.installmentPercent ?? 100;
+  return Math.round(order.totalAmount * (percent / 100) * 100) / 100;
 }
 
 export function formatSupplierMoney(amount: number, currency: SupplierCurrency): string {
@@ -125,6 +133,7 @@ export interface CreateSupplierOrderInput {
   linkedProjectName?: string;
   lotNo?: string;
   installmentType?: "deposit" | "balance" | "full";
+  installmentPercent?: number;
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
   partnerId?: string;
@@ -157,6 +166,7 @@ export async function createSupplierOrder(input: CreateSupplierOrderInput) {
     linkedProjectName: input.linkedProjectName ?? "",
     lotNo: input.lotNo ?? "",
     installmentType: input.installmentType ?? null,
+    installmentPercent: input.installmentPercent ?? null,
     linkedPurchaseOrderId: input.linkedPurchaseOrderId ?? "",
     linkedPurchaseOrderNo: input.linkedPurchaseOrderNo ?? "",
     partnerId: input.partnerId ?? "",
@@ -186,6 +196,7 @@ export type SupplierOrderPatch = Partial<
     | "linkedProjectName"
     | "lotNo"
     | "installmentType"
+    | "installmentPercent"
     | "linkedPurchaseOrderId"
     | "linkedPurchaseOrderNo"
     | "partnerId"

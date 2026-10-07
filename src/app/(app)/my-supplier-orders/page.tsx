@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Package, FileText } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal } from "@/lib/firestore/supplierOrders";
+import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
@@ -130,7 +130,14 @@ export default function MySupplierOrdersPage() {
                 {o.leadTimeDays != null && <span>{zh(isZh, "납기")}: {o.leadTimeDays}{zh(isZh, "일")}</span>}
                 {o.paymentTerms && <span>{zh(isZh, "결제조건")}: {o.paymentTerms}</span>}
               </div>
-              <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+              <div className="text-right">
+                <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+                {(o.installmentPercent ?? 100) < 100 && (
+                  <p className="text-xs font-semibold text-blue-600">
+                    {zh(isZh, "이번 청구")} ({o.installmentType ? zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]) : ""} {o.installmentPercent}%): {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                  </p>
+                )}
+              </div>
             </div>
 
             {o.packingNote && (

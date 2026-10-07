@@ -6,7 +6,7 @@ import { collection, documentId, getDocs, query, where } from "firebase/firestor
 import { Eye, FileText, Plus, Receipt, Trash2, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierOrdersByPartner, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
+import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import {
   listenSupplierInvoicesByPartner,
   createSupplierInvoice,
@@ -113,7 +113,7 @@ export default function MyInvoicesPage() {
     outstandingOrders.forEach((o) => {
       const key = o.linkedProjectId || "__none__";
       const entry = map.get(key) ?? { name: o.linkedProjectName ? trProjectName(o.linkedProjectName) : zh(isZh, "프로젝트 미지정"), totals: {} };
-      entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + o.totalAmount;
+      entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + calcSupplierOrderBilledAmount(o);
       map.set(key, entry);
     });
     return Array.from(map.values());
@@ -136,7 +136,7 @@ export default function MyInvoicesPage() {
   }
 
   const selectedOrders = orders.filter((o) => selectedOrderIds.includes(o.id));
-  const total = selectedOrders.reduce((sum, o) => sum + o.totalAmount, 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const total = selectedOrders.reduce((sum, o) => sum + calcSupplierOrderBilledAmount(o), 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
 
   function buildItems(): SupplierInvoiceLineItem[] {
     return [
@@ -148,7 +148,7 @@ export default function MyInvoicesPage() {
         linkedProjectId: o.linkedProjectId,
         linkedProjectName: o.linkedProjectName,
         description: `${o.installmentType ? `[${SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]}] ` : ""}${o.items.map((it) => it.name).join(", ") || o.soNumber}`,
-        amount: o.totalAmount,
+        amount: calcSupplierOrderBilledAmount(o),
       })),
       ...customItems
         .filter((c) => c.description.trim() && c.amount > 0)
@@ -287,7 +287,16 @@ export default function MyInvoicesPage() {
                       </span>
                     )}
                   </span>
-                  <span className="shrink-0 font-medium text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</span>
+                  <span className="shrink-0 text-right font-medium text-[#1d1d1f]">
+                    {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                    {(o.installmentPercent ?? 100) < 100 && (
+                      <span className="ml-1 block text-[10px] font-normal text-[#86868b]">
+                        {isZh
+                          ? `全部 ${formatSupplierMoney(o.totalAmount, o.currency)} 的 ${o.installmentPercent}%`
+                          : `전체 ${formatSupplierMoney(o.totalAmount, o.currency)}의 ${o.installmentPercent}%`}
+                      </span>
+                    )}
+                  </span>
                 </label>
               ))}
               {(outstandingByCurrency.get(currency) ?? []).length === 0 && (

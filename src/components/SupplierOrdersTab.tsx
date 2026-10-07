@@ -506,7 +506,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                   </span>
                 )}
                 {o.installmentType && (
-                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
                     {SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]}
                   </span>
                 )}
@@ -1146,7 +1146,7 @@ function SupplierOrderComposer({
   const effectiveLotNo = lotNo.trim() || (editing ? "" : autoLotNo);
   // 개발비(금형·시제품)를 선금/잔금으로 나눠 따로 발주할 때만 쓴다 — 목록·청구서 선택
   // 화면에 라벨로만 보이고, 결제·청구 로직에 영향은 없다.
-  const [installmentType, setInstallmentType] = useState<"" | "deposit" | "balance">(editing?.installmentType ?? "");
+  const [installmentType, setInstallmentType] = useState<"" | "deposit" | "balance" | "full">(editing?.installmentType ?? "");
   const [linkedPoId, setLinkedPoId] = useState(editing?.linkedPurchaseOrderId ?? "");
   const [linkedProjectId, setLinkedProjectId] = useState(editing?.linkedProjectId ?? "");
   // 이 발주서를 실제로 받는 협력사 계정 — 연동해두면 그 계정이 플랫폼에서 직접 조회 가능.
@@ -1767,17 +1767,19 @@ function SupplierOrderComposer({
               title="자동으로 매겨집니다. 공장이 쓰는 번호가 따로 있으면 덮어쓰세요."
               className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
             />
-            {/* 개발비(금형·시제품)를 선금/잔금으로 나눠 따로 발주할 때만 고른다 — 청구서
-                선택 화면에 라벨로 보여주기 위함일 뿐, 비워두면 아무 영향 없다. */}
+            {/* 개발비(금형·시제품)를 선금/잔금/완납으로 구분해 발주할 때 고른다 — 협력사가
+                이걸 보고 "선금은 들어왔으니 잔금을 청구해야겠다" 판단할 수 있게 하는 라벨일
+                뿐, 비워두면 아무 영향 없다. */}
             <select
               value={installmentType}
-              onChange={(e) => setInstallmentType(e.target.value as "" | "deposit" | "balance")}
-              title="개발비를 선금/잔금으로 나눠 발주할 때만 고르세요"
+              onChange={(e) => setInstallmentType(e.target.value as "" | "deposit" | "balance" | "full")}
+              title="개발비를 선금/잔금/완납으로 구분할 때만 고르세요"
               className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
             >
-              <option value="">선금/잔금 구분 없음</option>
+              <option value="">구분 없음</option>
               <option value="deposit">선금</option>
               <option value="balance">잔금</option>
+              <option value="full">완납</option>
             </select>
           </div>
 
@@ -1958,7 +1960,7 @@ function SupplierOrderDetail({
             </span>
           )}
           {order.installmentType && (
-            <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${order.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
               {SUPPLIER_ORDER_INSTALLMENT_LABEL[order.installmentType]}
             </span>
           )}

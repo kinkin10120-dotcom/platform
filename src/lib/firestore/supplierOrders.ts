@@ -36,7 +36,10 @@ function fromDoc(d: any): SupplierOrder {
     linkedProjectId: data.linkedProjectId || undefined,
     linkedProjectName: data.linkedProjectName || undefined,
     lotNo: data.lotNo || undefined,
-    installmentType: data.installmentType === "deposit" || data.installmentType === "balance" ? data.installmentType : undefined,
+    installmentType:
+      data.installmentType === "deposit" || data.installmentType === "balance" || data.installmentType === "full"
+        ? data.installmentType
+        : undefined,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     partnerId: data.partnerId || undefined,
@@ -121,7 +124,7 @@ export interface CreateSupplierOrderInput {
   linkedProjectId?: string;
   linkedProjectName?: string;
   lotNo?: string;
-  installmentType?: "deposit" | "balance";
+  installmentType?: "deposit" | "balance" | "full";
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
   partnerId?: string;

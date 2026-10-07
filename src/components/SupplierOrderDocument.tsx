@@ -17,7 +17,7 @@ export interface SupplierOrderDocumentData {
   packingNote?: string;
   memo?: string;
   lotNo?: string;
-  installmentType?: "deposit" | "balance";
+  installmentType?: "deposit" | "balance" | "full";
   createdAt: number;
 }
 
@@ -80,7 +80,14 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <Row label={L("订单号 / PO No.", "발주번호")} value={data.soNumber ?? "발행 시 자동 발급"} />
           {data.lotNo && <Row label={L("批次 / Lot", "로트번호")} value={data.lotNo} />}
           {data.installmentType && (
-            <Row label={L("款项 / Installment", "구분")} value={ko ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType] : (data.installmentType === "deposit" ? "定金 / Deposit" : "尾款 / Balance")} />
+            <Row
+              label={L("款项 / Installment", "구분")}
+              value={
+                ko
+                  ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType]
+                  : { deposit: "定金 / Deposit", balance: "尾款 / Balance", full: "全款 / Paid in Full" }[data.installmentType]
+              }
+            />
           )}
           {singleClient && <Row label={L("客户 / Client", "고객사")} value={singleClient} />}
           {singleKind && (

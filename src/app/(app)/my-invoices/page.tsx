@@ -282,7 +282,7 @@ export default function MyInvoicesPage() {
                   <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
                     {o.soNumber}{o.linkedProjectName ? ` · ${trProjectName(o.linkedProjectName)}` : ""}
                     {o.installmentType && (
-                      <span className="ml-1.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                      <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
                         {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
                       </span>
                     )}

@@ -84,7 +84,7 @@ export default function MySupplierOrdersPage() {
                     {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
                   </span>
                   {o.installmentType && (
-                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
                       {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
                     </span>
                   )}

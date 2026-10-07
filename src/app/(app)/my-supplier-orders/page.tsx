@@ -2,13 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, Package, Printer } from "lucide-react";
+import { FileText, Package } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
-import PdfPageScaler from "@/components/PdfPageScaler";
-import SupplierOrderDocument from "@/components/SupplierOrderDocument";
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-[#f5f5f7] text-[#86868b]",
@@ -25,7 +23,6 @@ export default function MySupplierOrdersPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [previewOrderId, setPreviewOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -104,13 +101,16 @@ export default function MySupplierOrdersPage() {
                 <p className="text-xs text-[#86868b]">
                   {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
                 </p>
-                <button
-                  onClick={() => setPreviewOrderId((prev) => (prev === o.id ? null : o.id))}
+                {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
+                    router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
+                    그대로 돌아온다. */}
+                <Link
+                  href={`/supplier-orders/${o.id}/print`}
                   className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
                 >
                   <FileText size={12} />
-                  {previewOrderId === o.id ? zh(isZh, "접기") : zh(isZh, "미리보기")}
-                </button>
+                  {zh(isZh, "미리보기 / PDF")}
+                </Link>
               </div>
             </div>
 
@@ -153,26 +153,6 @@ export default function MySupplierOrdersPage() {
             )}
             {o.memo && (
               <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
-            )}
-
-            {/* 모달 오버레이 대신 같은 카드 안에서 바로 펼쳐 보여준다 — 실제 인쇄/PDF 저장은
-                (app) 레이아웃(사이드바·상단바) 안에서 하면 숨긴 요소가 자리를 차지해 빈
-                두 번째 장이 생기는 문제가 있어, 여전히 전용 인쇄 페이지로 연결한다. */}
-            {previewOrderId === o.id && (
-              <div className="mt-4 overflow-x-auto rounded-2xl border border-[#f0f0f0] bg-[#f5f5f7] p-4">
-                <div className="mb-3 flex justify-end">
-                  <Link
-                    href={`/supplier-orders/${o.id}/print`}
-                    target="_blank"
-                    className="flex items-center gap-1 rounded-full bg-[#1d1d1f] px-4 py-1.5 text-xs font-medium text-white transition hover:bg-black"
-                  >
-                    <Printer size={12} /> {zh(isZh, "인쇄 / PDF 저장")}
-                  </Link>
-                </div>
-                <PdfPageScaler>
-                  <SupplierOrderDocument data={{ ...o, createdAt: o.createdAt }} />
-                </PdfPageScaler>
-              </div>
             )}
           </div>
         ))}

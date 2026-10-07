@@ -218,7 +218,8 @@ service cloud.firestore {
         "inquiry_answered", "quote_request", "quote_response", "purchase_order",
         "order_status_change", "order_cancel_request", "contract_signed",
         "contract_revision_requested", "contract_expiring", "partner_archive",
-        "supplier_invoice_submitted", "supplier_invoice_paid"
+        "supplier_invoice_submitted", "supplier_invoice_paid",
+        "supplier_quote_submitted", "supplier_quote_approved", "supplier_quote_rejected"
       ];
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -347,6 +348,21 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'submitted';
       // 제출 직후 실수를 본인이 되돌리는 것만 허용 — 관리자가 처리(지급완료)한 뒤로는
+      // 협력사가 건드릴 수 없다.
+      allow delete: if isSignedIn() && myProfile().role == 'partner'
+        && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';
+    }
+
+    // ---- 협력사 견적서 (협력사 → HANDYHAND 방향, 아직 발주 전인 건에 대한 사전 제안) ----
+    match /supplierQuotes/{quoteId} {
+      allow read, write: if isAdmin();
+      // 쿼리(where('partnerId','==',내 uid))가 규칙 조건과 정확히 일치해서 list도 안전하다.
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+      allow create: if isSignedIn() && myProfile().role == 'partner'
+        && request.resource.data.partnerId == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'submitted';
+      // 제출 직후 실수를 본인이 되돌리는 것만 허용 — 관리자가 승인/반려 처리한 뒤로는
       // 협력사가 건드릴 수 없다.
       allow delete: if isSignedIn() && myProfile().role == 'partner'
         && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';

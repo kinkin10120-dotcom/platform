@@ -14,6 +14,7 @@ import { downloadCsv } from "@/lib/csvExport";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
 import SupplierOrdersTab from "@/components/SupplierOrdersTab";
 import SupplierInvoicesTab from "@/components/SupplierInvoicesTab";
+import SupplierQuotesTab from "@/components/SupplierQuotesTab";
 import { listenSupplierOrders, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import {
   listenClientProducts,
@@ -73,9 +74,10 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 export default function OrdersPage() {
   const { appUser } = useAuth();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid" | "supplierInvoices">(
-    searchParams.get("tab") === "supplierInvoices" ? "supplierInvoices" : "orders"
-  );
+  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid" | "supplierInvoices" | "supplierQuotes">(() => {
+    const t = searchParams.get("tab");
+    return t === "supplierInvoices" || t === "supplierQuotes" ? t : "orders";
+  });
   // 구매발주서 미리보기 중에는 아래 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
   const [supplierPreviewing, setSupplierPreviewing] = useState(false);
 
@@ -126,6 +128,12 @@ export default function OrdersPage() {
           >
             협력사 청구서
           </button>
+          <button
+            onClick={() => setTab("supplierQuotes")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierQuotes" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            협력사 견적서
+          </button>
         </div>
       </div>
 
@@ -137,6 +145,8 @@ export default function OrdersPage() {
         <SupplierOrdersTab onPreview={setSupplierPreviewing} />
       ) : tab === "supplierInvoices" ? (
         <SupplierInvoicesTab />
+      ) : tab === "supplierQuotes" ? (
+        <SupplierQuotesTab />
       ) : (
         <UnpaidInstallmentsTab />
       )}

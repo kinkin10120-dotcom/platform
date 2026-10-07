@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
@@ -45,6 +45,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: isClient },
     { href: "/my-contracts", label: "계약", icon: FileSignature, show: isClient },
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
+    { href: "/my-quotes", label: zh(isZh, "견적서"), icon: Calculator, show: isPartner },
     { href: "/my-supplier-orders", label: zh(isZh, "발주 목록"), icon: ShoppingCart, show: isPartner },
     { href: "/my-invoices", label: zh(isZh, "청구서"), icon: Receipt, show: isPartner },
     { href: "/my-archive", label: zh(isZh, "자료함"), icon: Lock, show: isPartner },

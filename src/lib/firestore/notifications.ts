@@ -51,6 +51,7 @@ export async function createNotification(input: {
   orderId?: string;
   invoiceIndex?: number;
   supplierInvoiceId?: string;
+  supplierQuoteId?: string;
   type: NotificationType;
   message: string;
   details?: string[];

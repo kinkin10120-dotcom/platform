@@ -280,7 +280,10 @@ export type NotificationType =
   | "contract_expiring"
   | "partner_archive"
   | "supplier_invoice_submitted"
-  | "supplier_invoice_paid";
+  | "supplier_invoice_paid"
+  | "supplier_quote_submitted"
+  | "supplier_quote_approved"
+  | "supplier_quote_rejected";
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   assigned: "업무 배정",
@@ -306,6 +309,9 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   partner_archive: "협력사 자료함 활동",
   supplier_invoice_submitted: "협력사 청구서 제출",
   supplier_invoice_paid: "청구서 지급 완료",
+  supplier_quote_submitted: "협력사 견적서 제출",
+  supplier_quote_approved: "견적서 승인됨",
+  supplier_quote_rejected: "견적서 반려됨",
 };
 
 export interface AppNotification {
@@ -318,6 +324,7 @@ export interface AppNotification {
   invoiceIndex?: number; // 청구서 발행 알림일 때만 설정 (회차 인덱스)
   contractId?: string; // 계약 서명/수정요청 알림용
   supplierInvoiceId?: string; // 협력사 청구서 제출/지급완료 알림용
+  supplierQuoteId?: string; // 협력사 견적서 제출/승인/반려 알림용
   type: NotificationType;
   message: string;
   read: boolean;
@@ -841,5 +848,54 @@ export interface SupplierInvoice {
   receiptUrl?: string;
   receiptStoragePath?: string;
   receiptName?: string;
+  createdBy: string;
+}
+
+// 협력사 → HANDYHAND 견적서. 청구서(supplierInvoices)가 "이미 발주된 건을 얼마 달라"는
+// 거라면, 이건 아직 발주 전인 건에 대해 "이 가격에 만들 수 있다"고 먼저 제안하는 것이다.
+// 관리자가 승인하면 그 내용 그대로 매입 발주서(SupplierOrder, 작성중 상태)가 자동 생성되어,
+// 다시 입력할 필요 없이 바로 거기서 검토·발행하면 된다.
+export type SupplierQuoteStatus = "submitted" | "approved" | "rejected";
+
+export const SUPPLIER_QUOTE_STATUS_LABEL: Record<SupplierQuoteStatus, string> = {
+  submitted: "검토 대기",
+  approved: "승인됨",
+  rejected: "반려됨",
+};
+
+export interface SupplierQuoteItem {
+  id: string;
+  name: string;
+  // 중국 협력사가 중국어로 입력했을 때의 한국어 번역 — 관리자는 항상 이 값(없으면 원문)을
+  // 본다. memoKo와 같은 방식.
+  nameKo?: string;
+  nameEn?: string;
+  spec?: string;
+  unit?: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface SupplierQuote {
+  id: string;
+  quoteNumber: string;
+  partnerId: string;
+  partnerName: string;
+  currency: SupplierCurrency;
+  items: SupplierQuoteItem[];
+  totalAmount: number;
+  orderKind?: SupplierOrderKind;
+  linkedProjectId?: string;
+  linkedProjectName?: string;
+  memo?: string;
+  memoKo?: string;
+  status: SupplierQuoteStatus;
+  submittedAt: number;
+  decidedAt?: number;
+  decidedBy?: string;
+  rejectReason?: string;
+  // 승인 시 자동 생성된 매입 발주서 id — 협력사 쪽 이력에서 "그 발주서로 이어졌다"는 걸
+  // 바로 찾아갈 수 있게 남겨둔다.
+  linkedSupplierOrderId?: string;
   createdBy: string;
 }

@@ -31,6 +31,9 @@ const ALL_TYPES: NotificationType[] = [
   "partner_archive",
   "supplier_invoice_submitted",
   "supplier_invoice_paid",
+  "supplier_quote_submitted",
+  "supplier_quote_approved",
+  "supplier_quote_rejected",
 ];
 
 const TYPE_DESC: Record<NotificationType, string> = {
@@ -57,6 +60,9 @@ const TYPE_DESC: Record<NotificationType, string> = {
   partner_archive: "협력사 자료함에 새 파일이 올라오거나 코멘트가 달렸을 때",
   supplier_invoice_submitted: "협력사가 청구서를 제출했을 때",
   supplier_invoice_paid: "제출한 청구서가 지급 완료 처리되었을 때",
+  supplier_quote_submitted: "협력사가 견적서를 제출했을 때",
+  supplier_quote_approved: "제출한 견적서가 승인되었을 때",
+  supplier_quote_rejected: "제출한 견적서가 반려되었을 때",
 };
 
 export default function NotificationSettingsPage() {

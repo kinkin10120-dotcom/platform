@@ -80,6 +80,12 @@ export default function NotificationBell() {
     } else if (n.type === "supplier_invoice_paid") {
       setOpen(false);
       router.push("/my-invoices");
+    } else if (n.type === "supplier_quote_submitted") {
+      setOpen(false);
+      router.push("/orders?tab=supplierQuotes");
+    } else if (n.type === "supplier_quote_approved" || n.type === "supplier_quote_rejected") {
+      setOpen(false);
+      router.push("/my-quotes");
     }
   }
 

@@ -398,69 +398,91 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
           </div>
         )}
 
-        {grouped.map(([supplier, rows]) => (
-          <div key={supplier} className="overflow-hidden rounded-3xl bg-white">
-            <div className="flex items-center justify-between border-b border-[#f0f0f0] px-5 py-3">
-              <p className="font-semibold text-[#1d1d1f]">{supplier}</p>
-              <span className="text-xs text-[#86868b]">{rows.length}개 품목</span>
-            </div>
-            {rows.map((e) => {
-              // 부대비용은 금액 × 개수다 — calcCostsTotal과 같은 기준으로 계산해야 다른 화면과 안 어긋난다.
-              const costTotal = calcCostsTotal(e.costItems);
-              return (
-                <div key={`${e.kind}-${e.id}`} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
-                  <div className="flex items-start justify-between gap-3">
-                    {e.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={e.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                            e.orderKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
-                          }`}
-                        >
-                          {SUPPLIER_ORDER_KIND_LABEL[e.orderKind ?? "production"]}
-                        </span>
-                        <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
-                      </div>
-                      <p className="mt-0.5 truncate text-xs text-[#86868b]">
-                        {e.subtitle}
-                        {e.nameEn ? ` · ${e.nameEn}` : ""}
-                      </p>
-                      {(e.costItems ?? []).length > 0 && (
-                        <p className="mt-0.5 text-xs text-[#d1d1d6]">
-                          부대비용 {e.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, e.currency)}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-start gap-2">
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-[#1d1d1f]">
-                          {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "단가 미입력"}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[#d1d1d6]">매입 단가</p>
-                      </div>
-                      <button
-                        onClick={() => setEditingId((prev) => (prev === e.id ? null : e.id))}
-                        className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
-                        title="매입 정보 수정"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  {editingId === e.id && (
-                    <div className="mt-3 border-t border-[#f0f0f0] pt-3">
-                      <PurchaseInfoEditor entry={e} supplierNames={supplierNames} clientNameOptions={clientNameOptions} onDone={() => setEditingId(null)} />
-                    </div>
+        {grouped.map(([supplier, rows]) => {
+          // 같은 발주처라도 생산용/개발용 품목은 성격이 달라 섞여 있으면 한눈에 구분하기
+          // 어렵다 — 묶음 안에서 다시 생산/개발로 나눠 보여준다.
+          const productionRows = rows.filter((e) => (e.orderKind ?? "production") === "production");
+          const developmentRows = rows.filter((e) => e.orderKind === "development");
+          const renderRow = (e: CatalogEntry) => {
+            // 부대비용은 금액 × 개수다 — calcCostsTotal과 같은 기준으로 계산해야 다른 화면과 안 어긋난다.
+            const costTotal = calcCostsTotal(e.costItems);
+            return (
+              <div key={`${e.kind}-${e.id}`} className="border-b border-[#f5f5f7] px-5 py-3 last:border-b-0">
+                <div className="flex items-start justify-between gap-3">
+                  {e.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={e.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
                   )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                          e.orderKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
+                        }`}
+                      >
+                        {SUPPLIER_ORDER_KIND_LABEL[e.orderKind ?? "production"]}
+                      </span>
+                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-[#86868b]">
+                      {e.subtitle}
+                      {e.nameEn ? ` · ${e.nameEn}` : ""}
+                    </p>
+                    {(e.costItems ?? []).length > 0 && (
+                      <p className="mt-0.5 text-xs text-[#d1d1d6]">
+                        부대비용 {e.costItems!.length}건 · 최대 {formatSupplierMoney(costTotal, e.currency)}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-start gap-2">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-[#1d1d1f]">
+                        {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "단가 미입력"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#d1d1d6]">매입 단가</p>
+                    </div>
+                    <button
+                      onClick={() => setEditingId((prev) => (prev === e.id ? null : e.id))}
+                      className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                      title="매입 정보 수정"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        ))}
+                {editingId === e.id && (
+                  <div className="mt-3 border-t border-[#f0f0f0] pt-3">
+                    <PurchaseInfoEditor entry={e} supplierNames={supplierNames} clientNameOptions={clientNameOptions} onDone={() => setEditingId(null)} />
+                  </div>
+                )}
+              </div>
+            );
+          };
+          return (
+            <div key={supplier} className="overflow-hidden rounded-3xl bg-white">
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-5 py-3">
+                <p className="font-semibold text-[#1d1d1f]">{supplier}</p>
+                <span className="text-xs text-[#86868b]">{rows.length}개 품목</span>
+              </div>
+              {productionRows.length > 0 && (
+                <>
+                  <p className="bg-[#fafafa] px-5 py-1.5 text-[11px] font-medium text-[#86868b]">
+                    {SUPPLIER_ORDER_KIND_LABEL.production} {productionRows.length}
+                  </p>
+                  {productionRows.map(renderRow)}
+                </>
+              )}
+              {developmentRows.length > 0 && (
+                <>
+                  <p className="bg-[#fafafa] px-5 py-1.5 text-[11px] font-medium text-violet-600">
+                    {SUPPLIER_ORDER_KIND_LABEL.development} {developmentRows.length}
+                  </p>
+                  {developmentRows.map(renderRow)}
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* 오른쪽 — 발행한 구매발주 목록 */}

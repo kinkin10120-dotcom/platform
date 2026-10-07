@@ -366,6 +366,14 @@ service cloud.firestore {
       // 협력사가 건드릴 수 없다.
       allow delete: if isSignedIn() && myProfile().role == 'partner'
         && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';
+      // 가격이 나중에 조정되는 경우가 많아 내용 수정을 허용한다 — 단, 관리자가 아직
+      // 검토 전(submitted)일 때만, 그리고 소유자·상태·작성자는 이 수정으로 못 바꾼다
+      // (상태를 끼워 넣어 승인된 것처럼 만드는 경로를 원천적으로 막는다).
+      allow update: if isSignedIn() && myProfile().role == 'partner'
+        && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted'
+        && request.resource.data.partnerId == resource.data.partnerId
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.createdBy == resource.data.createdBy;
     }
 
     // ---- 협력사 자료함 (관리자 ↔ 협력사 전용, 업무와 무관한 프로젝트 단위 공간) ----

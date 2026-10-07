@@ -135,6 +135,28 @@ export async function deleteSupplierQuote(id: string) {
   return deleteDoc(doc(db, "supplierQuotes", id));
 }
 
+export type UpdateSupplierQuoteInput = Pick<
+  CreateSupplierQuoteInput,
+  "currency" | "items" | "orderKind" | "linkedProjectId" | "linkedProjectName" | "memo" | "memoKo"
+>;
+
+// 협력사 본인이 "검토 대기" 상태일 때만 수정할 수 있다 — 가격이 나중에 조정되는 경우가
+// 많아서 생긴 기능이지만, 관리자가 이미 승인/반려 판단을 내린 뒤에 내용이 바뀌면 안 되므로
+// 제출 직후(아직 검토 전) 상태로만 제한한다(Firestore 규칙에서도 동일하게 강제한다).
+export async function updateSupplierQuote(id: string, input: UpdateSupplierQuoteInput) {
+  const totalAmount = calcSupplierQuoteTotal(input.items);
+  return updateDoc(doc(db, "supplierQuotes", id), {
+    currency: input.currency,
+    items: input.items,
+    totalAmount,
+    orderKind: input.orderKind ?? null,
+    linkedProjectId: input.linkedProjectId ?? "",
+    linkedProjectName: input.linkedProjectName ?? "",
+    memo: input.memo ?? "",
+    memoKo: input.memoKo ?? "",
+  });
+}
+
 // 관리자 전용 — 승인하면 같은 내용으로 매입 발주서(작성중 상태)를 자동 생성해, 다시
 // 입력할 필요 없이 거기서 바로 검토·발행만 하면 되게 한다.
 export async function approveSupplierQuote(quote: SupplierQuote, decidedBy: string) {

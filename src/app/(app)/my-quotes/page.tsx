@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { Calculator, Eye, FileText, Plus, Trash2, X } from "lucide-react";
+import { Calculator, ChevronDown, ChevronUp, Eye, FileText, Pencil, Plus, Trash2, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierQuotesByPartner, createSupplierQuote, deleteSupplierQuote } from "@/lib/firestore/supplierQuotes";
+import { listenSupplierQuotesByPartner, createSupplierQuote, updateSupplierQuote, deleteSupplierQuote } from "@/lib/firestore/supplierQuotes";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import {
   SupplierQuote,
@@ -21,6 +21,8 @@ import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from 
 import NumberInput from "@/components/NumberInput";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierQuoteDocument from "@/components/SupplierQuoteDocument";
+
+const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold"];
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -52,8 +54,13 @@ export default function MyQuotesPage() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [projects, setProjects] = useState<{ id: string; name: string; nameZh?: string }[]>([]);
+  // 발주 목록과 같은 방식으로 기본은 접어두고 필요할 때만 펼친다.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const [showForm, setShowForm] = useState(false);
+  // null이면 새로 작성, 아니면 그 견적서를 수정 중 — "검토 대기" 상태일 때만 가격 조정 등
+  // 수정이 허용된다(승인/반려 이후엔 Firestore 규칙에서도 막는다).
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [currencyChoice, setCurrencyChoice] = useState<SupplierCurrency>("USD");
   const currency: SupplierCurrency = isZh ? "CNY" : currencyChoice;
   const [orderKind, setOrderKind] = useState<SupplierOrderKind>("production");
@@ -66,6 +73,15 @@ export default function MyQuotesPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<{ items: SupplierQuoteItem[]; memoKo?: string } | null>(null);
   const [previewLang, setPreviewLang] = useState<"zh" | "ko">("zh");
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -96,17 +112,40 @@ export default function MyQuotesPage() {
     })();
   }, [appUser?.projectIds]);
 
-  const zhProjectNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
-  function trProjectName(p: { name: string; nameZh?: string }): string {
-    return (isZh && p.nameZh) || zhProjectNames[p.name] || p.name;
+  const zhProjectNames = useZhAutoTranslate(isZh, [
+    ...projects.map((p) => p.name),
+    ...quotes.map((q) => q.linkedProjectName || "").filter(Boolean),
+  ]);
+  function trProjectName(name: string, nameZh?: string): string {
+    return (isZh && nameZh) || zhProjectNames[name] || name;
   }
 
+  // 관리자 쪽 구매 카탈로그·발주 목록과 같은 방식 — 생산/개발/금형으로 나눠 보여줘야 내역이
+  // 많을 때도 찾기 쉽다. 구분을 안 고른 견적서는 "미지정" 묶음으로 따로 둔다.
+  const groupedQuotes = useMemo(() => {
+    const groups: Record<SupplierOrderKind | "unset", SupplierQuote[]> = { production: [], development: [], mold: [], unset: [] };
+    quotes.forEach((q) => groups[q.orderKind ?? "unset"].push(q));
+    return groups;
+  }, [quotes]);
+
   function openForm() {
+    setEditingId(null);
     setCurrencyChoice("USD");
     setOrderKind("production");
     setLinkedProjectId("");
     setItems([emptyItem()]);
     setMemo("");
+    setSubmitError("");
+    setShowForm(true);
+  }
+
+  function openEditForm(q: SupplierQuote) {
+    setEditingId(q.id);
+    setCurrencyChoice(q.currency);
+    setOrderKind(q.orderKind ?? "production");
+    setLinkedProjectId(q.linkedProjectId ?? "");
+    setItems(q.items.length > 0 ? q.items.map((it) => ({ ...it })) : [emptyItem()]);
+    setMemo(q.memo ?? "");
     setSubmitError("");
     setShowForm(true);
   }
@@ -126,7 +165,7 @@ export default function MyQuotesPage() {
   const validItems = items.filter((it) => it.name.trim() && it.quantity > 0 && it.unitPrice > 0);
   const total = validItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
 
-  // 중국 협력사가 중국어로 입력한 내용(품명, 비고)만 한국어로 미리 번역해둔다 — 제출과
+  // 중국 협력사가 중국어로 입력한 내용(품명, 비고)만 한국어로 미리 번역해둔다 — 제출/수정과
   // 미리보기 둘 다 같은 번역 결과를 써야 하므로 공통 함수로 뺐다.
   async function buildItemsWithTranslation(): Promise<{ items: SupplierQuoteItem[]; memoKo?: string }> {
     const finalItems = validItems.map((it) => ({ ...it, name: it.name.trim() }));
@@ -149,19 +188,32 @@ export default function MyQuotesPage() {
     try {
       const { items: finalItems, memoKo } = await buildItemsWithTranslation();
       const project = projects.find((p) => p.id === linkedProjectId);
-      await createSupplierQuote({
-        partnerId: appUser.uid,
-        partnerName: appUser.name,
-        currency,
-        items: finalItems,
-        orderKind,
-        linkedProjectId: linkedProjectId || undefined,
-        linkedProjectName: project?.name,
-        memo: memo.trim() || undefined,
-        memoKo,
-        createdBy: appUser.uid,
-      });
+      if (editingId) {
+        await updateSupplierQuote(editingId, {
+          currency,
+          items: finalItems,
+          orderKind,
+          linkedProjectId: linkedProjectId || undefined,
+          linkedProjectName: project?.name,
+          memo: memo.trim() || undefined,
+          memoKo,
+        });
+      } else {
+        await createSupplierQuote({
+          partnerId: appUser.uid,
+          partnerName: appUser.name,
+          currency,
+          items: finalItems,
+          orderKind,
+          linkedProjectId: linkedProjectId || undefined,
+          linkedProjectName: project?.name,
+          memo: memo.trim() || undefined,
+          memoKo,
+          createdBy: appUser.uid,
+        });
+      }
       setShowForm(false);
+      setEditingId(null);
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : zh(isZh, "견적서 제출에 실패했습니다."));
     } finally {
@@ -200,7 +252,9 @@ export default function MyQuotesPage() {
       {showForm && (
         <div className="space-y-4 rounded-3xl bg-white p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "견적서 작성")}</p>
+            <p className="text-sm font-semibold text-[#1d1d1f]">
+              {editingId ? zh(isZh, "견적서 수정") : zh(isZh, "견적서 작성")}
+            </p>
             <div className="flex items-center gap-2">
               <select
                 value={orderKind}
@@ -236,7 +290,7 @@ export default function MyQuotesPage() {
                 className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
               >
                 <option value="">{zh(isZh, "프로젝트 없음")}</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{trProjectName(p)}</option>)}
+                {projects.map((p) => <option key={p.id} value={p.id}>{trProjectName(p.name, p.nameZh)}</option>)}
               </select>
             </div>
           )}
@@ -310,7 +364,11 @@ export default function MyQuotesPage() {
               disabled={submitting || total <= 0}
               className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black disabled:opacity-50"
             >
-              {submitting ? zh(isZh, "제출 중...") : zh(isZh, "견적서 제출")}
+              {submitting
+                ? zh(isZh, "제출 중...")
+                : editingId
+                  ? zh(isZh, "수정 저장")
+                  : zh(isZh, "견적서 제출")}
             </button>
             <button
               onClick={async () => {
@@ -328,7 +386,7 @@ export default function MyQuotesPage() {
             >
               <Eye size={14} /> {previewLoading ? zh(isZh, "불러오는 중...") : zh(isZh, "미리보기")}
             </button>
-            <button onClick={() => setShowForm(false)} className="rounded-full border border-[#d1d1d6] px-5 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">
+            <button onClick={() => { setShowForm(false); setEditingId(null); }} className="rounded-full border border-[#d1d1d6] px-5 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">
               {zh(isZh, "취소")}
             </button>
           </div>
@@ -350,62 +408,106 @@ export default function MyQuotesPage() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {quotes.map((q) => (
-          <div key={q.id} className="rounded-3xl bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="flex items-center gap-2 font-semibold text-[#1d1d1f]">
-                  {q.quoteNumber}
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[q.status]}`}>
-                    {zh(isZh, SUPPLIER_QUOTE_STATUS_LABEL[q.status])}
-                  </span>
-                  {q.orderKind && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[q.orderKind]}`}>
-                      {zh(isZh, SUPPLIER_ORDER_KIND_LABEL[q.orderKind])}
-                    </span>
-                  )}
-                </p>
-                {q.linkedProjectName && <p className="mt-0.5 text-xs text-[#86868b]">{trProjectName({ name: q.linkedProjectName })}</p>}
-                <p className="mt-0.5 text-xs text-[#86868b]">{new Date(q.submittedAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(q.totalAmount, q.currency)}</p>
-                <Link
-                  href={`/supplier-quotes/${q.id}/print`}
-                  target="_blank"
-                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
-                >
-                  <FileText size={12} /> {zh(isZh, "미리보기 / PDF")}
-                </Link>
-                {q.status === "submitted" && (
-                  <button onClick={() => handleDelete(q)} className="rounded-full p-2 text-[#d1d1d6] hover:bg-red-50 hover:text-red-500">
-                    <Trash2 size={14} />
-                  </button>
-                )}
+      <div className="space-y-6">
+        {[...KIND_ORDER, "unset" as const].map((kind) => {
+          const list = groupedQuotes[kind];
+          if (list.length === 0) return null;
+          return (
+            <div key={kind}>
+              <p className="mb-2 px-1 text-sm font-semibold text-[#1d1d1f]">
+                {kind === "unset" ? zh(isZh, "미지정") : zh(isZh, SUPPLIER_ORDER_KIND_LABEL[kind])}
+              </p>
+              <div className="space-y-3">
+                {list.map((q) => {
+                  const expanded = expandedIds.has(q.id);
+                  return (
+                    <div key={q.id} className="overflow-hidden rounded-3xl bg-white">
+                      <button
+                        onClick={() => toggleExpanded(q.id)}
+                        className="flex w-full flex-wrap items-center justify-between gap-2 p-5 text-left"
+                      >
+                        <div className="min-w-0">
+                          <p className="flex flex-wrap items-center gap-2 font-semibold text-[#1d1d1f]">
+                            {q.quoteNumber}
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[q.status]}`}>
+                              {zh(isZh, SUPPLIER_QUOTE_STATUS_LABEL[q.status])}
+                            </span>
+                          </p>
+                          {q.linkedProjectName && (
+                            <p className="mt-0.5 truncate text-xs text-[#86868b]">{trProjectName(q.linkedProjectName)}</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <p className="text-xs text-[#86868b]">
+                            {new Date(q.submittedAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                          </p>
+                          <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(q.totalAmount, q.currency)}</p>
+                          {expanded ? <ChevronUp size={16} className="text-[#86868b]" /> : <ChevronDown size={16} className="text-[#86868b]" />}
+                        </div>
+                      </button>
+
+                      {expanded && (
+                        <div className="border-t border-[#f0f0f0] px-5 pb-5 pt-4">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Link
+                              href={`/supplier-quotes/${q.id}/print`}
+                              target="_blank"
+                              className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                            >
+                              <FileText size={12} /> {zh(isZh, "미리보기 / PDF")}
+                            </Link>
+                            {/* 가격이 나중에 조정되는 경우가 많아서 생긴 기능 — 관리자가 아직
+                                검토 전(submitted)일 때만 수정·삭제할 수 있다. */}
+                            {q.status === "submitted" && (
+                              <>
+                                <button
+                                  onClick={() => openEditForm(q)}
+                                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                                >
+                                  <Pencil size={12} /> {zh(isZh, "수정")}
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(q)}
+                                  className="rounded-full border border-[#d1d1d6] p-1.5 text-[#86868b] transition hover:border-red-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+
+                          <div className="mt-4 space-y-2">
+                            {q.items.map((it) => (
+                              <div key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-[#1d1d1f]">{it.name}</p>
+                                  {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
+                                </div>
+                                <p className="shrink-0 text-xs text-[#86868b]">
+                                  {it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, q.currency)}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {(q.memoKo || q.memo) && (
+                            <p className="mt-3 whitespace-pre-wrap text-xs text-[#86868b]">{q.memoKo || q.memo}</p>
+                          )}
+                          {q.status === "rejected" && q.rejectReason && (
+                            <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{zh(isZh, "반려 사유")}: {q.rejectReason}</p>
+                          )}
+                          {q.status === "approved" && (
+                            <p className="mt-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-600">{zh(isZh, "승인되어 발주서로 전환되었습니다.")}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            <div className="mt-3 space-y-1.5">
-              {q.items.map((it) => (
-                <div key={it.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-2.5 text-sm">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-[#1d1d1f]">{it.name}</p>
-                    {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
-                  </div>
-                  <p className="shrink-0 text-xs text-[#86868b]">
-                    {it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, q.currency)}
-                  </p>
-                </div>
-              ))}
-            </div>
-            {q.status === "rejected" && q.rejectReason && (
-              <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{zh(isZh, "반려 사유")}: {q.rejectReason}</p>
-            )}
-            {q.status === "approved" && (
-              <p className="mt-2 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-600">{zh(isZh, "승인되어 발주서로 전환되었습니다.")}</p>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showPreview && previewData && (

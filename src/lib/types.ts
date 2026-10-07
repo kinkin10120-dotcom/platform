@@ -655,19 +655,22 @@ export interface ContractTemplate {
 // 매입 전용 통화를 따로 둔다.
 export type SupplierCurrency = "USD" | "CNY" | "KRW";
 
-// 같은 공장에 내는 발주라도 성격이 다르다 — 금형·시제품처럼 개발 단계에서 한 번 나가는
-// 발주와, 양산 부품처럼 반복해서 나가는 발주는 원가를 볼 때 섞으면 안 된다.
-export type SupplierOrderKind = "production" | "development";
+// 같은 공장에 내는 발주라도 성격이 다르다 — 금형처럼 한 번 만들고 끝나는 설비성 발주,
+// 시제품처럼 개발 단계에서 나가는 발주, 양산 부품처럼 반복해서 나가는 발주는 원가를 볼 때
+// 섞으면 안 된다.
+export type SupplierOrderKind = "production" | "development" | "mold";
 
 export const SUPPLIER_ORDER_KIND_LABEL: Record<SupplierOrderKind, string> = {
   production: "생산",
   development: "개발",
+  mold: "금형",
 };
 
 // 발주서에 찍히는 표기(중문/영문 병기용).
 export const SUPPLIER_ORDER_KIND_CN: Record<SupplierOrderKind, string> = {
   production: "量产 / Production",
   development: "开发 / Development",
+  mold: "模具 / Mold",
 };
 
 export const SUPPLIER_ORDER_INSTALLMENT_LABEL: Record<"deposit" | "balance" | "full", string> = {

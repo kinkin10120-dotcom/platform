@@ -59,6 +59,12 @@ const STATUS_STYLE: Record<string, string> = {
 
 const NO_SUPPLIER = "미지정";
 
+const KIND_BADGE_CLASS: Record<SupplierOrderKind, string> = {
+  production: "bg-[#f5f5f7] text-[#86868b]",
+  development: "bg-violet-50 text-violet-600",
+  mold: "bg-amber-50 text-amber-600",
+};
+
 // 결제조건 기본 문구 — 원화(국내) 발주서는 한글로 나가므로 기본값도 한글로 맞춘다.
 const DEFAULT_PAYMENT_FOREIGN = "T/T 50% deposit, 50% before shipment";
 const DEFAULT_PAYMENT_KRW = "계약금 30%, 출고 전 잔금 70%";
@@ -399,10 +405,11 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         )}
 
         {grouped.map(([supplier, rows]) => {
-          // 같은 발주처라도 생산용/개발용 품목은 성격이 달라 섞여 있으면 한눈에 구분하기
-          // 어렵다 — 묶음 안에서 다시 생산/개발로 나눠 보여준다.
+          // 같은 발주처라도 생산용/개발용/금형 품목은 성격이 달라 섞여 있으면 한눈에 구분하기
+          // 어렵다 — 묶음 안에서 다시 생산/개발/금형으로 나눠 보여준다.
           const productionRows = rows.filter((e) => (e.orderKind ?? "production") === "production");
           const developmentRows = rows.filter((e) => e.orderKind === "development");
+          const moldRows = rows.filter((e) => e.orderKind === "mold");
           const renderRow = (e: CatalogEntry) => {
             // 부대비용은 금액 × 개수다 — calcCostsTotal과 같은 기준으로 계산해야 다른 화면과 안 어긋난다.
             const costTotal = calcCostsTotal(e.costItems);
@@ -416,9 +423,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                          e.orderKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
-                        }`}
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_BADGE_CLASS[e.orderKind ?? "production"]}`}
                       >
                         {SUPPLIER_ORDER_KIND_LABEL[e.orderKind ?? "production"]}
                       </span>
@@ -480,6 +485,14 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                   {developmentRows.map(renderRow)}
                 </>
               )}
+              {moldRows.length > 0 && (
+                <>
+                  <p className="border-b border-[#f0f0f0] bg-[#fafafa] px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-600">
+                    {SUPPLIER_ORDER_KIND_LABEL.mold}
+                  </p>
+                  {moldRows.map(renderRow)}
+                </>
+              )}
             </div>
           );
         })}
@@ -519,11 +532,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                 {/* 상세 화면과 같은 규칙 — 품목이 전부 같은 성격이면 발주 전체의 성격이라
                     상태 뱃지 옆에 한 번만 두고, 섞였을 때만 품목 줄에 표시한다. */}
                 {orderKinds.length === 1 && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      orderKinds[0] === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
-                    }`}
-                  >
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${KIND_BADGE_CLASS[orderKinds[0]]}`}>
                     {SUPPLIER_ORDER_KIND_LABEL[orderKinds[0]]}
                   </span>
                 )}
@@ -589,7 +598,7 @@ function SupplierOrderSummary({ orders }: { orders: SupplierOrder[] }) {
     let totalKrw = 0;
     let missingRateCount = 0;
     const bySupplier = new Map<string, number>();
-    const byKind: Record<SupplierOrderKind, number> = { production: 0, development: 0 };
+    const byKind: Record<SupplierOrderKind, number> = { production: 0, development: 0, mold: 0 };
     const byProject = new Map<string, number>();
 
     for (const o of inPeriod) {
@@ -653,16 +662,18 @@ function SupplierOrderSummary({ orders }: { orders: SupplierOrder[] }) {
               발행 {orderCount}건 · 원화 환산 합계
               {missingRateCount > 0 && ` (환율 미기록 ${missingRateCount}건 제외)`}
             </p>
-            {/* 생산/개발 비중 — 막대 하나로 바로 감이 오게. */}
+            {/* 생산/개발/금형 비중 — 막대 하나로 바로 감이 오게. */}
             {totalKrw > 0 && (
               <div className="mt-3 space-y-1.5">
                 <div className="flex h-2 overflow-hidden rounded-full bg-[#f5f5f7]">
                   <div className="bg-[#1d1d1f]" style={{ width: `${(byKind.production / totalKrw) * 100}%` }} />
                   <div className="bg-violet-400" style={{ width: `${(byKind.development / totalKrw) * 100}%` }} />
+                  <div className="bg-amber-400" style={{ width: `${(byKind.mold / totalKrw) * 100}%` }} />
                 </div>
                 <div className="flex justify-between text-xs text-[#86868b]">
                   <span>생산 {fmt(byKind.production)}</span>
                   <span>개발 {fmt(byKind.development)}</span>
+                  <span>금형 {fmt(byKind.mold)}</span>
                 </div>
               </div>
             )}
@@ -893,8 +904,8 @@ function PurchaseInfoEditor({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {/* 금형·시제품처럼 개발 단계에서 한 번 나가는 발주와 양산 부품 발주는 원가를 볼 때
-            섞으면 안 되므로 품목에 미리 표시해둔다. */}
+        {/* 금형처럼 한 번 만들고 끝나는 설비성 발주, 시제품처럼 개발 단계에서 나가는 발주,
+            양산 부품 발주는 원가를 볼 때 섞으면 안 되므로 품목에 미리 표시해둔다. */}
         <select
           value={orderKind}
           onChange={(e) => setOrderKind(e.target.value as SupplierOrderKind)}
@@ -902,6 +913,7 @@ function PurchaseInfoEditor({
         >
           <option value="production">생산 발주</option>
           <option value="development">개발 발주</option>
+          <option value="mold">금형 발주</option>
         </select>
         <input
           value={supplierName}
@@ -1993,11 +2005,7 @@ function SupplierOrderDetail({
           {/* 품목이 전부 같은 성격이면 발주 전체의 성격이므로 상태 뱃지 옆에 함께 보여준다.
               섞여 있으면 여기 대신 품목마다 표시한다. */}
           {singleKind && (
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                singleKind === "development" ? "bg-violet-50 text-violet-600" : "bg-[#f5f5f7] text-[#86868b]"
-              }`}
-            >
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${KIND_BADGE_CLASS[singleKind]}`}>
               {SUPPLIER_ORDER_KIND_LABEL[singleKind]}
             </span>
           )}

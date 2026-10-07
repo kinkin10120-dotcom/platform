@@ -47,6 +47,7 @@ import {
   SupplierOrderItem,
   SupplierOrderKind,
   SUPPLIER_ORDER_KIND_LABEL,
+  SUPPLIER_ORDER_KIND_BADGE_CLASS,
   SUPPLIER_ORDER_INSTALLMENT_LABEL,
   SupplierPartItem,
   SupplierProduct,
@@ -58,12 +59,6 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const NO_SUPPLIER = "미지정";
-
-const KIND_BADGE_CLASS: Record<SupplierOrderKind, string> = {
-  production: "bg-[#f5f5f7] text-[#86868b]",
-  development: "bg-violet-50 text-violet-600",
-  mold: "bg-amber-50 text-amber-600",
-};
 
 // 결제조건 기본 문구 — 원화(국내) 발주서는 한글로 나가므로 기본값도 한글로 맞춘다.
 const DEFAULT_PAYMENT_FOREIGN = "T/T 50% deposit, 50% before shipment";
@@ -423,7 +418,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${KIND_BADGE_CLASS[e.orderKind ?? "production"]}`}
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[e.orderKind ?? "production"]}`}
                       >
                         {SUPPLIER_ORDER_KIND_LABEL[e.orderKind ?? "production"]}
                       </span>
@@ -531,7 +526,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                 {/* 상세 화면과 같은 규칙 — 품목이 전부 같은 성격이면 발주 전체의 성격이라
                     상태 뱃지 옆에 한 번만 두고, 섞였을 때만 품목 줄에 표시한다. */}
                 {orderKinds.length === 1 && (
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${KIND_BADGE_CLASS[orderKinds[0]]}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[orderKinds[0]]}`}>
                     {SUPPLIER_ORDER_KIND_LABEL[orderKinds[0]]}
                   </span>
                 )}
@@ -2004,7 +1999,7 @@ function SupplierOrderDetail({
           {/* 품목이 전부 같은 성격이면 발주 전체의 성격이므로 상태 뱃지 옆에 함께 보여준다.
               섞여 있으면 여기 대신 품목마다 표시한다. */}
           {singleKind && (
-            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${KIND_BADGE_CLASS[singleKind]}`}>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[singleKind]}`}>
               {SUPPLIER_ORDER_KIND_LABEL[singleKind]}
             </span>
           )}

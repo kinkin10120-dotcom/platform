@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, FileText, Package } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
-import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
+import {
+  SupplierOrder,
+  SupplierOrderKind,
+  SUPPLIER_ORDER_STATUS_LABEL,
+  SUPPLIER_ORDER_INSTALLMENT_LABEL,
+  SUPPLIER_ORDER_KIND_LABEL,
+  SUPPLIER_ORDER_KIND_BADGE_CLASS,
+} from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+
+const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold"];
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-[#f5f5f7] text-[#86868b]",
@@ -58,6 +67,22 @@ export default function MySupplierOrdersPage() {
 
   const zhNotes = useZhAutoTranslate(isZh, visibleOrders.flatMap((o) => [o.memo ?? "", o.packingNote ?? ""]));
 
+  function orderKindsOf(o: SupplierOrder): SupplierOrderKind[] {
+    return Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
+  }
+
+  // 관리자 쪽 구매 카탈로그와 같은 방식 — 생산/개발/금형으로 나눠 보여줘야 내역이 많을 때도
+  // 찾기 쉽다. 품목 성격이 섞인 발주는 "혼합" 묶음으로 따로 둔다.
+  const groupedOrders = useMemo(() => {
+    const groups: Record<SupplierOrderKind | "mixed", SupplierOrder[]> = { production: [], development: [], mold: [], mixed: [] };
+    visibleOrders.forEach((o) => {
+      const kinds = orderKindsOf(o);
+      groups[kinds.length === 1 ? kinds[0] : "mixed"].push(o);
+    });
+    return groups;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleOrders]);
+
   if (appUser && !isPartner) {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
   }
@@ -89,104 +114,131 @@ export default function MySupplierOrdersPage() {
         </div>
       )}
 
-      <div className="space-y-3">
-        {visibleOrders.map((o) => {
-          const expanded = expandedIds.has(o.id);
+      <div className="space-y-6">
+        {[...KIND_ORDER, "mixed" as const].map((kind) => {
+          const list = groupedOrders[kind];
+          if (list.length === 0) return null;
           return (
-            <div key={o.id} className="overflow-hidden rounded-3xl bg-white">
-              <button
-                onClick={() => toggleExpanded(o.id)}
-                className="flex w-full flex-wrap items-center justify-between gap-2 p-5 text-left"
-              >
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2 font-semibold text-[#1d1d1f]">
-                    {o.soNumber}
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
-                      {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
-                    </span>
-                    {o.installmentType && (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
-                        {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
-                      </span>
-                    )}
-                  </p>
-                  {o.linkedProjectName && (
-                    <p className="mt-0.5 truncate text-xs text-[#86868b]">{o.linkedProjectName}</p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <p className="text-xs text-[#86868b]">
-                    {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
-                  </p>
-                  <div className="text-right">
-                    <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
-                    {(o.installmentPercent ?? 100) < 100 && (
-                      <p className="text-[11px] font-medium text-blue-600">
-                        {zh(isZh, "이번 청구")} {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
-                      </p>
-                    )}
-                  </div>
-                  {expanded ? <ChevronUp size={16} className="text-[#86868b]" /> : <ChevronDown size={16} className="text-[#86868b]" />}
-                </div>
-              </button>
-
-              {expanded && (
-                <div className="border-t border-[#f0f0f0] px-5 pb-5 pt-4">
-                  <div className="flex justify-end">
-                    {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
-                        router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
-                        그대로 돌아온다. */}
-                    <Link
-                      href={`/supplier-orders/${o.id}/print`}
-                      className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
-                    >
-                      <FileText size={12} />
-                      {zh(isZh, "미리보기 / PDF")}
-                    </Link>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    {o.items.map((it, i) => (
-                      <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm">
+            <div key={kind}>
+              <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
+                {kind === "mixed" ? zh(isZh, "혼합") : zh(isZh, SUPPLIER_ORDER_KIND_LABEL[kind])}
+              </p>
+              <div className="space-y-3">
+                {list.map((o) => {
+                  const expanded = expandedIds.has(o.id);
+                  const kinds = orderKindsOf(o);
+                  const singleKind = kinds.length === 1 ? kinds[0] : null;
+                  return (
+                    <div key={o.id} className="overflow-hidden rounded-3xl bg-white">
+                      <button
+                        onClick={() => toggleExpanded(o.id)}
+                        className="flex w-full flex-wrap items-center justify-between gap-2 p-5 text-left"
+                      >
                         <div className="min-w-0">
-                          <p className="font-medium text-[#1d1d1f]">{it.nameEn || it.name}</p>
-                          {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
+                          <p className="flex flex-wrap items-center gap-2 font-semibold text-[#1d1d1f]">
+                            {o.soNumber}
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
+                              {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
+                            </span>
+                            {singleKind && (
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[singleKind]}`}>
+                                {zh(isZh, SUPPLIER_ORDER_KIND_LABEL[singleKind])}
+                              </span>
+                            )}
+                            {o.installmentType && (
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
+                                {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+                              </span>
+                            )}
+                          </p>
+                          {o.linkedProjectName && (
+                            <p className="mt-0.5 truncate text-xs text-[#86868b]">{o.linkedProjectName}</p>
+                          )}
                         </div>
-                        <div className="shrink-0 text-right text-xs text-[#86868b]">
-                          <p>{it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, o.currency)}</p>
-                          <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(calcSupplierItemTotal(it), o.currency)}</p>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <p className="text-xs text-[#86868b]">
+                            {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                          </p>
+                          <div className="text-right">
+                            <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+                            {(o.installmentPercent ?? 100) < 100 && (
+                              <p className="text-[11px] font-medium text-blue-600">
+                                {zh(isZh, "이번 청구")} {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                              </p>
+                            )}
+                          </div>
+                          {expanded ? <ChevronUp size={16} className="text-[#86868b]" /> : <ChevronDown size={16} className="text-[#86868b]" />}
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      </button>
 
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86868b]">
-                      {o.incoterms && <span>Incoterms: {o.incoterms}</span>}
-                      {o.portOfLoading && <span>{zh(isZh, "선적항")}: {o.portOfLoading}</span>}
-                      {o.leadTimeDays != null && <span>{zh(isZh, "납기")}: {o.leadTimeDays}{zh(isZh, "일")}</span>}
-                      {o.paymentTerms && <span>{zh(isZh, "결제조건")}: {o.paymentTerms}</span>}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
-                      {(o.installmentPercent ?? 100) < 100 && (
-                        <p className="text-xs font-semibold text-blue-600">
-                          {zh(isZh, "이번 청구")} ({o.installmentType ? zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]) : ""} {o.installmentPercent}%): {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
-                        </p>
+                      {expanded && (
+                        <div className="border-t border-[#f0f0f0] px-5 pb-5 pt-4">
+                          <div className="flex justify-end">
+                            {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
+                                router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
+                                그대로 돌아온다. */}
+                            <Link
+                              href={`/supplier-orders/${o.id}/print`}
+                              className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                            >
+                              <FileText size={12} />
+                              {zh(isZh, "미리보기 / PDF")}
+                            </Link>
+                          </div>
+
+                          <div className="mt-4 space-y-2">
+                            {o.items.map((it, i) => (
+                              <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-[#1d1d1f]">
+                                    {!singleKind && (
+                                      <span className={`mr-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[it.orderKind ?? "production"]}`}>
+                                        {zh(isZh, SUPPLIER_ORDER_KIND_LABEL[it.orderKind ?? "production"])}
+                                      </span>
+                                    )}
+                                    {it.nameEn || it.name}
+                                  </p>
+                                  {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
+                                </div>
+                                <div className="shrink-0 text-right text-xs text-[#86868b]">
+                                  <p>{it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, o.currency)}</p>
+                                  <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(calcSupplierItemTotal(it), o.currency)}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86868b]">
+                              {o.incoterms && <span>Incoterms: {o.incoterms}</span>}
+                              {o.portOfLoading && <span>{zh(isZh, "선적항")}: {o.portOfLoading}</span>}
+                              {o.leadTimeDays != null && <span>{zh(isZh, "납기")}: {o.leadTimeDays}{zh(isZh, "일")}</span>}
+                              {o.paymentTerms && <span>{zh(isZh, "결제조건")}: {o.paymentTerms}</span>}
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+                              {(o.installmentPercent ?? 100) < 100 && (
+                                <p className="text-xs font-semibold text-blue-600">
+                                  {zh(isZh, "이번 청구")} ({o.installmentType ? zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]) : ""} {o.installmentPercent}%): {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {o.packingNote && (
+                            <p className="mt-2 text-xs text-[#86868b]">
+                              {zh(isZh, "포장")}: {zhNotes[o.packingNote] || o.packingNote}
+                            </p>
+                          )}
+                          {o.memo && (
+                            <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </div>
-
-                  {o.packingNote && (
-                    <p className="mt-2 text-xs text-[#86868b]">
-                      {zh(isZh, "포장")}: {zhNotes[o.packingNote] || o.packingNote}
-                    </p>
-                  )}
-                  {o.memo && (
-                    <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
-                  )}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           );
         })}

@@ -673,6 +673,13 @@ export const SUPPLIER_ORDER_KIND_CN: Record<SupplierOrderKind, string> = {
   mold: "模具 / Mold",
 };
 
+// 뱃지 색상 — 관리자·협력사 화면 양쪽에서 같은 색으로 보이게 여기 하나로 공유한다.
+export const SUPPLIER_ORDER_KIND_BADGE_CLASS: Record<SupplierOrderKind, string> = {
+  production: "bg-[#f5f5f7] text-[#86868b]",
+  development: "bg-violet-50 text-violet-600",
+  mold: "bg-amber-50 text-amber-600",
+};
+
 export const SUPPLIER_ORDER_INSTALLMENT_LABEL: Record<"deposit" | "balance" | "full", string> = {
   deposit: "선금",
   balance: "잔금",

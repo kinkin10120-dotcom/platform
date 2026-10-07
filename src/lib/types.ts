@@ -827,6 +827,11 @@ export interface SupplierInvoice {
   currency: SupplierCurrency;
   items: SupplierInvoiceLineItem[];
   totalAmount: number;
+  // 협력사가 직접 붙이는 제목 — 보통 월별로 모아 청구하니 "10월 청구서"처럼 적어두면
+  // 나중에 이력 목록에서 청구번호보다 훨씬 알아보기 쉽다. 자유 입력이라 중국어로 써도
+  // titleKo에 번역을 따로 저장한다(memo와 같은 방식).
+  title?: string;
+  titleKo?: string;
   memo?: string;
   memoKo?: string;
   status: SupplierInvoiceStatus;

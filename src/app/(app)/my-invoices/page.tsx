@@ -55,12 +55,16 @@ export default function MyInvoicesPage() {
   // 제안). 사용자가 직접 고른 것만 여기 담긴다 — 안 고른 발주는 defaultBilling을 그대로 쓴다.
   const [orderBillingOverrides, setOrderBillingOverrides] = useState<Record<string, { type: "deposit" | "balance" | "full"; percent: number }>>({});
   const [customItems, setCustomItems] = useState<{ id: string; description: string; amount: number; projectId: string }[]>([]);
+  // 청구서를 월별로 모아 만드는 경우가 많아서, 이력 목록에서 "몇 월 청구서인지" 제목만
+  // 보고 바로 알아볼 수 있게 한다. 항상 월별인 건 아니라 자유 입력 + 이번 달 제목을
+  // 기본값으로 미리 채워주는 정도로만 돕는다.
+  const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewData, setPreviewData] = useState<{ items: SupplierInvoiceLineItem[]; memoKo?: string } | null>(null);
+  const [previewData, setPreviewData] = useState<{ items: SupplierInvoiceLineItem[]; titleKo?: string; memoKo?: string } | null>(null);
   const [previewLang, setPreviewLang] = useState<"zh" | "ko">("zh");
 
   useEffect(() => {
@@ -176,6 +180,8 @@ export default function MyInvoicesPage() {
     setSelectedOrderIds([]);
     setOrderBillingOverrides({});
     setCustomItems([]);
+    const now = new Date();
+    setTitle(isZh ? `${now.getMonth() + 1}月账单` : `${now.getMonth() + 1}월 청구서`);
     setMemo("");
     setSubmitError("");
     setShowForm(true);
@@ -221,15 +227,16 @@ export default function MyInvoicesPage() {
     ];
   }
 
-  // 중국 협력사가 직접 입력한 내용(직접 추가한 항목의 내용, 비고)만 한국어로 미리 번역해둔다 —
-  // 발주서에서 가져온 항목의 설명은 이미 한국어(관리자가 입력한 품명)라 번역이 필요 없다.
-  async function buildItemsWithTranslation(): Promise<{ items: SupplierInvoiceLineItem[]; memoKo?: string }> {
+  // 중국 협력사가 직접 입력한 내용(직접 추가한 항목의 내용, 제목, 비고)만 한국어로 미리
+  // 번역해둔다 — 발주서에서 가져온 항목의 설명은 이미 한국어(관리자가 입력한 품명)라
+  // 번역이 필요 없다.
+  async function buildItemsWithTranslation(): Promise<{ items: SupplierInvoiceLineItem[]; titleKo?: string; memoKo?: string }> {
     const items = buildItems();
     if (!isZh) return { items };
     const customIndexes = items
       .map((it, i) => (it.source === "custom" ? i : -1))
       .filter((i) => i >= 0);
-    const texts = [...customIndexes.map((i) => items[i].description), memo.trim()];
+    const texts = [...customIndexes.map((i) => items[i].description), title.trim(), memo.trim()];
     const translations = await translateToKoreanForCache(texts);
     const translatedItems = items.map((it, i) => {
       const idx = customIndexes.indexOf(i);
@@ -237,8 +244,9 @@ export default function MyInvoicesPage() {
       const ko = translations[idx];
       return ko ? { ...it, descriptionKo: ko } : it;
     });
+    const titleKo = translations[translations.length - 2] ?? undefined;
     const memoKo = translations[translations.length - 1] ?? undefined;
-    return { items: translatedItems, memoKo: memoKo ?? undefined };
+    return { items: translatedItems, titleKo: titleKo ?? undefined, memoKo: memoKo ?? undefined };
   }
 
   async function handleSubmit() {
@@ -250,12 +258,14 @@ export default function MyInvoicesPage() {
     setSubmitting(true);
     setSubmitError("");
     try {
-      const { items, memoKo } = await buildItemsWithTranslation();
+      const { items, titleKo, memoKo } = await buildItemsWithTranslation();
       await createSupplierInvoice({
         partnerId: appUser.uid,
         partnerName: appUser.name,
         currency,
         items,
+        title: title.trim() || undefined,
+        titleKo,
         memo: memo.trim() || undefined,
         memoKo,
         createdBy: appUser.uid,
@@ -329,6 +339,16 @@ export default function MyInvoicesPage() {
                 <option value="KRW">KRW 원</option>
               </select>
             )}
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-[#86868b]">{zh(isZh, "청구서 제목")}</p>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={zh(isZh, "예: 10월 청구서")}
+              className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            />
           </div>
 
           <div>
@@ -500,12 +520,15 @@ export default function MyInvoicesPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="flex items-center gap-2 font-semibold text-[#1d1d1f]">
-                  {inv.invoiceNumber}
+                  {inv.title || inv.invoiceNumber}
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[inv.status]}`}>
                     {zh(isZh, SUPPLIER_INVOICE_STATUS_LABEL[inv.status])}
                   </span>
                 </p>
-                <p className="mt-0.5 text-xs text-[#86868b]">{new Date(inv.submittedAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}</p>
+                <p className="mt-0.5 text-xs text-[#86868b]">
+                  {inv.title ? `${inv.invoiceNumber} · ` : ""}
+                  {new Date(inv.submittedAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(inv.totalAmount, inv.currency)}</p>
@@ -570,6 +593,8 @@ export default function MyInvoicesPage() {
                   currency,
                   items: previewData.items,
                   totalAmount: total,
+                  title: title.trim() || undefined,
+                  titleKo: previewData.titleKo,
                   memo: memo.trim() || undefined,
                   memoKo: previewData.memoKo,
                   submittedAt: Date.now(),

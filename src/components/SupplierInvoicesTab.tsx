@@ -94,8 +94,9 @@ export default function SupplierInvoicesTab() {
         <div className="space-y-4 self-start rounded-3xl bg-white p-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-semibold text-[#1d1d1f]">{selected.partnerName}</p>
+              <p className="font-semibold text-[#1d1d1f]">{(selected.titleKo || selected.title) ?? selected.partnerName}</p>
               <p className="mt-0.5 text-xs text-[#86868b]">
+                {(selected.titleKo || selected.title) ? `${selected.partnerName} · ` : ""}
                 {selected.invoiceNumber} · {new Date(selected.submittedAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" })}
               </p>
             </div>
@@ -173,12 +174,14 @@ function InvoiceCard({ invoice, selected, onClick }: { invoice: SupplierInvoice;
       className={`block w-full rounded-2xl p-4 text-left transition ${selected ? "bg-[#1d1d1f] text-white" : "bg-white text-[#1d1d1f] hover:bg-[#f5f5f7]"}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate font-medium">{invoice.partnerName}</p>
+        <p className="truncate font-medium">{(invoice.titleKo || invoice.title) ?? invoice.partnerName}</p>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${selected ? "bg-white/20 text-white" : STATUS_STYLE[invoice.status]}`}>
           {SUPPLIER_INVOICE_STATUS_LABEL[invoice.status]}
         </span>
       </div>
-      <p className={`mt-1 text-xs ${selected ? "text-white/70" : "text-[#86868b]"}`}>{invoice.invoiceNumber}</p>
+      <p className={`mt-1 text-xs ${selected ? "text-white/70" : "text-[#86868b]"}`}>
+        {invoice.partnerName} · {invoice.invoiceNumber}
+      </p>
       <p className={`mt-1.5 text-sm font-semibold ${selected ? "text-white" : "text-[#1d1d1f]"}`}>
         {formatSupplierMoney(invoice.totalAmount, invoice.currency)}
       </p>

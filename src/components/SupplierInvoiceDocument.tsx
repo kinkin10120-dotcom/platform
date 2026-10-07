@@ -16,6 +16,8 @@ export interface SupplierInvoiceDocumentData {
   currency: SupplierCurrency;
   items: SupplierInvoiceLineItem[];
   totalAmount: number;
+  title?: string;
+  titleKo?: string;
   memo?: string;
   memoKo?: string;
   submittedAt: number;
@@ -31,6 +33,7 @@ export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: S
   const ko = lang === "ko";
   const L = (cn: string, kr: string) => (ko ? kr : cn);
   const memo = ko ? data.memoKo || data.memo : data.memo;
+  const title = ko ? data.titleKo || data.title : data.title;
 
   return (
     <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -50,6 +53,7 @@ export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: S
         <div className="space-y-1.5">
           <Row label={L("开票方", "발행처")} value={data.partnerName || "-"} />
           <Row label={L("发票编号", "청구서 번호")} value={data.invoiceNumber} />
+          {title && <Row label={L("标题", "제목")} value={title} />}
           <Row label={L("提交日期", "제출일")} value={issuedDate} />
         </div>
         <div className="space-y-1.5">

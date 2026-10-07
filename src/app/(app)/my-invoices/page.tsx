@@ -12,7 +12,17 @@ import {
   createSupplierInvoice,
   deleteSupplierInvoice,
 } from "@/lib/firestore/supplierInvoices";
-import { SupplierOrder, SupplierInvoice, SupplierInvoiceLineItem, SupplierCurrency, SUPPLIER_INVOICE_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
+import {
+  SupplierOrder,
+  SupplierOrderKind,
+  SupplierInvoice,
+  SupplierInvoiceLineItem,
+  SupplierCurrency,
+  SUPPLIER_INVOICE_STATUS_LABEL,
+  SUPPLIER_ORDER_INSTALLMENT_LABEL,
+  SUPPLIER_ORDER_KIND_LABEL,
+  SUPPLIER_ORDER_KIND_BADGE_CLASS,
+} from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
 import PdfPageScaler from "@/components/PdfPageScaler";
@@ -166,11 +176,16 @@ export default function MyInvoicesPage() {
   // 금액(선금 50%만 등)이 아니라 그 발주에서 아직 못 받은 전체 금액을 보여줘야 "미수금"이라는
   // 말과 맞는다.
   const outstandingByProject = useMemo(() => {
-    const map = new Map<string, { name: string; totals: Partial<Record<SupplierCurrency, number>> }>();
+    const map = new Map<string, { name: string; totals: Partial<Record<SupplierCurrency, number>>; kinds: Set<SupplierOrderKind> }>();
     outstandingOrders.forEach((o) => {
       const key = o.linkedProjectId || "__none__";
-      const entry = map.get(key) ?? { name: o.linkedProjectName ? trProjectName(o.linkedProjectName) : zh(isZh, "프로젝트 미지정"), totals: {} };
+      const entry = map.get(key) ?? {
+        name: o.linkedProjectName ? trProjectName(o.linkedProjectName) : zh(isZh, "프로젝트 미지정"),
+        totals: {},
+        kinds: new Set<SupplierOrderKind>(),
+      };
       entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + remainingOf(o);
+      o.items.forEach((it) => entry.kinds.add(it.orderKind ?? "production"));
       map.set(key, entry);
     });
     return Array.from(map.values());
@@ -311,9 +326,16 @@ export default function MyInvoicesPage() {
           <p className="mb-3 text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "미수금 현황")}</p>
           <div className="space-y-2">
             {outstandingByProject.map((p, i) => (
-              <div key={i} className="flex items-center justify-between rounded-2xl bg-[#f5f5f7] px-4 py-2.5 text-sm">
-                <span className="text-[#1d1d1f]">{p.name}</span>
-                <span className="font-medium text-[#1d1d1f]">
+              <div key={i} className="flex items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-2.5 text-sm">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-[#1d1d1f]">{p.name}</span>
+                  {Array.from(p.kinds).map((kind) => (
+                    <span key={kind} className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[kind]}`}>
+                      {zh(isZh, SUPPLIER_ORDER_KIND_LABEL[kind])}
+                    </span>
+                  ))}
+                </span>
+                <span className="shrink-0 font-medium text-[#1d1d1f]">
                   {(Object.entries(p.totals) as [SupplierCurrency, number][]).map(([cur, amt]) => formatSupplierMoney(amt, cur)).join(" + ")}
                 </span>
               </div>

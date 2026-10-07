@@ -66,6 +66,12 @@ export default function MySupplierOrdersPage() {
   const visibleOrders = orders.filter((o) => o.status === "issued");
 
   const zhNotes = useZhAutoTranslate(isZh, visibleOrders.flatMap((o) => [o.memo ?? "", o.packingNote ?? ""]));
+  // 연결된 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 nameZh 같은 캐시 필드가 없다 —
+  // 다른 화면(my-invoices 등)과 같은 방식으로 화면에서 즉석 번역한다.
+  const zhProjectNames = useZhAutoTranslate(isZh, visibleOrders.map((o) => o.linkedProjectName || "").filter(Boolean));
+  function trProjectName(name: string): string {
+    return zhProjectNames[name] || name;
+  }
 
   function orderKindsOf(o: SupplierOrder): SupplierOrderKind[] {
     return Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
@@ -152,7 +158,7 @@ export default function MySupplierOrdersPage() {
                             )}
                           </p>
                           {o.linkedProjectName && (
-                            <p className="mt-0.5 truncate text-xs text-[#86868b]">{o.linkedProjectName}</p>
+                            <p className="mt-0.5 truncate text-xs text-[#86868b]">{trProjectName(o.linkedProjectName)}</p>
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-3">

@@ -147,6 +147,8 @@ const ZH_DICT: Record<string, string> = {
   // Project type tags (PROJECT_TYPE_LABEL)
   "개발": "开发",
   "양산": "量产",
+  // 발주 구분(SUPPLIER_ORDER_KIND_LABEL)은 "생산"이라는 다른 단어를 쓴다 — 위 "양산"과는 별개.
+  "생산": "量产",
   "패키지": "包装",
   "상세페이지": "详情页",
   "금형": "模具",

@@ -120,7 +120,7 @@ export default function MySupplierOrdersPage() {
           if (list.length === 0) return null;
           return (
             <div key={kind}>
-              <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
+              <p className="mb-2 px-1 text-sm font-semibold text-[#1d1d1f]">
                 {kind === "mixed" ? zh(isZh, "혼합") : zh(isZh, SUPPLIER_ORDER_KIND_LABEL[kind])}
               </p>
               <div className="space-y-3">

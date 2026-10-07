@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
+import Link from "next/link";
+import { Check, ChevronDown, ChevronUp, Printer, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllSupplierQuotes, approveSupplierQuote, rejectSupplierQuote } from "@/lib/firestore/supplierQuotes";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
@@ -133,6 +134,14 @@ export default function SupplierQuotesTab() {
           {(selected.memoKo || selected.memo) && (
             <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">{selected.memoKo || selected.memo}</p>
           )}
+
+          <Link
+            href={`/supplier-quotes/${selected.id}/print`}
+            target="_blank"
+            className="flex w-fit items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+          >
+            <Printer size={13} /> 견적서 보기 / PDF
+          </Link>
 
           {selected.status === "rejected" && selected.rejectReason && (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">반려 사유: {selected.rejectReason}</p>

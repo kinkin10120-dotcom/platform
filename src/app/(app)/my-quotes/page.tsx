@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { Calculator, Plus, Trash2 } from "lucide-react";
+import { Calculator, Eye, FileText, Plus, Trash2, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierQuotesByPartner, createSupplierQuote, deleteSupplierQuote } from "@/lib/firestore/supplierQuotes";
@@ -18,6 +19,8 @@ import {
 } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
+import PdfPageScaler from "@/components/PdfPageScaler";
+import SupplierQuoteDocument from "@/components/SupplierQuoteDocument";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -59,6 +62,10 @@ export default function MyQuotesPage() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<{ items: SupplierQuoteItem[]; memoKo?: string } | null>(null);
+  const [previewLang, setPreviewLang] = useState<"zh" | "ko">("zh");
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -119,6 +126,18 @@ export default function MyQuotesPage() {
   const validItems = items.filter((it) => it.name.trim() && it.quantity > 0 && it.unitPrice > 0);
   const total = validItems.reduce((sum, it) => sum + it.quantity * it.unitPrice, 0);
 
+  // 중국 협력사가 중국어로 입력한 내용(품명, 비고)만 한국어로 미리 번역해둔다 — 제출과
+  // 미리보기 둘 다 같은 번역 결과를 써야 하므로 공통 함수로 뺐다.
+  async function buildItemsWithTranslation(): Promise<{ items: SupplierQuoteItem[]; memoKo?: string }> {
+    const finalItems = validItems.map((it) => ({ ...it, name: it.name.trim() }));
+    if (!isZh) return { items: finalItems };
+    const texts = [...finalItems.map((it) => it.name), memo.trim()];
+    const translations = await translateToKoreanForCache(texts);
+    const translatedItems = finalItems.map((it, i) => (translations[i] ? { ...it, nameKo: translations[i]! } : it));
+    const memoKo = translations[translations.length - 1] ?? undefined;
+    return { items: translatedItems, memoKo: memoKo ?? undefined };
+  }
+
   async function handleSubmit() {
     if (!appUser) return;
     if (validItems.length === 0) {
@@ -128,15 +147,7 @@ export default function MyQuotesPage() {
     setSubmitting(true);
     setSubmitError("");
     try {
-      let finalItems = validItems.map((it) => ({ ...it, name: it.name.trim() }));
-      let memoKo: string | undefined;
-      // 중국 협력사가 중국어로 입력한 내용(품명, 비고)만 한국어로 미리 번역해둔다.
-      if (isZh) {
-        const texts = [...finalItems.map((it) => it.name), memo.trim()];
-        const translations = await translateToKoreanForCache(texts);
-        finalItems = finalItems.map((it, i) => (translations[i] ? { ...it, nameKo: translations[i]! } : it));
-        memoKo = translations[translations.length - 1] ?? undefined;
-      }
+      const { items: finalItems, memoKo } = await buildItemsWithTranslation();
       const project = projects.find((p) => p.id === linkedProjectId);
       await createSupplierQuote({
         partnerId: appUser.uid,
@@ -301,6 +312,22 @@ export default function MyQuotesPage() {
             >
               {submitting ? zh(isZh, "제출 중...") : zh(isZh, "견적서 제출")}
             </button>
+            <button
+              onClick={async () => {
+                setPreviewLoading(true);
+                setPreviewLang(isZh ? "zh" : "ko");
+                try {
+                  setPreviewData(await buildItemsWithTranslation());
+                  setShowPreview(true);
+                } finally {
+                  setPreviewLoading(false);
+                }
+              }}
+              disabled={total <= 0 || previewLoading}
+              className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+            >
+              <Eye size={14} /> {previewLoading ? zh(isZh, "불러오는 중...") : zh(isZh, "미리보기")}
+            </button>
             <button onClick={() => setShowForm(false)} className="rounded-full border border-[#d1d1d6] px-5 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">
               {zh(isZh, "취소")}
             </button>
@@ -344,6 +371,13 @@ export default function MyQuotesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(q.totalAmount, q.currency)}</p>
+                <Link
+                  href={`/supplier-quotes/${q.id}/print`}
+                  target="_blank"
+                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                >
+                  <FileText size={12} /> {zh(isZh, "미리보기 / PDF")}
+                </Link>
                 {q.status === "submitted" && (
                   <button onClick={() => handleDelete(q)} className="rounded-full p-2 text-[#d1d1d6] hover:bg-red-50 hover:text-red-500">
                     <Trash2 size={14} />
@@ -373,6 +407,54 @@ export default function MyQuotesPage() {
           </div>
         ))}
       </div>
+
+      {showPreview && previewData && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setShowPreview(false)}>
+          <div className="mx-auto mb-4 flex w-full max-w-[210mm] items-center justify-between px-4">
+            <button
+              onClick={() => setShowPreview(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
+            >
+              <X size={16} />
+            </button>
+            {isZh && (
+              <div className="flex overflow-hidden rounded-full border border-white/30" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setPreviewLang("zh")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "zh" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
+                >
+                  中文版
+                </button>
+                <button
+                  onClick={() => setPreviewLang("ko")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "ko" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
+                >
+                  한국어판
+                </button>
+              </div>
+            )}
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <PdfPageScaler>
+              <SupplierQuoteDocument
+                lang={previewLang}
+                data={{
+                  quoteNumber: zh(isZh, "미리보기 (제출 전)"),
+                  partnerName: appUser?.name ?? "",
+                  currency,
+                  items: previewData.items,
+                  totalAmount: total,
+                  orderKind,
+                  linkedProjectName: projects.find((p) => p.id === linkedProjectId)?.name,
+                  memo: memo.trim() || undefined,
+                  memoKo: previewData.memoKo,
+                  submittedAt: Date.now(),
+                }}
+              />
+            </PdfPageScaler>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

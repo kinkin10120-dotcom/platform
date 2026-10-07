@@ -36,6 +36,7 @@ function fromDoc(d: any): SupplierOrder {
     linkedProjectId: data.linkedProjectId || undefined,
     linkedProjectName: data.linkedProjectName || undefined,
     lotNo: data.lotNo || undefined,
+    installmentType: data.installmentType === "deposit" || data.installmentType === "balance" ? data.installmentType : undefined,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     partnerId: data.partnerId || undefined,
@@ -120,6 +121,7 @@ export interface CreateSupplierOrderInput {
   linkedProjectId?: string;
   linkedProjectName?: string;
   lotNo?: string;
+  installmentType?: "deposit" | "balance";
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
   partnerId?: string;
@@ -151,6 +153,7 @@ export async function createSupplierOrder(input: CreateSupplierOrderInput) {
     linkedProjectId: input.linkedProjectId ?? "",
     linkedProjectName: input.linkedProjectName ?? "",
     lotNo: input.lotNo ?? "",
+    installmentType: input.installmentType ?? null,
     linkedPurchaseOrderId: input.linkedPurchaseOrderId ?? "",
     linkedPurchaseOrderNo: input.linkedPurchaseOrderNo ?? "",
     partnerId: input.partnerId ?? "",
@@ -179,6 +182,7 @@ export type SupplierOrderPatch = Partial<
     | "linkedProjectId"
     | "linkedProjectName"
     | "lotNo"
+    | "installmentType"
     | "linkedPurchaseOrderId"
     | "linkedPurchaseOrderNo"
     | "partnerId"

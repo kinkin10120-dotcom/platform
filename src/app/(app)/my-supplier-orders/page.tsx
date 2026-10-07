@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Package, FileText } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal } from "@/lib/firestore/supplierOrders";
-import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL } from "@/lib/types";
+import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -83,6 +83,11 @@ export default function MySupplierOrdersPage() {
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
                     {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
                   </span>
+                  {o.installmentType && (
+                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                      {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+                    </span>
+                  )}
                 </p>
                 {o.linkedProjectName && (
                   <p className="mt-0.5 text-xs text-[#86868b]">{o.linkedProjectName}</p>

@@ -1,4 +1,4 @@
-import { SUPPLIER_ORDER_KIND_CN, SUPPLIER_ORDER_KIND_LABEL, SupplierCurrency, SupplierOrderItem } from "@/lib/types";
+import { SUPPLIER_ORDER_KIND_CN, SUPPLIER_ORDER_KIND_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL, SupplierCurrency, SupplierOrderItem } from "@/lib/types";
 import { calcSupplierItemTotal, calcSupplierOrderTotal, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 
 // 발주서를 받는 쪽이 중국 공장이라 라벨을 전부 중문/영문 병기로 쓴다. 우리 쪽 발주서(매출)는
@@ -17,6 +17,7 @@ export interface SupplierOrderDocumentData {
   packingNote?: string;
   memo?: string;
   lotNo?: string;
+  installmentType?: "deposit" | "balance";
   createdAt: number;
 }
 
@@ -78,6 +79,9 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           <Row label={L("供应商 / Supplier", "발주처")} value={data.supplierName || "-"} />
           <Row label={L("订单号 / PO No.", "발주번호")} value={data.soNumber ?? "발행 시 자동 발급"} />
           {data.lotNo && <Row label={L("批次 / Lot", "로트번호")} value={data.lotNo} />}
+          {data.installmentType && (
+            <Row label={L("款项 / Installment", "구분")} value={ko ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType] : (data.installmentType === "deposit" ? "定金 / Deposit" : "尾款 / Balance")} />
+          )}
           {singleClient && <Row label={L("客户 / Client", "고객사")} value={singleClient} />}
           {singleKind && (
             <Row

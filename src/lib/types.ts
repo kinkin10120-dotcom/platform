@@ -670,6 +670,11 @@ export const SUPPLIER_ORDER_KIND_CN: Record<SupplierOrderKind, string> = {
   development: "开发 / Development",
 };
 
+export const SUPPLIER_ORDER_INSTALLMENT_LABEL: Record<"deposit" | "balance", string> = {
+  deposit: "선금",
+  balance: "잔금",
+};
+
 export interface SupplierOrderItem {
   name: string; // 내부용 한글 품명 (목록·검색에 쓰인다)
   nameEn?: string; // 발주서에 실제로 찍히는 영문/중문 품명
@@ -752,6 +757,9 @@ export interface SupplierOrder {
   linkedProjectName?: string;
   // 같은 제품을 여러 차례 나눠 발주할 때 공장과 맞추는 로트 번호(자유 텍스트).
   lotNo?: string;
+  // 개발비(금형·시제품 등)를 선금/잔금으로 나눠 발주할 때만 표시용으로 쓴다 — 이것만으로
+  // 실제 결제·청구 로직이 갈리지는 않고, 목록·청구서 선택 화면에 라벨로만 나타난다.
+  installmentType?: "deposit" | "balance";
   // "이 고객 발주가 들어와서 이 구매발주를 냈다"를 잇는 참조. 반드시 이쪽(매입 문서)에만 둔다 —
   // 반대로 purchaseOrders에 "이 발주로 낸 구매발주" 필드를 달면 그 컬렉션은 고객도 읽을 수 있어
   // 원가 문서의 존재와 번호가 그대로 새어나간다. supplierOrders는 관리자 전용이라 여기서

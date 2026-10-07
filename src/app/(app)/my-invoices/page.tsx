@@ -12,7 +12,7 @@ import {
   createSupplierInvoice,
   deleteSupplierInvoice,
 } from "@/lib/firestore/supplierInvoices";
-import { SupplierOrder, SupplierInvoice, SupplierInvoiceLineItem, SupplierCurrency, SUPPLIER_INVOICE_STATUS_LABEL } from "@/lib/types";
+import { SupplierOrder, SupplierInvoice, SupplierInvoiceLineItem, SupplierCurrency, SUPPLIER_INVOICE_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
 import PdfPageScaler from "@/components/PdfPageScaler";
@@ -131,7 +131,7 @@ export default function MyInvoicesPage() {
         soNumber: o.soNumber,
         linkedProjectId: o.linkedProjectId,
         linkedProjectName: o.linkedProjectName,
-        description: o.items.map((it) => it.name).join(", ") || o.soNumber,
+        description: `${o.installmentType ? `[${SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]}] ` : ""}${o.items.map((it) => it.name).join(", ") || o.soNumber}`,
         amount: o.totalAmount,
       })),
       ...customItems
@@ -238,7 +238,14 @@ export default function MyInvoicesPage() {
               {(outstandingByCurrency.get(currency) ?? []).map((o) => (
                 <label key={o.id} className="flex items-center gap-2 rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs">
                   <input type="checkbox" checked={selectedOrderIds.includes(o.id)} onChange={() => toggleOrder(o.id)} />
-                  <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">{o.soNumber}{o.linkedProjectName ? ` · ${o.linkedProjectName}` : ""}</span>
+                  <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
+                    {o.soNumber}{o.linkedProjectName ? ` · ${o.linkedProjectName}` : ""}
+                    {o.installmentType && (
+                      <span className="ml-1.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                        {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+                      </span>
+                    )}
+                  </span>
                   <span className="shrink-0 font-medium text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</span>
                 </label>
               ))}

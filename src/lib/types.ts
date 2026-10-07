@@ -798,6 +798,9 @@ export interface SupplierInvoiceLineItem {
   linkedProjectId?: string;
   linkedProjectName?: string;
   description: string;
+  // 중국 협력사가 중국어로 입력한 내용의 한국어 번역 — 관리자는 항상 이 값(없으면 원문)을
+  // 본다. 원문이 이미 한국어(발주서 품목명 등)면 번역이 필요 없어 비워둔다.
+  descriptionKo?: string;
   amount: number;
 }
 
@@ -810,6 +813,7 @@ export interface SupplierInvoice {
   items: SupplierInvoiceLineItem[];
   totalAmount: number;
   memo?: string;
+  memoKo?: string;
   status: SupplierInvoiceStatus;
   submittedAt: number;
   paidAt?: number;

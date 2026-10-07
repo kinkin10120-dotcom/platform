@@ -13,7 +13,7 @@ import {
   deleteSupplierInvoice,
 } from "@/lib/firestore/supplierInvoices";
 import { SupplierOrder, SupplierInvoice, SupplierInvoiceLineItem, SupplierCurrency, SUPPLIER_INVOICE_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
@@ -42,7 +42,7 @@ export default function MyInvoicesPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; nameZh?: string }[]>([]);
 
   const [showForm, setShowForm] = useState(false);
   const [currencyChoice, setCurrencyChoice] = useState<SupplierCurrency>("USD");
@@ -55,6 +55,9 @@ export default function MyInvoicesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<{ items: SupplierInvoiceLineItem[]; memoKo?: string } | null>(null);
+  const [previewLang, setPreviewLang] = useState<"zh" | "ko">("zh");
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -73,14 +76,24 @@ export default function MyInvoicesPage() {
     const ids = appUser?.projectIds ?? [];
     if (ids.length === 0) return;
     (async () => {
-      const list: { id: string; name: string }[] = [];
+      const list: { id: string; name: string; nameZh?: string }[] = [];
       for (const part of chunk(ids, 10)) {
         const snap = await getDocs(query(collection(db, "projects"), where(documentId(), "in", part)));
-        snap.docs.forEach((d) => list.push({ id: d.id, name: d.data().name }));
+        snap.docs.forEach((d) => list.push({ id: d.id, name: d.data().name, nameZh: d.data().nameZh || undefined }));
       }
       setProjects(list);
     })();
   }, [appUser?.projectIds]);
+
+  // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다 — 다른 화면과
+  // 같은 방식(미리 번역된 nameZh 우선, 없으면 즉석 번역).
+  const zhProjectNames = useZhAutoTranslate(isZh, [
+    ...projects.map((p) => p.name),
+    ...orders.map((o) => o.linkedProjectName || "").filter(Boolean),
+  ]);
+  function trProjectName(name: string, nameZh?: string): string {
+    return (isZh && nameZh) || zhProjectNames[name] || name;
+  }
 
   // 이미 어떤 청구서에든(제출됨/지급완료 상관없이) 한 번 담긴 발주서는 더 이상 미수금이 아니다.
   const invoicedOrderIds = useMemo(
@@ -99,12 +112,12 @@ export default function MyInvoicesPage() {
     const map = new Map<string, { name: string; totals: Partial<Record<SupplierCurrency, number>> }>();
     outstandingOrders.forEach((o) => {
       const key = o.linkedProjectId || "__none__";
-      const entry = map.get(key) ?? { name: o.linkedProjectName || zh(isZh, "프로젝트 미지정"), totals: {} };
+      const entry = map.get(key) ?? { name: o.linkedProjectName ? trProjectName(o.linkedProjectName) : zh(isZh, "프로젝트 미지정"), totals: {} };
       entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + o.totalAmount;
       map.set(key, entry);
     });
     return Array.from(map.values());
-  }, [outstandingOrders, isZh]);
+  }, [outstandingOrders, isZh, zhProjectNames]);
 
   function openForm() {
     setSelectedOrderIds([]);
@@ -150,22 +163,43 @@ export default function MyInvoicesPage() {
     ];
   }
 
+  // 중국 협력사가 직접 입력한 내용(직접 추가한 항목의 내용, 비고)만 한국어로 미리 번역해둔다 —
+  // 발주서에서 가져온 항목의 설명은 이미 한국어(관리자가 입력한 품명)라 번역이 필요 없다.
+  async function buildItemsWithTranslation(): Promise<{ items: SupplierInvoiceLineItem[]; memoKo?: string }> {
+    const items = buildItems();
+    if (!isZh) return { items };
+    const customIndexes = items
+      .map((it, i) => (it.source === "custom" ? i : -1))
+      .filter((i) => i >= 0);
+    const texts = [...customIndexes.map((i) => items[i].description), memo.trim()];
+    const translations = await translateToKoreanForCache(texts);
+    const translatedItems = items.map((it, i) => {
+      const idx = customIndexes.indexOf(i);
+      if (idx === -1) return it;
+      const ko = translations[idx];
+      return ko ? { ...it, descriptionKo: ko } : it;
+    });
+    const memoKo = translations[translations.length - 1] ?? undefined;
+    return { items: translatedItems, memoKo: memoKo ?? undefined };
+  }
+
   async function handleSubmit() {
     if (!appUser) return;
-    const items = buildItems();
-    if (items.length === 0) {
+    if (buildItems().length === 0) {
       setSubmitError(zh(isZh, "청구할 항목이 없습니다."));
       return;
     }
     setSubmitting(true);
     setSubmitError("");
     try {
+      const { items, memoKo } = await buildItemsWithTranslation();
       await createSupplierInvoice({
         partnerId: appUser.uid,
         partnerName: appUser.name,
         currency,
         items,
         memo: memo.trim() || undefined,
+        memoKo,
         createdBy: appUser.uid,
       });
       setShowForm(false);
@@ -246,7 +280,7 @@ export default function MyInvoicesPage() {
                 <label key={o.id} className="flex items-center gap-2 rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs">
                   <input type="checkbox" checked={selectedOrderIds.includes(o.id)} onChange={() => toggleOrder(o.id)} />
                   <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
-                    {o.soNumber}{o.linkedProjectName ? ` · ${o.linkedProjectName}` : ""}
+                    {o.soNumber}{o.linkedProjectName ? ` · ${trProjectName(o.linkedProjectName)}` : ""}
                     {o.installmentType && (
                       <span className="ml-1.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
                         {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
@@ -279,7 +313,7 @@ export default function MyInvoicesPage() {
                     className="rounded-lg border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
                   >
                     <option value="">{zh(isZh, "프로젝트 없음")}</option>
-                    {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {projects.map((p) => <option key={p.id} value={p.id}>{trProjectName(p.name, p.nameZh)}</option>)}
                   </select>
                   <NumberInput
                     value={c.amount}
@@ -320,11 +354,20 @@ export default function MyInvoicesPage() {
               {submitting ? zh(isZh, "제출 중...") : zh(isZh, "청구서 제출")}
             </button>
             <button
-              onClick={() => setShowPreview(true)}
-              disabled={total <= 0}
+              onClick={async () => {
+                setPreviewLoading(true);
+                setPreviewLang(isZh ? "zh" : "ko");
+                try {
+                  setPreviewData(await buildItemsWithTranslation());
+                  setShowPreview(true);
+                } finally {
+                  setPreviewLoading(false);
+                }
+              }}
+              disabled={total <= 0 || previewLoading}
               className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
             >
-              <Eye size={14} /> {zh(isZh, "미리보기")}
+              <Eye size={14} /> {previewLoading ? zh(isZh, "불러오는 중...") : zh(isZh, "미리보기")}
             </button>
             <button onClick={() => setShowForm(false)} className="rounded-full border border-[#d1d1d6] px-5 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">
               {zh(isZh, "취소")}
@@ -379,26 +422,46 @@ export default function MyInvoicesPage() {
         ))}
       </div>
 
-      {showPreview && (
+      {showPreview && previewData && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setShowPreview(false)}>
-          <div className="mx-auto mb-4 w-full max-w-[210mm] px-4">
+          <div className="mx-auto mb-4 flex w-full max-w-[210mm] items-center justify-between px-4">
             <button
               onClick={() => setShowPreview(false)}
               className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
             >
               <X size={16} />
             </button>
+            {/* 중국 협력사만 의미가 있는 토글 — 본인이 쓴 중국어 원문과, 관리자가 실제로 볼
+                한국어 번역본을 둘 다 확인할 수 있게 한다. */}
+            {isZh && (
+              <div className="flex overflow-hidden rounded-full border border-white/30" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => setPreviewLang("zh")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "zh" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
+                >
+                  中文版
+                </button>
+                <button
+                  onClick={() => setPreviewLang("ko")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "ko" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
+                >
+                  한국어판
+                </button>
+              </div>
+            )}
           </div>
           <div onClick={(e) => e.stopPropagation()}>
             <PdfPageScaler>
               <SupplierInvoiceDocument
+                lang={previewLang}
                 data={{
                   invoiceNumber: zh(isZh, "미리보기 (제출 전)"),
                   partnerName: appUser?.name ?? "",
                   currency,
-                  items: buildItems(),
+                  items: previewData.items,
                   totalAmount: total,
                   memo: memo.trim() || undefined,
+                  memoKo: previewData.memoKo,
                   submittedAt: Date.now(),
                 }}
               />

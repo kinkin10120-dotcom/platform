@@ -19,6 +19,9 @@ export default function SupplierInvoicePrintPage() {
   const isZh = usePartnerZh();
   const router = useRouter();
   const [invoice, setInvoice] = useState<SupplierInvoice | null | undefined>(undefined);
+  // 관리자는 항상 한국어판만 본다(토글 자체를 안 보여줌) — 중국 협력사 계정만 중문/한글을
+  // 오가며 본인이 쓴 원문과 번역본을 둘 다 확인할 수 있다.
+  const [docLang, setDocLang] = useState<"zh" | "ko">(isZh ? "zh" : "ko");
 
   useEffect(() => {
     if (loading) return;
@@ -71,17 +74,35 @@ export default function SupplierInvoicePrintPage() {
             </button>
             <p className="text-sm text-[#86868b]">{invoice.invoiceNumber} — {zh(isZh, "인쇄 시 A4 크기로 저장됩니다.")}</p>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
-          >
-            {zh(isZh, "인쇄 / PDF 저장")}
-          </button>
+          <div className="flex items-center gap-2">
+            {appUser?.role === "partner" && isZh && (
+              <div className="flex overflow-hidden rounded-full border border-[#d1d1d6]">
+                <button
+                  onClick={() => setDocLang("zh")}
+                  className={`px-4 py-1.5 text-xs font-medium ${docLang === "zh" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+                >
+                  中文版
+                </button>
+                <button
+                  onClick={() => setDocLang("ko")}
+                  className={`px-4 py-1.5 text-xs font-medium ${docLang === "ko" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+                >
+                  한국어판
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => window.print()}
+              className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black"
+            >
+              {zh(isZh, "인쇄 / PDF 저장")}
+            </button>
+          </div>
         </div>
       </div>
 
       <PdfPageScaler>
-        <SupplierInvoiceDocument data={invoice} />
+        <SupplierInvoiceDocument data={invoice} lang={appUser?.role === "admin" ? "ko" : docLang} />
       </PdfPageScaler>
     </div>
   );

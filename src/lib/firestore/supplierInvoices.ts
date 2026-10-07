@@ -28,6 +28,7 @@ function fromDoc(d: any): SupplierInvoice {
     items: data.items ?? [],
     totalAmount: data.totalAmount ?? 0,
     memo: data.memo || undefined,
+    memoKo: data.memoKo || undefined,
     status: data.status === "paid" ? "paid" : "submitted",
     submittedAt: data.submittedAt?.toMillis ? data.submittedAt.toMillis() : Date.now(),
     paidAt: data.paidAt?.toMillis ? data.paidAt.toMillis() : undefined,
@@ -70,6 +71,7 @@ export interface CreateSupplierInvoiceInput {
   currency: SupplierCurrency;
   items: SupplierInvoiceLineItem[];
   memo?: string;
+  memoKo?: string;
   createdBy: string;
 }
 
@@ -89,6 +91,7 @@ export async function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
     items: input.items,
     totalAmount,
     memo: input.memo ?? "",
+    memoKo: input.memoKo ?? "",
     status: "submitted" as SupplierInvoiceStatus,
     submittedAt: serverTimestamp(),
     createdBy: input.createdBy,

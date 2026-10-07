@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { FileText, Package } from "lucide-react";
+import { ChevronDown, ChevronUp, FileText, Package } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierItemTotal, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder, SUPPLIER_ORDER_STATUS_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL } from "@/lib/types";
@@ -23,6 +23,18 @@ export default function MySupplierOrdersPage() {
   const [orders, setOrders] = useState<SupplierOrder[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
+  // 내역이 많아지면 한눈에 찾기 어려워서, 기본은 접어두고 번호·금액 등 핵심만 보여준 뒤
+  // 눌러서 펼치게 한다.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -77,85 +89,107 @@ export default function MySupplierOrdersPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {visibleOrders.map((o) => (
-          <div key={o.id} className="rounded-3xl bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="flex items-center gap-2 font-semibold text-[#1d1d1f]">
-                  {o.soNumber}
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
-                    {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
-                  </span>
-                  {o.installmentType && (
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
-                      {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+      <div className="space-y-3">
+        {visibleOrders.map((o) => {
+          const expanded = expandedIds.has(o.id);
+          return (
+            <div key={o.id} className="overflow-hidden rounded-3xl bg-white">
+              <button
+                onClick={() => toggleExpanded(o.id)}
+                className="flex w-full flex-wrap items-center justify-between gap-2 p-5 text-left"
+              >
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2 font-semibold text-[#1d1d1f]">
+                    {o.soNumber}
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[o.status]}`}>
+                      {zh(isZh, SUPPLIER_ORDER_STATUS_LABEL[o.status])}
                     </span>
-                  )}
-                </p>
-                {o.linkedProjectName && (
-                  <p className="mt-0.5 text-xs text-[#86868b]">{o.linkedProjectName}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <p className="text-xs text-[#86868b]">
-                  {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
-                </p>
-                {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
-                    router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
-                    그대로 돌아온다. */}
-                <Link
-                  href={`/supplier-orders/${o.id}/print`}
-                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
-                >
-                  <FileText size={12} />
-                  {zh(isZh, "미리보기 / PDF")}
-                </Link>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {o.items.map((it, i) => (
-                <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium text-[#1d1d1f]">{it.nameEn || it.name}</p>
-                    {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
-                  </div>
-                  <div className="shrink-0 text-right text-xs text-[#86868b]">
-                    <p>{it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, o.currency)}</p>
-                    <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(calcSupplierItemTotal(it), o.currency)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86868b]">
-                {o.incoterms && <span>Incoterms: {o.incoterms}</span>}
-                {o.portOfLoading && <span>{zh(isZh, "선적항")}: {o.portOfLoading}</span>}
-                {o.leadTimeDays != null && <span>{zh(isZh, "납기")}: {o.leadTimeDays}{zh(isZh, "일")}</span>}
-                {o.paymentTerms && <span>{zh(isZh, "결제조건")}: {o.paymentTerms}</span>}
-              </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
-                {(o.installmentPercent ?? 100) < 100 && (
-                  <p className="text-xs font-semibold text-blue-600">
-                    {zh(isZh, "이번 청구")} ({o.installmentType ? zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]) : ""} {o.installmentPercent}%): {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                    {o.installmentType && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
+                        {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+                      </span>
+                    )}
                   </p>
-                )}
-              </div>
-            </div>
+                  {o.linkedProjectName && (
+                    <p className="mt-0.5 truncate text-xs text-[#86868b]">{o.linkedProjectName}</p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <p className="text-xs text-[#86868b]">
+                    {new Date(o.issuedAt ?? o.createdAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                  </p>
+                  <div className="text-right">
+                    <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+                    {(o.installmentPercent ?? 100) < 100 && (
+                      <p className="text-[11px] font-medium text-blue-600">
+                        {zh(isZh, "이번 청구")} {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                      </p>
+                    )}
+                  </div>
+                  {expanded ? <ChevronUp size={16} className="text-[#86868b]" /> : <ChevronDown size={16} className="text-[#86868b]" />}
+                </div>
+              </button>
 
-            {o.packingNote && (
-              <p className="mt-2 text-xs text-[#86868b]">
-                {zh(isZh, "포장")}: {zhNotes[o.packingNote] || o.packingNote}
-              </p>
-            )}
-            {o.memo && (
-              <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
-            )}
-          </div>
-        ))}
+              {expanded && (
+                <div className="border-t border-[#f0f0f0] px-5 pb-5 pt-4">
+                  <div className="flex justify-end">
+                    {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
+                        router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
+                        그대로 돌아온다. */}
+                    <Link
+                      href={`/supplier-orders/${o.id}/print`}
+                      className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                    >
+                      <FileText size={12} />
+                      {zh(isZh, "미리보기 / PDF")}
+                    </Link>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {o.items.map((it, i) => (
+                      <div key={i} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-sm">
+                        <div className="min-w-0">
+                          <p className="font-medium text-[#1d1d1f]">{it.nameEn || it.name}</p>
+                          {it.spec && <p className="text-xs text-[#86868b]">{it.spec}</p>}
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-[#86868b]">
+                          <p>{it.quantity.toLocaleString()}{it.unit ?? "EA"} × {formatSupplierMoney(it.unitPrice, o.currency)}</p>
+                          <p className="font-semibold text-[#1d1d1f]">{formatSupplierMoney(calcSupplierItemTotal(it), o.currency)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#f0f0f0] pt-4">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#86868b]">
+                      {o.incoterms && <span>Incoterms: {o.incoterms}</span>}
+                      {o.portOfLoading && <span>{zh(isZh, "선적항")}: {o.portOfLoading}</span>}
+                      {o.leadTimeDays != null && <span>{zh(isZh, "납기")}: {o.leadTimeDays}{zh(isZh, "일")}</span>}
+                      {o.paymentTerms && <span>{zh(isZh, "결제조건")}: {o.paymentTerms}</span>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(o.totalAmount, o.currency)}</p>
+                      {(o.installmentPercent ?? 100) < 100 && (
+                        <p className="text-xs font-semibold text-blue-600">
+                          {zh(isZh, "이번 청구")} ({o.installmentType ? zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]) : ""} {o.installmentPercent}%): {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {o.packingNote && (
+                    <p className="mt-2 text-xs text-[#86868b]">
+                      {zh(isZh, "포장")}: {zhNotes[o.packingNote] || o.packingNote}
+                    </p>
+                  )}
+                  {o.memo && (
+                    <p className="mt-1 whitespace-pre-wrap text-xs text-[#86868b]">{zhNotes[o.memo] || o.memo}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

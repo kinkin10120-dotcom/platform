@@ -22,6 +22,12 @@ export interface SupplierOrderDocumentData {
   createdAt: number;
 }
 
+const INSTALLMENT_LABEL_CN: Record<"deposit" | "balance" | "full", string> = {
+  deposit: "定金 / Deposit",
+  balance: "尾款 / Balance",
+  full: "全款 / Paid in Full",
+};
+
 // 외화(USD/CNY) 결제는 홍콩 법인(AIM TECHNOLOGY (HK) COMPANY) 명의로 발행한다 — 견적서·청구서와
 // 같은 기준이다. 해외송금 계좌가 홍콩 법인 앞으로 되어 있어 원화 문서와 발행 주체를 분리한다.
 const HK_COMPANY = {
@@ -83,11 +89,7 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           {data.installmentType && (
             <Row
               label={L("款项 / Installment", "구분")}
-              value={
-                ko
-                  ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType]
-                  : { deposit: "定金 / Deposit", balance: "尾款 / Balance", full: "全款 / Paid in Full" }[data.installmentType]
-              }
+              value={ko ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType] : INSTALLMENT_LABEL_CN[data.installmentType]}
             />
           )}
           {singleClient && <Row label={L("客户 / Client", "고객사")} value={singleClient} />}
@@ -190,7 +192,13 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
           {data.installmentPercent != null && data.installmentPercent < 100 && (
             <div className="flex items-center justify-between text-sm font-semibold text-blue-600">
               <span>
-                {L("本次请款", "이번 청구")} ({data.installmentType ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType] : ""} {data.installmentPercent}%)
+                {L("本次请款", "이번 청구")} (
+                {data.installmentType
+                  ? ko
+                    ? SUPPLIER_ORDER_INSTALLMENT_LABEL[data.installmentType]
+                    : INSTALLMENT_LABEL_CN[data.installmentType]
+                  : ""}{" "}
+                {data.installmentPercent}%)
               </span>
               <span>{formatSupplierMoney(total * (data.installmentPercent / 100), data.currency)}</span>
             </div>

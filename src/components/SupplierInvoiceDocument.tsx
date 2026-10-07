@@ -61,7 +61,7 @@ export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: S
       <table className="mt-8 w-full border-collapse text-sm">
         <thead>
           <tr className="border-y-2 border-[#1d1d1f] text-xs">
-            <th className="w-8 py-2.5 pr-2 text-left font-semibold">{L("序号", "순번")}</th>
+            <th className="w-10 whitespace-nowrap py-2.5 pr-2 text-left font-semibold">{L("序号", "순번")}</th>
             <th className="py-2.5 pr-2 text-left font-semibold">{L("内容", "내용")}</th>
             <th className="w-28 py-2.5 pl-2 text-right font-semibold">{L("金额", "금액")}</th>
           </tr>
@@ -69,7 +69,7 @@ export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: S
         <tbody>
           {data.items.map((it, i) => (
             <tr key={it.id} className="border-b border-[#e5e5e5] align-top">
-              <td className="py-3 pr-2 text-[#86868b]">{i + 1}</td>
+              <td className="whitespace-nowrap py-3 pr-2 text-[#86868b]">{i + 1}</td>
               <td className="py-3 pr-2">
                 <p className="font-medium">{ko ? it.descriptionKo || it.description : it.description}</p>
                 {it.linkedProjectName && (

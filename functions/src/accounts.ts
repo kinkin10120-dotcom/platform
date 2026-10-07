@@ -184,7 +184,13 @@ export const deleteClientAccount = onCall({ invoker: "public" }, async (request)
   if (!uid && !email) throw new HttpsError("invalid-argument", "uid 또는 email이 필요합니다.");
 
   const targetUid = uid ?? (await auth.getUserByEmail(email!)).uid;
-  await auth.deleteUser(targetUid);
+  try {
+    await auth.deleteUser(targetUid);
+  } catch (e: any) {
+    // 이전에 콘솔 등에서 Auth 계정만 먼저 지워져 Firestore 문서만 고아로 남은 경우 —
+    // 이걸 그냥 던지면 매번 "internal" 에러만 뜨고 영원히 문서를 못 지우게 된다.
+    if (e?.code !== "auth/user-not-found") throw e;
+  }
   await db.collection("users").doc(targetUid).delete().catch(() => {});
   return { ok: true, uid: targetUid };
 });

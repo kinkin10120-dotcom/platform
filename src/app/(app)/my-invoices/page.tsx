@@ -6,7 +6,7 @@ import { collection, documentId, getDocs, query, where } from "firebase/firestor
 import { Eye, FileText, Plus, Receipt, Trash2, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierOrdersByPartner, formatSupplierMoney, calcSupplierOrderBilledAmount } from "@/lib/firestore/supplierOrders";
+import { listenSupplierOrdersByPartner, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import {
   listenSupplierInvoicesByPartner,
   createSupplierInvoice,
@@ -50,6 +50,10 @@ export default function MyInvoicesPage() {
   // 실수로 USD/KRW를 고를 위험만 생긴다.
   const currency: SupplierCurrency = isZh ? "CNY" : currencyChoice;
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  // 발주 하나를 선금/잔금으로 나눠 여러 번 청구할 수 있어서, "이번 청구가 어느 차수인지"는
+  // 발주에 저장된 값이 아니라 청구서를 쓸 때마다 여기서 고른다(기본값은 defaultBilling이
+  // 제안). 사용자가 직접 고른 것만 여기 담긴다 — 안 고른 발주는 defaultBilling을 그대로 쓴다.
+  const [orderBillingOverrides, setOrderBillingOverrides] = useState<Record<string, { type: "deposit" | "balance" | "full"; percent: number }>>({});
   const [customItems, setCustomItems] = useState<{ id: string; description: string; amount: number; projectId: string }[]>([]);
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -95,28 +99,74 @@ export default function MyInvoicesPage() {
     return (isZh && nameZh) || zhProjectNames[name] || name;
   }
 
-  // 이미 어떤 청구서에든(제출됨/지급완료 상관없이) 한 번 담긴 발주서는 더 이상 미수금이 아니다.
-  const invoicedOrderIds = useMemo(
-    () => new Set(invoices.flatMap((inv) => inv.items.filter((it) => it.source === "order" && it.supplierOrderId).map((it) => it.supplierOrderId!))),
-    [invoices]
-  );
+  // 발주 하나가 선금→잔금처럼 여러 번 나눠 청구될 수 있어서, "청구서에 한 번이라도 담겼는지"가
+  // 아니라 "총액 중 이미 청구된 금액이 얼마인지"로 추적해야 한다 — 선금을 청구했다고 그
+  // 발주가 더 이상 안 보이면 나중에 잔금을 청구할 방법이 없어진다.
+  const invoicedAmountByOrderId = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const inv of invoices) {
+      for (const it of inv.items) {
+        if (it.source !== "order" || !it.supplierOrderId) continue;
+        map.set(it.supplierOrderId, (map.get(it.supplierOrderId) ?? 0) + it.amount);
+      }
+    }
+    return map;
+  }, [invoices]);
+
+  function remainingOf(o: SupplierOrder): number {
+    const invoiced = invoicedAmountByOrderId.get(o.id) ?? 0;
+    return Math.max(0, Math.round((o.totalAmount - invoiced) * 100) / 100);
+  }
+
+  // 선금/잔금 구분을 쓰는 발주이거나, 이미 일부 청구된 적 있는 발주만 "이번 청구 차수"
+  // 선택지를 보여준다 — 그 기능을 전혀 안 쓰는 평범한 단일 발주는 예전처럼 깔끔하게 전액만 보인다.
+  function needsPhaseSelector(o: SupplierOrder): boolean {
+    return !!o.installmentType || (invoicedAmountByOrderId.get(o.id) ?? 0) > 0.009;
+  }
+
+  function defaultBilling(o: SupplierOrder): { type: "deposit" | "balance" | "full"; percent: number } {
+    const invoiced = invoicedAmountByOrderId.get(o.id) ?? 0;
+    if (invoiced <= 0.009) {
+      // 아직 한 번도 청구 안 한 발주 — 발주 작성 시 관리자가 걸어둔 구분을 그대로 제안한다.
+      return o.installmentType
+        ? { type: o.installmentType, percent: o.installmentType === "full" ? 100 : (o.installmentPercent ?? 50) }
+        : { type: "full", percent: 100 };
+    }
+    // 이미 일부(보통 선금) 청구된 적 있다 — 남은 전액(잔금)을 기본값으로 제안한다.
+    const remainPercent = Math.round(((o.totalAmount - invoiced) / o.totalAmount) * 100);
+    return { type: "balance", percent: Math.min(100, Math.max(1, remainPercent)) };
+  }
+
+  function getBilling(o: SupplierOrder): { type: "deposit" | "balance" | "full"; percent: number } {
+    return orderBillingOverrides[o.id] ?? defaultBilling(o);
+  }
+
+  function billedAmountForOrder(o: SupplierOrder): number {
+    const billing = getBilling(o);
+    const pct = billing.type === "full" ? 100 : billing.percent;
+    const raw = Math.round(o.totalAmount * (pct / 100) * 100) / 100;
+    return Math.min(remainingOf(o), raw);
+  }
+
   // 아직 발행 전(작성중)인 발주는 협력사 쪽엔 애초에 노출되지 않는다(my-supplier-orders에서도
   // issued만 보여준다) — 여기서도 같은 기준으로 걸러야 "안 보이던 게 갑자기 청구서에 뜨는"
   // 일이 없다.
-  const outstandingOrders = orders.filter((o) => o.status === "issued" && !invoicedOrderIds.has(o.id));
+  const outstandingOrders = orders.filter((o) => o.status === "issued" && remainingOf(o) > 0.009);
   const outstandingByCurrency = useMemo(() => {
     const map = new Map<SupplierCurrency, SupplierOrder[]>();
     outstandingOrders.forEach((o) => map.set(o.currency, [...(map.get(o.currency) ?? []), o]));
     return map;
   }, [outstandingOrders]);
 
-  // 프로젝트별 미수금 — 청구서 작성 폼 없이도 전체 현황을 한눈에 보여준다.
+  // 프로젝트별 미수금 — 청구서 작성 폼 없이도 전체 현황을 한눈에 보여준다. 이번에 청구할
+  // 금액(선금 50%만 등)이 아니라 그 발주에서 아직 못 받은 전체 금액을 보여줘야 "미수금"이라는
+  // 말과 맞는다.
   const outstandingByProject = useMemo(() => {
     const map = new Map<string, { name: string; totals: Partial<Record<SupplierCurrency, number>> }>();
     outstandingOrders.forEach((o) => {
       const key = o.linkedProjectId || "__none__";
       const entry = map.get(key) ?? { name: o.linkedProjectName ? trProjectName(o.linkedProjectName) : zh(isZh, "프로젝트 미지정"), totals: {} };
-      entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + calcSupplierOrderBilledAmount(o);
+      entry.totals[o.currency] = (entry.totals[o.currency] ?? 0) + remainingOf(o);
       map.set(key, entry);
     });
     return Array.from(map.values());
@@ -124,6 +174,7 @@ export default function MyInvoicesPage() {
 
   function openForm() {
     setSelectedOrderIds([]);
+    setOrderBillingOverrides({});
     setCustomItems([]);
     setMemo("");
     setSubmitError("");
@@ -139,20 +190,24 @@ export default function MyInvoicesPage() {
   }
 
   const selectedOrders = orders.filter((o) => selectedOrderIds.includes(o.id));
-  const total = selectedOrders.reduce((sum, o) => sum + calcSupplierOrderBilledAmount(o), 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const total = selectedOrders.reduce((sum, o) => sum + billedAmountForOrder(o), 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
 
   function buildItems(): SupplierInvoiceLineItem[] {
     return [
-      ...selectedOrders.map((o) => ({
-        id: newId(),
-        source: "order" as const,
-        supplierOrderId: o.id,
-        soNumber: o.soNumber,
-        linkedProjectId: o.linkedProjectId,
-        linkedProjectName: o.linkedProjectName,
-        description: `${o.installmentType ? `[${SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType]}] ` : ""}${o.items.map((it) => it.name).join(", ") || o.soNumber}`,
-        amount: calcSupplierOrderBilledAmount(o),
-      })),
+      ...selectedOrders.map((o) => {
+        const billing = getBilling(o);
+        const showBracket = needsPhaseSelector(o);
+        return {
+          id: newId(),
+          source: "order" as const,
+          supplierOrderId: o.id,
+          soNumber: o.soNumber,
+          linkedProjectId: o.linkedProjectId,
+          linkedProjectName: o.linkedProjectName,
+          description: `${showBracket ? `[${SUPPLIER_ORDER_INSTALLMENT_LABEL[billing.type]}] ` : ""}${o.items.map((it) => it.name).join(", ") || o.soNumber}`,
+          amount: billedAmountForOrder(o),
+        };
+      }),
       ...customItems
         .filter((c) => c.description.trim() && c.amount > 0)
         .map((c) => ({
@@ -279,29 +334,72 @@ export default function MyInvoicesPage() {
           <div>
             <p className="mb-1.5 text-xs font-medium text-[#86868b]">{zh(isZh, "미청구 발주서 중 이번에 청구할 건 선택")}</p>
             <div className="space-y-1.5">
-              {(outstandingByCurrency.get(currency) ?? []).map((o) => (
-                <label key={o.id} className="flex items-center gap-2 rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs">
-                  <input type="checkbox" checked={selectedOrderIds.includes(o.id)} onChange={() => toggleOrder(o.id)} />
-                  <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
-                    {o.soNumber}{o.linkedProjectName ? ` · ${trProjectName(o.linkedProjectName)}` : ""}
-                    {o.installmentType && (
-                      <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
-                        {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+              {(outstandingByCurrency.get(currency) ?? []).map((o) => {
+                const billing = getBilling(o);
+                const remaining = remainingOf(o);
+                const checked = selectedOrderIds.includes(o.id);
+                const showSelector = needsPhaseSelector(o);
+                return (
+                  <div key={o.id} className="rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={checked} onChange={() => toggleOrder(o.id)} />
+                      <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
+                        {o.soNumber}{o.linkedProjectName ? ` · ${trProjectName(o.linkedProjectName)}` : ""}
+                        {o.installmentType && (
+                          <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
+                            {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-right font-medium text-[#1d1d1f]">
-                    {formatSupplierMoney(calcSupplierOrderBilledAmount(o), o.currency)}
-                    {(o.installmentPercent ?? 100) < 100 && (
-                      <span className="ml-1 block text-[10px] font-normal text-[#86868b]">
-                        {isZh
-                          ? `全部 ${formatSupplierMoney(o.totalAmount, o.currency)} 的 ${o.installmentPercent}%`
-                          : `전체 ${formatSupplierMoney(o.totalAmount, o.currency)}의 ${o.installmentPercent}%`}
+                      <span className="shrink-0 text-right font-medium text-[#1d1d1f]">
+                        {formatSupplierMoney(billedAmountForOrder(o), o.currency)}
                       </span>
+                    </label>
+                    {remaining < o.totalAmount && (
+                      <p className="mt-1 pl-6 text-[10px] text-[#86868b]">
+                        {zh(isZh, "전체")} {formatSupplierMoney(o.totalAmount, o.currency)} · {zh(isZh, "남은 금액")} {formatSupplierMoney(remaining, o.currency)}
+                      </p>
                     )}
-                  </span>
-                </label>
-              ))}
+                    {/* 발주 자체에 선금/잔금 구분이 걸려 있거나 이미 일부 청구된 적 있을 때만
+                        "이번 청구 차수" 선택지를 보여준다 — 평범한 단일 발주는 그냥 체크만 하면 된다. */}
+                    {checked && showSelector && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-6">
+                        <select
+                          value={billing.type}
+                          onChange={(e) => {
+                            const type = e.target.value as "deposit" | "balance" | "full";
+                            setOrderBillingOverrides((prev) => ({
+                              ...prev,
+                              [o.id]: { type, percent: type === "full" ? 100 : (prev[o.id]?.percent ?? billing.percent) },
+                            }));
+                          }}
+                          className="rounded-lg border border-[#d1d1d6] bg-white px-2 py-1 text-[11px] outline-none focus:border-[#86868b]"
+                        >
+                          <option value="deposit">{zh(isZh, "선금")}</option>
+                          <option value="balance">{zh(isZh, "잔금")}</option>
+                          <option value="full">{zh(isZh, "완납")}</option>
+                        </select>
+                        {billing.type !== "full" && (
+                          <span className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={billing.percent}
+                              onChange={(e) => {
+                                const percent = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                                setOrderBillingOverrides((prev) => ({ ...prev, [o.id]: { type: billing.type, percent } }));
+                              }}
+                              className="w-12 rounded-lg border border-[#d1d1d6] bg-white px-1.5 py-1 text-[11px] outline-none focus:border-[#86868b]"
+                            />
+                            <span className="text-[11px] text-[#86868b]">% {zh(isZh, "청구")}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {(outstandingByCurrency.get(currency) ?? []).length === 0 && (
                 <p className="text-xs text-[#86868b]">{zh(isZh, "이 통화로 청구할 발주서가 없습니다.")}</p>
               )}

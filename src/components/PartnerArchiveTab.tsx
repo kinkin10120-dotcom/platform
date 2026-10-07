@@ -88,18 +88,30 @@ function ExpandModal({ f, onClose }: { f: PartnerArchiveFile; onClose: () => voi
   );
 }
 
+function formatUploadedAt(ts: number, isZh: boolean) {
+  return new Date(ts).toLocaleString(isZh ? "zh-CN" : "ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function FileRow({
   f,
   displayName,
   canDelete,
   onDelete,
   badge,
+  isZh,
 }: {
   f: PartnerArchiveFile;
   displayName: string;
   canDelete: boolean;
   onDelete: () => void;
   badge?: React.ReactNode;
+  isZh: boolean;
 }) {
   const [preview, setPreview] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -128,6 +140,7 @@ function FileRow({
             )}
             <span className="truncate text-[#1d1d1f]">{displayName}</span>
             <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
+            <span className="shrink-0 text-xs text-[#86868b]">{formatUploadedAt(f.uploadedAt, isZh)}</span>
             {f.taskName && (
               <span className="shrink-0 truncate rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">{f.taskName}</span>
             )}
@@ -165,12 +178,14 @@ function FileGroupRow({
   displayName,
   canDelete,
   onDelete,
+  isZh,
 }: {
   latest: PartnerArchiveFile;
   older: PartnerArchiveFile[];
   displayName: (f: PartnerArchiveFile) => string;
   canDelete: (f: PartnerArchiveFile) => boolean;
   onDelete: (f: PartnerArchiveFile) => void;
+  isZh: boolean;
 }) {
   const [showOlder, setShowOlder] = useState(false);
 
@@ -181,6 +196,7 @@ function FileGroupRow({
         displayName={displayName(latest)}
         canDelete={canDelete(latest)}
         onDelete={() => onDelete(latest)}
+        isZh={isZh}
         badge={
           older.length > 0 ? (
             <button
@@ -203,6 +219,7 @@ function FileGroupRow({
               displayName={displayName(f)}
               canDelete={canDelete(f)}
               onDelete={() => onDelete(f)}
+              isZh={isZh}
               badge={<span className="ml-1 shrink-0 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">v{f.version}</span>}
             />
           ))}
@@ -414,6 +431,7 @@ export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId
               displayName={(f) => zhFileNames[f.name] ?? f.name}
               canDelete={canDelete}
               onDelete={(f) => deletePartnerArchiveFile(f.id, f.storagePath)}
+              isZh={isZh}
             />
           ))}
           {files.length === 0 && <p className="text-sm text-[#86868b]">{zh(isZh, "첨부된 자료가 없습니다.")}</p>}

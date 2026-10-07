@@ -135,14 +135,6 @@ export default function SupplierQuotesTab() {
             <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">{selected.memoKo || selected.memo}</p>
           )}
 
-          <Link
-            href={`/supplier-quotes/${selected.id}/print`}
-            target="_blank"
-            className="flex w-fit items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
-          >
-            <Printer size={13} /> 견적서 보기 / PDF
-          </Link>
-
           {selected.status === "rejected" && selected.rejectReason && (
             <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">반려 사유: {selected.rejectReason}</p>
           )}
@@ -152,14 +144,45 @@ export default function SupplierQuotesTab() {
             </p>
           )}
 
-          {selected.status === "submitted" && (
+          {selected.status === "submitted" && rejecting ? (
             <div className="space-y-2 border-t border-[#f0f0f0] pt-4">
-              {!rejecting ? (
-                <div className="flex flex-wrap gap-2">
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={2}
+                placeholder="반려 사유 (선택, 협력사에게 전달됩니다)"
+                className="w-full resize-none rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs outline-none focus:border-[#86868b]"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReject}
+                  disabled={approving}
+                  className="rounded-full bg-red-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
+                >
+                  {approving ? "처리 중..." : "정말 반려"}
+                </button>
+                <button
+                  onClick={() => { setRejecting(false); setRejectReason(""); }}
+                  className="rounded-full border border-[#d1d1d6] px-4 py-2 text-xs text-[#1d1d1f] hover:bg-[#f5f5f7]"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 border-t border-[#f0f0f0] pt-4">
+              <Link
+                href={`/supplier-quotes/${selected.id}/print`}
+                className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black"
+              >
+                <Printer size={14} /> 견적서 보기 / PDF
+              </Link>
+              {selected.status === "submitted" && (
+                <>
                   <button
                     onClick={handleApprove}
                     disabled={approving}
-                    className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+                    className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
                   >
                     <Check size={14} /> {approving ? "처리 중..." : "승인하고 발주서 생성"}
                   </button>
@@ -170,36 +193,11 @@ export default function SupplierQuotesTab() {
                   >
                     <X size={13} /> 반려
                   </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <textarea
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    rows={2}
-                    placeholder="반려 사유 (선택, 협력사에게 전달됩니다)"
-                    className="w-full resize-none rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs outline-none focus:border-[#86868b]"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleReject}
-                      disabled={approving}
-                      className="rounded-full bg-red-500 px-4 py-2 text-xs font-medium text-white transition hover:bg-red-600 disabled:opacity-50"
-                    >
-                      {approving ? "처리 중..." : "정말 반려"}
-                    </button>
-                    <button
-                      onClick={() => { setRejecting(false); setRejectReason(""); }}
-                      className="rounded-full border border-[#d1d1d6] px-4 py-2 text-xs text-[#1d1d1f] hover:bg-[#f5f5f7]"
-                    >
-                      취소
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
-              {actionError && <p className="text-xs text-red-500">{actionError}</p>}
             </div>
           )}
+          {actionError && <p className="text-xs text-red-500">{actionError}</p>}
         </div>
       )}
     </div>

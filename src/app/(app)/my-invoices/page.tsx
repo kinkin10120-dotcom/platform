@@ -100,10 +100,10 @@ export default function MyInvoicesPage() {
     () => new Set(invoices.flatMap((inv) => inv.items.filter((it) => it.source === "order" && it.supplierOrderId).map((it) => it.supplierOrderId!))),
     [invoices]
   );
-  // "草拟中"(draft)이어도 협력사 본인 발주 목록(my-supplier-orders)엔 이미 금액·선금 조건이
-  // 그대로 보이고 있어서, 발행(issued) 여부로 다시 걸러내면 협력사 입장에선 "분명히 보이는
-  // 발주인데 청구서에선 안 뜬다"는 혼란만 생긴다 — draft/issued 구분 없이 전부 청구 대상으로 본다.
-  const outstandingOrders = orders.filter((o) => !invoicedOrderIds.has(o.id));
+  // 아직 발행 전(작성중)인 발주는 협력사 쪽엔 애초에 노출되지 않는다(my-supplier-orders에서도
+  // issued만 보여준다) — 여기서도 같은 기준으로 걸러야 "안 보이던 게 갑자기 청구서에 뜨는"
+  // 일이 없다.
+  const outstandingOrders = orders.filter((o) => o.status === "issued" && !invoicedOrderIds.has(o.id));
   const outstandingByCurrency = useMemo(() => {
     const map = new Map<SupplierCurrency, SupplierOrder[]>();
     outstandingOrders.forEach((o) => map.set(o.currency, [...(map.get(o.currency) ?? []), o]));

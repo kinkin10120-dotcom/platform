@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw, Download } from "lucide-react";
+import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw, Download, Send } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
 import { listenAllClientProductInternals, setClientProductInternal } from "@/lib/firestore/productInternal";
@@ -1953,6 +1953,7 @@ function SupplierOrderDetail({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [revertConfirm, setRevertConfirm] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [issuing, setIssuing] = useState(false);
   const kinds = Array.from(new Set(order.items.map((it) => it.orderKind ?? "production")));
   const singleKind = kinds.length === 1 ? kinds[0] : null;
 
@@ -2072,7 +2073,7 @@ function SupplierOrderDetail({
           href={`/supplier-orders/${order.id}/print`}
           className="flex items-center gap-1.5 rounded-full bg-[#1d1d1f] px-5 py-2 text-xs font-medium text-white transition hover:bg-black"
         >
-          <Printer size={14} /> 발주서 보기 / PDF
+          <Printer size={14} /> 미리보기 / PDF
         </Link>
         <button
           onClick={onEdit}
@@ -2080,12 +2081,27 @@ function SupplierOrderDetail({
         >
           <Pencil size={13} /> 수정
         </button>
-        {/* 발행 처리 버튼은 두지 않는다 — 발주서를 실제로 뽑는 시점이 곧 보내는 시점이라,
-            인쇄 페이지를 열면 자동으로 "발행됨"이 된다. 버튼을 따로 누르게 하면 누르는 걸
-            잊어버려서 상태가 실제와 어긋난다. */}
-        {/* 미리보기를 열기만 해도 자동으로 "발행됨"이 되다 보니, 실제로 공장에 보내지 않은
-            건인데도 이 상태가 되어 아래 삭제 버튼이 막히는 경우가 있다 — 그럴 때만 쓰라고
-            "초안으로 되돌리기"를 둔다. 실제로 발행해 보낸 건은 절대 여기로 되돌리면 안 된다. */}
+        {/* 미리보기를 보는 것과 실제로 공장에 보내는 건 다른 행동이라(검토만 하고 아직 안
+            보낼 수도 있다), 발행은 반드시 이 버튼을 눌러야만 된다 — 열람만으로 자동 발행되지
+            않는다. 발행되면 협력사 계정의 발주 목록·청구서에도 비로소 노출된다. */}
+        {order.status === "draft" && (
+          <button
+            onClick={async () => {
+              setIssuing(true);
+              try {
+                await setSupplierOrderStatus(order.id, "issued");
+              } finally {
+                setIssuing(false);
+              }
+            }}
+            disabled={issuing}
+            className="flex items-center gap-1.5 rounded-full border border-[#1d1d1f] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:bg-[#1d1d1f] hover:text-white disabled:opacity-50"
+          >
+            <Send size={13} /> {issuing ? "발행 중..." : "발행하기"}
+          </button>
+        )}
+        {/* 실수로 발행한 경우에만 쓰라고 "초안으로 되돌리기"를 둔다. 실제로 발행해 보낸 건은
+            절대 여기로 되돌리면 안 된다 — 되돌리는 순간 협력사 쪽 목록·청구서에서 사라진다. */}
         {order.status === "issued" &&
           (revertConfirm ? (
             <button
@@ -2178,7 +2194,7 @@ function PrintablePreview({ children, onClose, label }: { children: React.ReactN
           {/* 여기서 바로 인쇄하지 않는다 — 사이드바·상단바가 있는 화면 안에서 인쇄하면
               숨긴 요소들이 자리를 차지해 빈 두 번째 장이 생긴다. 저장한 뒤 전용 인쇄
               페이지에서 뽑는다. */}
-          <p className="text-xs text-[#86868b]">저장한 뒤 &quot;발주서 보기 / PDF&quot;에서 인쇄할 수 있습니다.</p>
+          <p className="text-xs text-[#86868b]">저장한 뒤 &quot;미리보기 / PDF&quot;에서 인쇄할 수 있습니다.</p>
         </div>
       </div>
 

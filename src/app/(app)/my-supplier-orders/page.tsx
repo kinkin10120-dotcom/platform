@@ -40,7 +40,11 @@ export default function MySupplierOrdersPage() {
     );
   }, [appUser, isPartner]);
 
-  const zhNotes = useZhAutoTranslate(isZh, orders.flatMap((o) => [o.memo ?? "", o.packingNote ?? ""]));
+  // 아직 발행 전(작성중)인 발주는 관리자가 검토 중인 내부 문서라 협력사에게 보여줄 필요가
+  // 없다 — "발행하기"를 눌러야 비로소 여기 목록에 나타난다.
+  const visibleOrders = orders.filter((o) => o.status === "issued");
+
+  const zhNotes = useZhAutoTranslate(isZh, visibleOrders.flatMap((o) => [o.memo ?? "", o.packingNote ?? ""]));
 
   if (appUser && !isPartner) {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
@@ -66,7 +70,7 @@ export default function MySupplierOrdersPage() {
         </p>
       )}
 
-      {loaded && !loadError && orders.length === 0 && (
+      {loaded && !loadError && visibleOrders.length === 0 && (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-[#d1d1d6] bg-white py-16 text-center">
           <Package size={32} className="mb-3 text-[#d1d1d6]" />
           <p className="text-sm text-[#86868b]">{zh(isZh, "등록된 발주서가 없습니다.")}</p>
@@ -74,7 +78,7 @@ export default function MySupplierOrdersPage() {
       )}
 
       <div className="space-y-4">
-        {orders.map((o) => (
+        {visibleOrders.map((o) => (
           <div key={o.id} className="rounded-3xl bg-white p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>

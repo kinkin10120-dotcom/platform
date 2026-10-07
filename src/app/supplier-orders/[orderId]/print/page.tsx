@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenSupplierOrder, setSupplierOrderStatus } from "@/lib/firestore/supplierOrders";
+import { listenSupplierOrder } from "@/lib/firestore/supplierOrders";
 import { SupplierOrder } from "@/lib/types";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
@@ -37,14 +37,6 @@ export default function SupplierOrderPrintPage() {
     return listenSupplierOrder(orderId, setOrder);
   }, [orderId]);
 
-  // 발주서를 뽑는 시점이 곧 공장에 보내는 시점이라, 이 페이지를 열면 "발행됨"으로 올린다 —
-  // 별도 "발행 처리" 버튼을 두면 누르는 걸 잊어버려 상태가 실제와 어긋난다.
-  useEffect(() => {
-    if (!order || order.status !== "draft") return;
-    if (appUser?.role !== "admin") return;
-    setSupplierOrderStatus(order.id, "issued").catch(() => {});
-  }, [order, appUser?.role]);
-
   // 인쇄/PDF 저장 대화상자가 제안하는 파일명은 document.title을 그대로 따른다.
   useEffect(() => {
     if (!order) return;
@@ -56,7 +48,11 @@ export default function SupplierOrderPrintPage() {
   // 매입 원가가 담긴 문서라 원래는 관리자만 볼 수 있었는데, 이 발주서를 실제로 받는
   // 협력사 계정(partnerId로 연동됨)에게는 자기 발주서 열람만 예외로 허용한다. Firestore
   // 규칙(supplierOrders — partnerId == 본인 uid)이 이미 막지만, 화면에서도 한 번 더 막는다.
-  const canView = appUser?.role === "admin" || (appUser?.role === "partner" && !!order && order.partnerId === appUser.uid);
+  // 아직 "발행"하지 않은(작성중) 발주는 협력사에게 보여줄 필요가 없다 — 관리자가 발행하기
+  // 전까지는 링크를 알고 있어도 협력사는 열람할 수 없다.
+  const canView =
+    appUser?.role === "admin" ||
+    (appUser?.role === "partner" && !!order && order.partnerId === appUser.uid && order.status === "issued");
   if (!canView) {
     return <p className="p-10 text-center text-sm text-[#86868b]">{zh(isZh, "접근 권한이 없습니다.")}</p>;
   }

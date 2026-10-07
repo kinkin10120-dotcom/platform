@@ -20,6 +20,9 @@ export default function MyArchivePage() {
   const [loaded, setLoaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  // 완료된 프로젝트까지 탭에 계속 남아있으면, 진행 중인 프로젝트를 찾을 때 거슬린다 — 홈
+  // 화면과 같은 방식으로 기본은 숨기고, 필요할 때만 눌러서 보게 한다.
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     if (!appUser) return;
@@ -44,9 +47,14 @@ export default function MyArchivePage() {
   const zhNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
   const trName = (p: Project) => (isZh && p.nameZh) || zhNames[p.name] || p.name;
 
+  const archivedCount = projects.filter((p) => p.status === "completed").length;
+  const visibleProjects = showCompleted ? projects : projects.filter((p) => p.status !== "completed");
+
   useEffect(() => {
-    if (projects.length > 0 && !selectedId) setSelectedId(projects[0].id);
-  }, [projects, selectedId]);
+    if (!selectedId && (visibleProjects[0] ?? projects[0])) {
+      setSelectedId((visibleProjects[0] ?? projects[0]).id);
+    }
+  }, [projects, visibleProjects, selectedId]);
 
   // 자료함의 "관련 업무" 선택지용 — hiddenFromPartner는 list 규칙에서 걸러줄 수 없어 앱에서 거른다.
   useEffect(() => {
@@ -76,9 +84,9 @@ export default function MyArchivePage() {
         </div>
       )}
 
-      {projects.length > 1 && (
+      {visibleProjects.length > 1 && (
         <div className="flex flex-wrap gap-2">
-          {projects.map((p) => (
+          {visibleProjects.map((p) => (
             <button
               key={p.id}
               onClick={() => setSelectedId(p.id)}
@@ -90,6 +98,19 @@ export default function MyArchivePage() {
             </button>
           ))}
         </div>
+      )}
+
+      {archivedCount > 0 && (
+        <button
+          onClick={() => setShowCompleted((v) => !v)}
+          className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]"
+        >
+          {showCompleted
+            ? zh(isZh, "완료된 프로젝트 숨기기")
+            : isZh
+              ? `已隐藏 ${archivedCount} 个已完成项目 · 查看`
+              : `완료된 프로젝트 ${archivedCount}건 숨겨짐 · 보기`}
+        </button>
       )}
 
       {selectedId && (

@@ -60,7 +60,7 @@ const STATUS_STYLE: Record<string, string> = {
 const NO_SUPPLIER = "미지정";
 
 // 결제조건 기본 문구 — 원화(국내) 발주서는 한글로 나가므로 기본값도 한글로 맞춘다.
-const DEFAULT_PAYMENT_FOREIGN = "T/T 30% deposit, 70% before shipment";
+const DEFAULT_PAYMENT_FOREIGN = "T/T 50% deposit, 50% before shipment";
 const DEFAULT_PAYMENT_KRW = "계약금 30%, 출고 전 잔금 70%";
 
 // 구매 카탈로그 한 줄. 출처가 둘(고객에게도 파는 제품 / 매입 전용 품목)이라, 화면과 발주

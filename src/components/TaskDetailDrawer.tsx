@@ -22,6 +22,7 @@ interface Props {
 export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onClose }: Props) {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
   const dependsOnTasks = allTasks.filter((t) => task.dependsOn.includes(t.id));
   const dependsOnEntries = dependsOnTasks.map((t) => ({ id: t.id, task: t }));
@@ -814,14 +815,18 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
             <FileUploader projectId={task.projectId} taskId={task.id} />
           </section>
 
-          {/* 코멘트 */}
-          <section>
-            <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-[#86868b]">
-              <MessageSquare size={13} />
-              {zh(isZh, "코멘트")}
-            </p>
-            <CommentThread taskId={task.id} task={task} projectUsers={assigneeOptions} />
-          </section>
+          {/* 코멘트 — 관리자-고객 전용 스레드다(firestore.rules도 그렇게 막아뒀다). 협력사와의
+              소통은 "협력사 자료함"(PartnerArchiveTab)으로 완전히 분리되어 있어서 여기엔
+              아예 안 보여야 한다. */}
+          {!isPartner && (
+            <section>
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-[#86868b]">
+                <MessageSquare size={13} />
+                {zh(isZh, "코멘트")}
+              </p>
+              <CommentThread taskId={task.id} task={task} projectUsers={assigneeOptions} />
+            </section>
+          )}
 
           {saving && <p className="mt-3 text-xs text-[#d1d1d6]">{zh(isZh, "저장 중...")}</p>}
         </div>

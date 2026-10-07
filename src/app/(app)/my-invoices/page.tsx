@@ -381,12 +381,19 @@ export default function MyInvoicesPage() {
                 const remaining = remainingOf(o);
                 const checked = selectedOrderIds.includes(o.id);
                 const showSelector = needsPhaseSelector(o);
+                const orderKinds = Array.from(new Set(o.items.map((it) => it.orderKind ?? "production")));
+                const singleKind = orderKinds.length === 1 ? orderKinds[0] : null;
                 return (
                   <div key={o.id} className="rounded-xl border border-[#d1d1d6] px-3 py-2 text-xs">
                     <label className="flex items-center gap-2">
                       <input type="checkbox" checked={checked} onChange={() => toggleOrder(o.id)} />
                       <span className="min-w-0 flex-1 truncate text-[#1d1d1f]">
                         {o.soNumber}{o.linkedProjectName ? ` · ${trProjectName(o.linkedProjectName)}` : ""}
+                        {singleKind && (
+                          <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SUPPLIER_ORDER_KIND_BADGE_CLASS[singleKind]}`}>
+                            {zh(isZh, SUPPLIER_ORDER_KIND_LABEL[singleKind])}
+                          </span>
+                        )}
                         {o.installmentType && (
                           <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${o.installmentType === "full" ? "bg-green-50 text-green-600" : "bg-blue-50 text-blue-600"}`}>
                             {zh(isZh, SUPPLIER_ORDER_INSTALLMENT_LABEL[o.installmentType])}

@@ -466,16 +466,16 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               </div>
               {productionRows.length > 0 && (
                 <>
-                  <p className="bg-[#fafafa] px-5 py-1.5 text-[11px] font-medium text-[#86868b]">
-                    {SUPPLIER_ORDER_KIND_LABEL.production} {productionRows.length}
+                  <p className="border-b border-[#f0f0f0] bg-[#fafafa] px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#86868b]">
+                    {SUPPLIER_ORDER_KIND_LABEL.production}
                   </p>
                   {productionRows.map(renderRow)}
                 </>
               )}
               {developmentRows.length > 0 && (
                 <>
-                  <p className="bg-[#fafafa] px-5 py-1.5 text-[11px] font-medium text-violet-600">
-                    {SUPPLIER_ORDER_KIND_LABEL.development} {developmentRows.length}
+                  <p className="border-b border-[#f0f0f0] bg-[#fafafa] px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-600">
+                    {SUPPLIER_ORDER_KIND_LABEL.development}
                   </p>
                   {developmentRows.map(renderRow)}
                 </>

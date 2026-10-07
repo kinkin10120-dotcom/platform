@@ -222,6 +222,11 @@ export default function HomePage() {
 
   const decisionTasks = allTasks.filter((t) => t.needsDecision);
 
+  // 업무명은 관리자가 직접 입력한 자유 텍스트라, nameZh(저장 시 미리 번역해둔 값)가 없는
+  // 오래된/번역 실패 업무는 화면에서 즉석 번역(useZhAutoTranslate)으로 대체한다.
+  const zhTaskNames = useZhAutoTranslate(isZh, [...upcomingTasks, ...myAssignedTasks].map((t) => t.name));
+  const trTaskName = (t: Task) => (isZh && t.nameZh) || zhTaskNames[t.name] || t.name;
+
   // 그룹화 전이 아니라 그룹화 후 8건을 자르므로, 자동조정 연쇄로 한 번에 여러 건이 묶여도
   // 다른 날짜에 있었던 별개 변경들이 밀려나지 않는다.
   const recentDateChangeGroups = isAdmin
@@ -465,7 +470,7 @@ export default function HomePage() {
                       {zh(isZh, overdue ? "지연" : "임박")}
                     </span>
                   )}
-                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{(isZh && t.nameZh) || t.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{trTaskName(t)}</span>
                   <span className="hidden shrink-0 truncate text-xs text-[#86868b] sm:block">{(isZh && project?.nameZh) || project?.name || "-"}</span>
                   <span className={`shrink-0 text-xs ${overdue ? "font-semibold text-red-500" : "text-[#86868b]"}`}>{t.dueDate}</span>
                 </Link>
@@ -529,7 +534,7 @@ export default function HomePage() {
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${overdue ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-600"}`}>
                     {zh(isZh, overdue ? "지연" : "임박")}
                   </span>
-                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{(isZh && t.nameZh) || t.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{trTaskName(t)}</span>
                   <span className="hidden shrink-0 truncate text-xs text-[#86868b] sm:block">{(isZh && project?.nameZh) || project?.name || "-"}</span>
                   <span className={`shrink-0 text-xs ${overdue ? "font-semibold text-red-500" : "text-[#86868b]"}`}>{t.dueDate}</span>
                 </Link>

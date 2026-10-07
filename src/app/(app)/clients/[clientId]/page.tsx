@@ -527,7 +527,7 @@ export default function ClientDetailPage() {
                         {resetSentUid === u.uid ? "발송됨 ✓" : resettingUid === u.uid ? "발송 중..." : "비밀번호 재설정 메일 발송"}
                       </button>
                       <button
-                        onClick={() => { setDeleteUserTarget(u); setDeleteUserConfirmText(""); }}
+                        onClick={() => { setDeleteUserTarget(u); setDeleteUserConfirmText(""); setUserError(""); }}
                         disabled={deletingUid === u.uid}
                         className="shrink-0 text-[#d1d1d6] hover:text-red-500 disabled:opacity-40"
                       >
@@ -557,6 +557,10 @@ export default function ClientDetailPage() {
               <p className="mt-1.5 text-sm text-[#86868b]">
                 <span className="font-medium text-[#1d1d1f]">{deleteUserTarget.name}</span>({deleteUserTarget.email}) 계정을 삭제합니다. 이 작업은 되돌릴 수 없습니다.
               </p>
+              {/* 삭제 실패 메시지가 이 모달 뒤(화면 아래쪽)에만 렌더링돼서, 버튼을 눌러도
+                  실패 사유를 못 보고 "아무 반응 없음"처럼 보이는 문제가 있었다 — 모달
+                  안에도 그대로 보여준다. */}
+              {userError && <p className="mt-2 text-xs text-red-500">{userError}</p>}
             </div>
             <div>
               <label className="mb-1.5 block text-xs text-[#86868b]">
@@ -580,10 +584,10 @@ export default function ClientDetailPage() {
               </button>
               <button
                 onClick={handleConfirmDeleteUser}
-                disabled={deleteUserConfirmText !== DELETE_USER_KEYWORD}
+                disabled={deleteUserConfirmText !== DELETE_USER_KEYWORD || deletingUid === deleteUserTarget.uid}
                 className="rounded-full bg-red-500 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                삭제
+                {deletingUid === deleteUserTarget.uid ? "삭제 중..." : "삭제"}
               </button>
             </div>
           </div>

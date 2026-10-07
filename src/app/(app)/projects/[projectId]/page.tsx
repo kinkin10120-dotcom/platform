@@ -24,7 +24,7 @@ import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import { listenProject, updateProject } from "@/lib/firestore/projects";
 import { listenClient, listenClients, uploadClientLogo } from "@/lib/firestore/clients";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
-import { listenUsersByClient, listenAdmins } from "@/lib/firestore/users";
+import { listenUsersByClient, listenAdmins, listenPartners } from "@/lib/firestore/users";
 import { Project, Task, AppUser, ProjectType, PROJECT_TYPE_LABEL, ALL_PROJECT_TYPES, Client, TASK_STATUS_LABEL } from "@/lib/types";
 import { isOverdue } from "@/lib/bottleneck";
 import GanttChart from "@/components/GanttChart";
@@ -162,24 +162,39 @@ export default function ProjectWorkspacePage() {
   }, [isAdmin]);
 
   useEffect(() => {
-    // 담당자 배정 UI는 관리자 전용 기능이라 협력사에게는 필요 없고, listenUsersByClient는
-    // 협력사 계정으로 호출하면 권한 오류가 난다(협력사는 clientId가 없음).
-    if (!projectClientId || isPartner) return;
+    // 담당자 배정 UI는 관리자 전용 기능이라 협력사에게는 필요 없고, listenUsersByClient/
+    // listenPartners는 협력사 계정으로 호출하면 권한 오류가 난다(협력사는 users 컬렉션에서
+    // 본인 role이 admin인 문서만 조회 가능 — firestore.rules 참고).
+    if (isPartner) return;
     const admins: AppUser[] = [];
     const clientUsers: AppUser[] = [];
+    const projectPartners: AppUser[] = [];
     const unsub1 = listenAdmins((u) => {
       admins.splice(0, admins.length, ...u);
-      setAssigneeOptions([...admins, ...clientUsers]);
+      setAssigneeOptions([...admins, ...clientUsers, ...projectPartners]);
     });
-    const unsub2 = listenUsersByClient(projectClientId, (u) => {
-      clientUsers.splice(0, clientUsers.length, ...u);
-      setAssigneeOptions([...admins, ...clientUsers]);
-    });
+    // 고객사를 아직 못 정한 프로젝트도 있어(고객계정 추후 지정) clientId가 없으면 이 부분만 건너뛴다.
+    const unsub2 = projectClientId
+      ? listenUsersByClient(projectClientId, (u) => {
+          clientUsers.splice(0, clientUsers.length, ...u);
+          setAssigneeOptions([...admins, ...clientUsers, ...projectPartners]);
+        })
+      : undefined;
+    // 이 프로젝트에 배정된 협력사 계정도 담당자로 고를 수 있게 한다 — users의 role=='partner'
+    // 조회는 규칙상 관리자만 가능해서, 담당자 배정 UI 자체가 안 보이는 고객 세션에서는 아예
+    // 호출하지 않는다(안 그러면 조용히 permission-denied만 나고 아무도 못 쓰는 리스너가 돈다).
+    const unsub3 = isAdmin
+      ? listenPartners((u) => {
+          projectPartners.splice(0, projectPartners.length, ...u.filter((p) => p.projectIds?.includes(projectId)));
+          setAssigneeOptions([...admins, ...clientUsers, ...projectPartners]);
+        })
+      : undefined;
     return () => {
       unsub1();
-      unsub2();
+      unsub2?.();
+      unsub3?.();
     };
-  }, [projectClientId]);
+  }, [projectClientId, projectId, isPartner, isAdmin]);
 
   // 선택된 업무가 실시간 업데이트를 반영하도록 최신 tasks에서 다시 찾아준다.
   const liveSelectedTask = useMemo(

@@ -215,6 +215,11 @@ export default function HomePage() {
     .filter((t) => isOverdue(t) || isDueSoon(t))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
+  // 협력사 본인이 담당자로 지정된 업무 — 마감 임박·지연과 무관하게 전부 보여준다.
+  const myAssignedTasks = isPartner && appUser
+    ? allTasks.filter((t) => t.assigneeId === appUser.uid && t.status !== "done").sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    : [];
+
   const decisionTasks = allTasks.filter((t) => t.needsDecision);
 
   // 그룹화 전이 아니라 그룹화 후 8건을 자르므로, 자동조정 연쇄로 한 번에 여러 건이 묶여도
@@ -438,6 +443,38 @@ export default function HomePage() {
             <p className="text-xs text-[#86868b]">{zh(isZh, "마감 임박")}</p>
             <p className={`mt-1 text-2xl font-semibold ${dueSoonTaskCount > 0 ? "text-amber-500" : "text-[#1d1d1f]"}`}>{dueSoonTaskCount}{zh(isZh, "건")}</p>
           </div>
+        </div>
+      )}
+
+      {isPartner && myAssignedTasks.length > 0 && (
+        <div className="rounded-3xl bg-white p-5">
+          <p className="mb-3 text-sm font-semibold text-[#1d1d1f]">{zh(isZh, "내 업무")} {myAssignedTasks.length}{zh(isZh, "건")}</p>
+          <div className="space-y-1">
+            {myAssignedTasks.slice(0, 8).map((t) => {
+              const overdue = isOverdue(t);
+              const dueSoon = isDueSoon(t) && !overdue;
+              const project = projects.find((p) => p.id === t.projectId);
+              return (
+                <Link
+                  key={t.id}
+                  href={`/projects/${t.projectId}?task=${t.id}`}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition hover:bg-[#f5f5f7]"
+                >
+                  {(overdue || dueSoon) && (
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${overdue ? "bg-red-50 text-red-500" : "bg-amber-50 text-amber-600"}`}>
+                      {zh(isZh, overdue ? "지연" : "임박")}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#1d1d1f]">{(isZh && t.nameZh) || t.name}</span>
+                  <span className="hidden shrink-0 truncate text-xs text-[#86868b] sm:block">{(isZh && project?.nameZh) || project?.name || "-"}</span>
+                  <span className={`shrink-0 text-xs ${overdue ? "font-semibold text-red-500" : "text-[#86868b]"}`}>{t.dueDate}</span>
+                </Link>
+              );
+            })}
+          </div>
+          {myAssignedTasks.length > 8 && (
+            <p className="mt-2 px-3 text-xs text-[#86868b]">{zh(isZh, "외")} {myAssignedTasks.length - 8}{zh(isZh, "건 더 있음")}</p>
+          )}
         </div>
       )}
 

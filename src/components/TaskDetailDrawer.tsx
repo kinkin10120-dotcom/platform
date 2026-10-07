@@ -570,7 +570,7 @@ export default function TaskDetailDrawer({ task, allTasks, assigneeOptions, onCl
                     <option value="">미지정</option>
                     {assigneeOptions.map((u) => (
                       <option key={u.uid} value={u.uid}>
-                        {u.name}
+                        {u.name}{u.role === "partner" ? " (협력사)" : u.role === "client" ? " (고객)" : ""}
                       </option>
                     ))}
                   </select>

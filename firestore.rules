@@ -138,15 +138,12 @@ service cloud.firestore {
         // collectionGroup("comments") 쿼리(전역 검색용)는 이 중첩 규칙을 전혀 적용받지 않고
         // 파일 하단의 별도 {pathSegs=**} 와일드카드 규칙으로만 판단된다(Firestore 공식 동작).
         allow list: if isAdmin();
-        allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId)
-          || (belongsToPartnerProject(get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId)
-              && get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false) != true);
+        // 이 스레드는 관리자-고객 전용이다 — 협력사와의 소통은 partnerArchiveComments라는
+        // 완전히 별도인 컬렉션으로 분리해뒀으니, 협력사는 여기를 읽지도 쓰지도 못한다.
+        allow get, list: if belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId);
         allow get: if isAdmin();
-        allow create: if (adminOrClientOrPartnerOf(
-            get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId,
-            get(/databases/$(database)/documents/tasks/$(taskId)).data.projectId,
-            get(/databases/$(database)/documents/tasks/$(taskId)).data.get('hiddenFromPartner', false)
-          )) && request.resource.data.authorId == request.auth.uid;
+        allow create: if (isAdmin() || belongsToClient(get(/databases/$(database)/documents/tasks/$(taskId)).data.clientId))
+          && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isAdmin() || resource.data.authorId == request.auth.uid;
       }
 

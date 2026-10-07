@@ -214,9 +214,12 @@ export default function ProjectWorkspacePage() {
   const decisionTasks = useMemo(() => tasks.filter((t) => t.needsDecision), [tasks]);
   // 협력사 자료함(partner) 탭은 관리자·협력사에게만 보인다 — 고객(클라이언트) 계정에겐
   // 탭 자체가 아예 렌더링되지 않는다("이런 게 있다"는 존재조차 몰라야 한다).
+  // 반대로 "댓글"(comments) 탭은 관리자-고객이 주고받는 스레드라 협력사에게는 보이면 안
+  // 된다 — 그래서 애초에 협력사 자료함을 별도 컬렉션으로 분리해둔 건데, 이 탭이 그대로
+  // 열려 있으면 그 분리가 의미 없어진다.
   const visibleTabOrder = useMemo(() => {
     let order = tabOrder;
-    if (isPartner) order = order.filter((id) => id !== "dashboard");
+    if (isPartner) order = order.filter((id) => id !== "dashboard" && id !== "comments");
     if (!isAdmin && !isPartner) order = order.filter((id) => id !== "partner");
     return order;
   }, [tabOrder, isPartner, isAdmin]);
@@ -580,7 +583,7 @@ export default function ProjectWorkspacePage() {
       {tab === "list" && <TaskList tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "dashboard" && <ProjectDashboard project={project} tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "files" && <ProjectFilesTab tasks={tasks} />}
-      {tab === "comments" && <ProjectCommentsTab tasks={tasks} onSelectTask={setSelectedTask} />}
+      {tab === "comments" && !isPartner && <ProjectCommentsTab tasks={tasks} onSelectTask={setSelectedTask} />}
       {tab === "partner" && (isAdmin || isPartner) && <PartnerArchiveTab projectId={project.id} tasks={tasks} />}
 
       {editOpen && (

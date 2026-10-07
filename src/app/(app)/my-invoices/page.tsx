@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { FileText, Plus, Receipt, Trash2 } from "lucide-react";
+import { Eye, FileText, Plus, Receipt, Trash2, X } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
@@ -15,6 +15,8 @@ import {
 import { SupplierOrder, SupplierInvoice, SupplierInvoiceLineItem, SupplierCurrency, SUPPLIER_INVOICE_STATUS_LABEL } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
+import PdfPageScaler from "@/components/PdfPageScaler";
+import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -49,6 +51,7 @@ export default function MyInvoicesPage() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
@@ -119,9 +122,8 @@ export default function MyInvoicesPage() {
   const selectedOrders = orders.filter((o) => selectedOrderIds.includes(o.id));
   const total = selectedOrders.reduce((sum, o) => sum + o.totalAmount, 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
 
-  async function handleSubmit() {
-    if (!appUser) return;
-    const items: SupplierInvoiceLineItem[] = [
+  function buildItems(): SupplierInvoiceLineItem[] {
+    return [
       ...selectedOrders.map((o) => ({
         id: newId(),
         source: "order" as const,
@@ -143,6 +145,11 @@ export default function MyInvoicesPage() {
           amount: c.amount,
         })),
     ];
+  }
+
+  async function handleSubmit() {
+    if (!appUser) return;
+    const items = buildItems();
     if (items.length === 0) {
       setSubmitError(zh(isZh, "청구할 항목이 없습니다."));
       return;
@@ -298,6 +305,13 @@ export default function MyInvoicesPage() {
             >
               {submitting ? zh(isZh, "제출 중...") : zh(isZh, "청구서 제출")}
             </button>
+            <button
+              onClick={() => setShowPreview(true)}
+              disabled={total <= 0}
+              className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+            >
+              <Eye size={14} /> {zh(isZh, "미리보기")}
+            </button>
             <button onClick={() => setShowForm(false)} className="rounded-full border border-[#d1d1d6] px-5 py-2 text-sm text-[#1d1d1f] hover:bg-[#f5f5f7]">
               {zh(isZh, "취소")}
             </button>
@@ -350,6 +364,34 @@ export default function MyInvoicesPage() {
           </div>
         ))}
       </div>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setShowPreview(false)}>
+          <div className="mx-auto mb-4 w-full max-w-[210mm] px-4">
+            <button
+              onClick={() => setShowPreview(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div onClick={(e) => e.stopPropagation()}>
+            <PdfPageScaler>
+              <SupplierInvoiceDocument
+                data={{
+                  invoiceNumber: zh(isZh, "미리보기 (제출 전)"),
+                  partnerName: appUser?.name ?? "",
+                  currency,
+                  items: buildItems(),
+                  totalAmount: total,
+                  memo: memo.trim() || undefined,
+                  submittedAt: Date.now(),
+                }}
+              />
+            </PdfPageScaler>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

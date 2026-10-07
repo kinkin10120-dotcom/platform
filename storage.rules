@@ -31,6 +31,13 @@ service firebase.storage {
       allow read, write: if isSignedIn();
     }
 
+    // 협력사 청구서 지급 영수증: supplierInvoiceReceipts/{invoiceId}/{fileName}
+    // 같은 이유로 Storage 쪽에서는 로그인 여부만 확인하고, 실제 접근 가능 여부는
+    // Firestore 쪽 규칙(supplierInvoices)이 가른다.
+    match /supplierInvoiceReceipts/{invoiceId}/{allPaths=**} {
+      allow read, write: if isSignedIn();
+    }
+
     // 클라이언트 브랜드 로고
     match /clients/{clientId}/logo {
       allow read: if true;

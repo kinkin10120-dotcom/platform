@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +13,7 @@ import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD 
 import { downloadCsv } from "@/lib/csvExport";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
 import SupplierOrdersTab from "@/components/SupplierOrdersTab";
+import SupplierInvoicesTab from "@/components/SupplierInvoicesTab";
 import { listenSupplierOrders, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import {
   listenClientProducts,
@@ -70,7 +72,10 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 
 export default function OrdersPage() {
   const { appUser } = useAuth();
-  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid">("orders");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid" | "supplierInvoices">(
+    searchParams.get("tab") === "supplierInvoices" ? "supplierInvoices" : "orders"
+  );
   // 구매발주서 미리보기 중에는 아래 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
   const [supplierPreviewing, setSupplierPreviewing] = useState(false);
 
@@ -115,6 +120,12 @@ export default function OrdersPage() {
           >
             미수금
           </button>
+          <button
+            onClick={() => setTab("supplierInvoices")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierInvoices" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            협력사 청구서
+          </button>
         </div>
       </div>
 
@@ -124,6 +135,8 @@ export default function OrdersPage() {
         <CatalogTab />
       ) : tab === "supplier" ? (
         <SupplierOrdersTab onPreview={setSupplierPreviewing} />
+      ) : tab === "supplierInvoices" ? (
+        <SupplierInvoicesTab />
       ) : (
         <UnpaidInstallmentsTab />
       )}

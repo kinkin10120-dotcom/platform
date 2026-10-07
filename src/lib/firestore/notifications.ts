@@ -30,6 +30,7 @@ export function listenNotifications(userId: string, cb: (items: AppNotification[
           orderId: data.orderId,
           invoiceIndex: data.invoiceIndex,
           contractId: data.contractId,
+          supplierInvoiceId: data.supplierInvoiceId,
           type: data.type,
           message: data.message,
           read: !!data.read,
@@ -49,6 +50,7 @@ export async function createNotification(input: {
   noticeId?: string;
   orderId?: string;
   invoiceIndex?: number;
+  supplierInvoiceId?: string;
   type: NotificationType;
   message: string;
   details?: string[];

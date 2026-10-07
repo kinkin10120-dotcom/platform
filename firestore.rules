@@ -220,7 +220,8 @@ service cloud.firestore {
         "rescheduled", "weekly_summary", "notice", "decision_needed", "inquiry",
         "inquiry_answered", "quote_request", "quote_response", "purchase_order",
         "order_status_change", "order_cancel_request", "contract_signed",
-        "contract_revision_requested", "contract_expiring", "partner_archive"
+        "contract_revision_requested", "contract_expiring", "partner_archive",
+        "supplier_invoice_submitted", "supplier_invoice_paid"
       ];
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -337,6 +338,21 @@ service cloud.firestore {
       // 일치해서 list도 안전하다(hiddenFromPartner 때와 달리 문서마다 값이 갈리는 필드가
       // 아니라 쿼리 자체가 이미 그 값으로 좁혀져 있어서 걸러줄 필요가 없다).
       allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+    }
+
+    // ---- 협력사 청구서 (협력사 → HANDYHAND 방향, supplierOrders와 돈의 방향이 반대) ----
+    match /supplierInvoices/{invoiceId} {
+      allow read, write: if isAdmin();
+      // 쿼리(where('partnerId','==',내 uid))가 규칙 조건과 정확히 일치해서 list도 안전하다.
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+      allow create: if isSignedIn() && myProfile().role == 'partner'
+        && request.resource.data.partnerId == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'submitted';
+      // 제출 직후 실수를 본인이 되돌리는 것만 허용 — 관리자가 처리(지급완료)한 뒤로는
+      // 협력사가 건드릴 수 없다.
+      allow delete: if isSignedIn() && myProfile().role == 'partner'
+        && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';
     }
 
     // ---- 협력사 자료함 (관리자 ↔ 협력사 전용, 업무와 무관한 프로젝트 단위 공간) ----

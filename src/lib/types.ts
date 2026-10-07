@@ -278,7 +278,9 @@ export type NotificationType =
   | "contract_signed"
   | "contract_revision_requested"
   | "contract_expiring"
-  | "partner_archive";
+  | "partner_archive"
+  | "supplier_invoice_submitted"
+  | "supplier_invoice_paid";
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   assigned: "업무 배정",
@@ -302,6 +304,8 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   contract_revision_requested: "계약서 수정 요청",
   contract_expiring: "계약 만료 임박",
   partner_archive: "협력사 자료함 활동",
+  supplier_invoice_submitted: "협력사 청구서 제출",
+  supplier_invoice_paid: "청구서 지급 완료",
 };
 
 export interface AppNotification {
@@ -313,6 +317,7 @@ export interface AppNotification {
   orderId?: string; // 발주 관련 알림 — 발주서/청구서 페이지로 바로 연결하는 데 사용
   invoiceIndex?: number; // 청구서 발행 알림일 때만 설정 (회차 인덱스)
   contractId?: string; // 계약 서명/수정요청 알림용
+  supplierInvoiceId?: string; // 협력사 청구서 제출/지급완료 알림용
   type: NotificationType;
   message: string;
   read: boolean;
@@ -761,5 +766,48 @@ export interface SupplierOrder {
   issuedAt?: number;
   createdAt: number;
   updatedAt: number;
+  createdBy: string;
+}
+
+// 협력사(공급사)가 HANDYHAND에게 보내는 월별 청구서 — SupplierOrder(우리가 협력사에게 내는
+// 발주)와는 돈이 오가는 방향이 반대다. 청구서 한 건은 발행된 발주서 중 이번에 받을 것들을
+// 골라 담거나(source:"order"), 발주서와 무관한 비용을 자유 입력(source:"custom")으로 담아
+// 만든다. 지급 처리(영수증 첨부)는 관리자만 할 수 있다.
+export type SupplierInvoiceStatus = "submitted" | "paid";
+
+export const SUPPLIER_INVOICE_STATUS_LABEL: Record<SupplierInvoiceStatus, string> = {
+  submitted: "제출됨",
+  paid: "지급완료",
+};
+
+export interface SupplierInvoiceLineItem {
+  id: string;
+  source: "order" | "custom";
+  // source === "order"일 때만 — 원본 발주서를 그대로 참조하지 않고 당시 금액을 복사해 둔다
+  // (발주서가 나중에 바뀌어도 이미 제출한 청구서 금액은 그대로 남아야 한다).
+  supplierOrderId?: string;
+  soNumber?: string;
+  linkedProjectId?: string;
+  linkedProjectName?: string;
+  description: string;
+  amount: number;
+}
+
+export interface SupplierInvoice {
+  id: string;
+  invoiceNumber: string;
+  partnerId: string;
+  partnerName: string;
+  currency: SupplierCurrency;
+  items: SupplierInvoiceLineItem[];
+  totalAmount: number;
+  memo?: string;
+  status: SupplierInvoiceStatus;
+  submittedAt: number;
+  paidAt?: number;
+  // 지급 완료 처리 시 관리자가 첨부하는 송금 영수증.
+  receiptUrl?: string;
+  receiptStoragePath?: string;
+  receiptName?: string;
   createdBy: string;
 }

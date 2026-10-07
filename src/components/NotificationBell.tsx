@@ -74,6 +74,12 @@ export default function NotificationBell() {
     } else if (n.type === "contract_signed" || n.type === "contract_revision_requested") {
       setOpen(false);
       router.push("/contracts");
+    } else if (n.type === "supplier_invoice_submitted") {
+      setOpen(false);
+      router.push("/orders?tab=supplierInvoices");
+    } else if (n.type === "supplier_invoice_paid") {
+      setOpen(false);
+      router.push("/my-invoices");
     }
   }
 

@@ -162,14 +162,16 @@ export async function updateSupplierQuote(id: string, input: UpdateSupplierQuote
 export async function approveSupplierQuote(quote: SupplierQuote, decidedBy: string) {
   const orderRef = await createSupplierOrder({
     supplierName: quote.partnerName,
+    // Firestore는 undefined 필드가 섞인 객체를 그대로 setDoc에 넘기면 거부한다 — 견적서
+    // 품목엔 nameEn/spec/unit처럼 비어 있는 선택 필드가 흔해서, 값이 있을 때만 키를 넣는다.
     items: quote.items.map((it) => ({
       name: it.nameKo || it.name,
-      nameEn: it.nameEn,
-      spec: it.spec,
+      ...(it.nameEn ? { nameEn: it.nameEn } : {}),
+      ...(it.spec ? { spec: it.spec } : {}),
       unitPrice: it.unitPrice,
       quantity: it.quantity,
-      unit: it.unit,
-      orderKind: quote.orderKind,
+      ...(it.unit ? { unit: it.unit } : {}),
+      ...(quote.orderKind ? { orderKind: quote.orderKind } : {}),
     })),
     currency: quote.currency,
     linkedProjectId: quote.linkedProjectId,

@@ -499,9 +499,11 @@ export default function MyQuotesPage() {
                       {expanded && (
                         <div className="border-t border-[#f0f0f0] px-5 pb-5 pt-4">
                           <div className="flex flex-wrap justify-end gap-2">
+                            {/* 새 탭이 아니라 같은 탭에서 연다 — 전용 인쇄 페이지의 "닫기" 버튼이
+                                router.back()이라, 같은 탭 히스토리로 들어가야 닫을 때 이 목록으로
+                                그대로 돌아온다. */}
                             <Link
                               href={`/supplier-quotes/${q.id}/print`}
-                              target="_blank"
                               className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
                             >
                               <FileText size={12} /> {zh(isZh, "미리보기 / PDF")}

@@ -15,7 +15,7 @@ import {
 } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
-const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold"];
+const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "bg-[#f5f5f7] text-[#86868b]",
@@ -80,7 +80,7 @@ export default function MySupplierOrdersPage() {
   // 관리자 쪽 구매 카탈로그와 같은 방식 — 생산/개발/금형으로 나눠 보여줘야 내역이 많을 때도
   // 찾기 쉽다. 품목 성격이 섞인 발주는 "혼합" 묶음으로 따로 둔다.
   const groupedOrders = useMemo(() => {
-    const groups: Record<SupplierOrderKind | "mixed", SupplierOrder[]> = { production: [], development: [], mold: [], mixed: [] };
+    const groups: Record<SupplierOrderKind | "mixed", SupplierOrder[]> = { production: [], development: [], mold: [], sample: [], mixed: [] };
     visibleOrders.forEach((o) => {
       const kinds = orderKindsOf(o);
       groups[kinds.length === 1 ? kinds[0] : "mixed"].push(o);

@@ -400,11 +400,12 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         )}
 
         {grouped.map(([supplier, rows]) => {
-          // 같은 발주처라도 생산용/개발용/금형 품목은 성격이 달라 섞여 있으면 한눈에 구분하기
-          // 어렵다 — 묶음 안에서 다시 생산/개발/금형으로 나눠 보여준다.
+          // 같은 발주처라도 생산용/개발용/금형/샘플 품목은 성격이 달라 섞여 있으면 한눈에
+          // 구분하기 어렵다 — 묶음 안에서 다시 나눠 보여준다.
           const productionRows = rows.filter((e) => (e.orderKind ?? "production") === "production");
           const developmentRows = rows.filter((e) => e.orderKind === "development");
           const moldRows = rows.filter((e) => e.orderKind === "mold");
+          const sampleRows = rows.filter((e) => e.orderKind === "sample");
           const renderRow = (e: CatalogEntry) => {
             // 부대비용은 금액 × 개수다 — calcCostsTotal과 같은 기준으로 계산해야 다른 화면과 안 어긋난다.
             const costTotal = calcCostsTotal(e.costItems);
@@ -485,6 +486,14 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                     {SUPPLIER_ORDER_KIND_LABEL.mold}
                   </p>
                   {moldRows.map(renderRow)}
+                </>
+              )}
+              {sampleRows.length > 0 && (
+                <>
+                  <p className="border-b border-[#f0f0f0] bg-[#fafafa] px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-sky-600">
+                    {SUPPLIER_ORDER_KIND_LABEL.sample}
+                  </p>
+                  {sampleRows.map(renderRow)}
                 </>
               )}
             </div>
@@ -592,7 +601,7 @@ function SupplierOrderSummary({ orders }: { orders: SupplierOrder[] }) {
     let totalKrw = 0;
     let missingRateCount = 0;
     const bySupplier = new Map<string, number>();
-    const byKind: Record<SupplierOrderKind, number> = { production: 0, development: 0, mold: 0 };
+    const byKind: Record<SupplierOrderKind, number> = { production: 0, development: 0, mold: 0, sample: 0 };
     const byProject = new Map<string, number>();
 
     for (const o of inPeriod) {
@@ -656,18 +665,20 @@ function SupplierOrderSummary({ orders }: { orders: SupplierOrder[] }) {
               발행 {orderCount}건 · 원화 환산 합계
               {missingRateCount > 0 && ` (환율 미기록 ${missingRateCount}건 제외)`}
             </p>
-            {/* 생산/개발/금형 비중 — 막대 하나로 바로 감이 오게. */}
+            {/* 생산/개발/금형/샘플 비중 — 막대 하나로 바로 감이 오게. */}
             {totalKrw > 0 && (
               <div className="mt-3 space-y-1.5">
                 <div className="flex h-2 overflow-hidden rounded-full bg-[#f5f5f7]">
                   <div className="bg-[#1d1d1f]" style={{ width: `${(byKind.production / totalKrw) * 100}%` }} />
                   <div className="bg-violet-400" style={{ width: `${(byKind.development / totalKrw) * 100}%` }} />
                   <div className="bg-amber-400" style={{ width: `${(byKind.mold / totalKrw) * 100}%` }} />
+                  <div className="bg-sky-400" style={{ width: `${(byKind.sample / totalKrw) * 100}%` }} />
                 </div>
-                <div className="flex justify-between text-xs text-[#86868b]">
+                <div className="flex flex-wrap justify-between gap-x-3 text-xs text-[#86868b]">
                   <span>생산 {fmt(byKind.production)}</span>
                   <span>개발 {fmt(byKind.development)}</span>
                   <span>금형 {fmt(byKind.mold)}</span>
+                  <span>샘플 {fmt(byKind.sample)}</span>
                 </div>
               </div>
             )}
@@ -899,7 +910,8 @@ function PurchaseInfoEditor({
 
       <div className="flex flex-wrap gap-2">
         {/* 금형처럼 한 번 만들고 끝나는 설비성 발주, 시제품처럼 개발 단계에서 나가는 발주,
-            양산 부품 발주는 원가를 볼 때 섞으면 안 되므로 품목에 미리 표시해둔다. */}
+            양산 전 확인용 샘플, 양산 부품 발주는 원가를 볼 때 섞으면 안 되므로 품목에 미리
+            표시해둔다. */}
         <select
           value={orderKind}
           onChange={(e) => setOrderKind(e.target.value as SupplierOrderKind)}
@@ -908,6 +920,7 @@ function PurchaseInfoEditor({
           <option value="production">생산 발주</option>
           <option value="development">개발 발주</option>
           <option value="mold">금형 발주</option>
+          <option value="sample">샘플 발주</option>
         </select>
         <input
           value={supplierName}

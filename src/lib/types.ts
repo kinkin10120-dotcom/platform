@@ -663,14 +663,15 @@ export interface ContractTemplate {
 export type SupplierCurrency = "USD" | "CNY" | "KRW";
 
 // 같은 공장에 내는 발주라도 성격이 다르다 — 금형처럼 한 번 만들고 끝나는 설비성 발주,
-// 시제품처럼 개발 단계에서 나가는 발주, 양산 부품처럼 반복해서 나가는 발주는 원가를 볼 때
-// 섞으면 안 된다.
-export type SupplierOrderKind = "production" | "development" | "mold";
+// 시제품처럼 개발 단계에서 나가는 발주, 양산 부품처럼 반복해서 나가는 발주, 양산 전
+// 확인용으로 소량만 받는 샘플은 원가를 볼 때 섞으면 안 된다.
+export type SupplierOrderKind = "production" | "development" | "mold" | "sample";
 
 export const SUPPLIER_ORDER_KIND_LABEL: Record<SupplierOrderKind, string> = {
   production: "생산",
   development: "개발",
   mold: "금형",
+  sample: "샘플",
 };
 
 // 발주서에 찍히는 표기(중문/영문 병기용).
@@ -678,6 +679,7 @@ export const SUPPLIER_ORDER_KIND_CN: Record<SupplierOrderKind, string> = {
   production: "量产 / Production",
   development: "开发 / Development",
   mold: "模具 / Mold",
+  sample: "样品 / Sample",
 };
 
 // 뱃지 색상 — 관리자·협력사 화면 양쪽에서 같은 색으로 보이게 여기 하나로 공유한다.
@@ -685,6 +687,7 @@ export const SUPPLIER_ORDER_KIND_BADGE_CLASS: Record<SupplierOrderKind, string> 
   production: "bg-[#f5f5f7] text-[#86868b]",
   development: "bg-violet-50 text-violet-600",
   mold: "bg-amber-50 text-amber-600",
+  sample: "bg-sky-50 text-sky-600",
 };
 
 export const SUPPLIER_ORDER_INSTALLMENT_LABEL: Record<"deposit" | "balance" | "full", string> = {

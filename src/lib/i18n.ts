@@ -175,6 +175,7 @@ const ZH_DICT: Record<string, string> = {
   "패키지": "包装",
   "상세페이지": "详情页",
   "금형": "模具",
+  "샘플": "样品",
   "전체 진행률": "总体进度",
 
   // Gantt / Task list common

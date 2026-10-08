@@ -22,7 +22,7 @@ import NumberInput from "@/components/NumberInput";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierQuoteDocument from "@/components/SupplierQuoteDocument";
 
-const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold"];
+const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -123,7 +123,7 @@ export default function MyQuotesPage() {
   // 관리자 쪽 구매 카탈로그·발주 목록과 같은 방식 — 생산/개발/금형으로 나눠 보여줘야 내역이
   // 많을 때도 찾기 쉽다. 구분을 안 고른 견적서는 "미지정" 묶음으로 따로 둔다.
   const groupedQuotes = useMemo(() => {
-    const groups: Record<SupplierOrderKind | "unset", SupplierQuote[]> = { production: [], development: [], mold: [], unset: [] };
+    const groups: Record<SupplierOrderKind | "unset", SupplierQuote[]> = { production: [], development: [], mold: [], sample: [], unset: [] };
     quotes.forEach((q) => groups[q.orderKind ?? "unset"].push(q));
     return groups;
   }, [quotes]);
@@ -264,6 +264,7 @@ export default function MyQuotesPage() {
                 <option value="production">{zh(isZh, "생산")}</option>
                 <option value="development">{zh(isZh, "개발")}</option>
                 <option value="mold">{zh(isZh, "금형")}</option>
+                <option value="sample">{zh(isZh, "샘플")}</option>
               </select>
               {isZh ? (
                 <span className="rounded-xl border border-[#d1d1d6] bg-[#f5f5f7] px-3 py-1.5 text-xs font-medium text-[#1d1d1f]">CNY ¥</span>

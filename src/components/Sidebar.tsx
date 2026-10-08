@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
+import { disablePushNotifications } from "@/lib/messaging";
 import { useState, useRef, useEffect } from "react";
 
 type NavItem = { href: string; label: string; icon: React.ElementType; show: boolean };
@@ -107,6 +108,24 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     dragIndex.current = null;
     dragOverIndex.current = null;
+  }
+
+  // 로그아웃은 전체 새로고침 없이 처리돼 기기(브라우저)의 푸시 토큰이 그대로 남는다 —
+  // FCM 토큰은 계정이 아니라 "이 브라우저·서비스워커"에 묶이므로, 지우지 않고 다른 계정으로
+  // 로그인하면 그 계정도 같은 토큰을 다시 등록하게 되어(알림 벨의 자동 복구 로직) 결국 한
+  // 토큰이 양쪽 계정의 fcmTokens에 동시에 남는다. 그 상태에서 관리자에게 가는 알림(예:
+  // 협력사가 견적서를 제출했을 때)이 바로 이 기기로도 푸시되어, 로그아웃하고 다른 계정으로
+  // 전환해도 이전 계정 알림이 계속 오는 것처럼 보인다. 로그아웃 시점에 이 계정 쪽 토큰을
+  // 지워 끊어낸다.
+  async function handleSignOut() {
+    if (appUser) {
+      try {
+        await disablePushNotifications(appUser.uid);
+      } catch {
+        // 토큰 정리 실패는 로그아웃 자체를 막지 않는다.
+      }
+    }
+    signOut();
   }
 
   useEffect(() => {
@@ -245,7 +264,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
             )}
             <p className="truncate text-xs text-[#86868b]">{appUser?.email}</p>
             <button
-              onClick={() => signOut()}
+              onClick={handleSignOut}
               className="mt-3 flex items-center gap-1.5 text-xs text-[#86868b] transition hover:text-red-500"
             >
               <LogOut size={13} /> {zh(isZh, "로그아웃")}

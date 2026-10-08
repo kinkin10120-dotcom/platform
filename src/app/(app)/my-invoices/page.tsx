@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { Eye, FileText, Plus, Receipt, Trash2, X } from "lucide-react";
+import { Eye, FileText, Plus, Receipt, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
@@ -25,7 +25,7 @@ import {
 } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from "@/lib/i18n";
 import NumberInput from "@/components/NumberInput";
-import PdfPageScaler from "@/components/PdfPageScaler";
+import PrintablePreview from "@/components/PrintablePreview";
 import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -301,6 +301,57 @@ export default function MyInvoicesPage() {
 
   if (appUser && !isPartner) {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
+  }
+
+  // 관리자 발주 작성 화면과 같은 방식 — 아직 제출 전인 내용이라 전용 인쇄 페이지가 없다.
+  // 모달 대신 화면 전체로 보여주고, 실제 인쇄는 제출한 뒤 "미리보기 / PDF"에서 한다(사이드바·
+  // 상단바가 있는 화면 안에서 인쇄하면 빈 두 번째 장이 생기는 문제 때문).
+  if (showPreview && previewData) {
+    return (
+      <PrintablePreview
+        onClose={() => setShowPreview(false)}
+        label={zh(isZh, "제출 전 미리보기 — 실제 청구서와 동일합니다.")}
+        right={
+          <div className="flex items-center gap-3">
+            {/* 중국 협력사만 의미가 있는 토글 — 본인이 쓴 중국어 원문과, 관리자가 실제로 볼
+                한국어 번역본을 둘 다 확인할 수 있게 한다. */}
+            {isZh && (
+              <div className="flex overflow-hidden rounded-full border border-[#d1d1d6]">
+                <button
+                  onClick={() => setPreviewLang("zh")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "zh" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+                >
+                  中文版
+                </button>
+                <button
+                  onClick={() => setPreviewLang("ko")}
+                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "ko" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+                >
+                  한국어판
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-[#86868b]">{zh(isZh, "제출한 뒤 \"미리보기 / PDF\"에서 인쇄할 수 있습니다.")}</p>
+          </div>
+        }
+      >
+        <SupplierInvoiceDocument
+          lang={previewLang}
+          data={{
+            invoiceNumber: zh(isZh, "미리보기 (제출 전)"),
+            partnerName: appUser?.name ?? "",
+            currency,
+            items: previewData.items,
+            totalAmount: total,
+            title: title.trim() || undefined,
+            titleKo: previewData.titleKo,
+            memo: memo.trim() || undefined,
+            memoKo: previewData.memoKo,
+            submittedAt: Date.now(),
+          }}
+        />
+      </PrintablePreview>
+    );
   }
 
   return (
@@ -584,55 +635,6 @@ export default function MyInvoicesPage() {
         ))}
       </div>
 
-      {showPreview && previewData && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 py-10" onClick={() => setShowPreview(false)}>
-          <div className="mx-auto mb-4 flex w-full max-w-[210mm] items-center justify-between px-4">
-            <button
-              onClick={() => setShowPreview(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/30 text-white transition hover:border-white"
-            >
-              <X size={16} />
-            </button>
-            {/* 중국 협력사만 의미가 있는 토글 — 본인이 쓴 중국어 원문과, 관리자가 실제로 볼
-                한국어 번역본을 둘 다 확인할 수 있게 한다. */}
-            {isZh && (
-              <div className="flex overflow-hidden rounded-full border border-white/30" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => setPreviewLang("zh")}
-                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "zh" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
-                >
-                  中文版
-                </button>
-                <button
-                  onClick={() => setPreviewLang("ko")}
-                  className={`px-4 py-1.5 text-xs font-medium ${previewLang === "ko" ? "bg-white text-[#1d1d1f]" : "text-white"}`}
-                >
-                  한국어판
-                </button>
-              </div>
-            )}
-          </div>
-          <div onClick={(e) => e.stopPropagation()}>
-            <PdfPageScaler>
-              <SupplierInvoiceDocument
-                lang={previewLang}
-                data={{
-                  invoiceNumber: zh(isZh, "미리보기 (제출 전)"),
-                  partnerName: appUser?.name ?? "",
-                  currency,
-                  items: previewData.items,
-                  totalAmount: total,
-                  title: title.trim() || undefined,
-                  titleKo: previewData.titleKo,
-                  memo: memo.trim() || undefined,
-                  memoKo: previewData.memoKo,
-                  submittedAt: Date.now(),
-                }}
-              />
-            </PdfPageScaler>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

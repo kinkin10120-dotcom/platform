@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, KeyRound } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenPartners } from "@/lib/firestore/users";
@@ -8,12 +9,24 @@ import { listenAllProjects } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { createPartnerAccount, updatePartnerProjects, deleteClientAccount, sendPasswordResetEmail } from "@/lib/functions";
 import { AppUser, Project, Client } from "@/lib/types";
+import SupplierOrdersTab from "@/components/SupplierOrdersTab";
+import SupplierInvoicesTab from "@/components/SupplierInvoicesTab";
+import SupplierQuotesTab from "@/components/SupplierQuotesTab";
 
 // 중국 파트너 공장 등 제조 협력사 계정 — 지정된 프로젝트의 일정·업무·첨부 자료·코멘트만
-// 보여주고, 계약·견적·발주 등 금액이 얽힌 데이터는 애초에 접근 경로가 없다(firestore.rules).
+// 보여주고, 계약·견적 등 고객 쪽 데이터는 애초에 접근 경로가 없다(firestore.rules). 협력사와
+// 관련된 화면(계정, 구매 발주, 청구서, 견적서)을 전부 이 안에 모아서, 고객 쪽 발주 관리
+// 화면과 섞이지 않게 한다.
 export default function PartnersPage() {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<"accounts" | "supplier" | "supplierInvoices" | "supplierQuotes">(() => {
+    const t = searchParams.get("tab");
+    return t === "supplierInvoices" || t === "supplierQuotes" ? t : "accounts";
+  });
+  // 구매발주서 미리보기 중에는 위 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
+  const [supplierPreviewing, setSupplierPreviewing] = useState(false);
 
   const [partners, setPartners] = useState<AppUser[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -98,25 +111,61 @@ export default function PartnersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${supplierPreviewing ? "hidden" : ""}`}>
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
             협력사 관리
           </h1>
           <p className="mt-1 pl-4 text-sm text-[#86868b]">
-            중국 파트너 공장 등 협력사 계정을 만들고, 볼 수 있는 프로젝트를 지정합니다. 계약·견적·발주는 노출되지 않고, 지정된 프로젝트의 일정·업무·첨부 자료·코멘트만 보입니다.
+            협력사 계정·구매 발주·청구서·견적서를 한곳에서 관리합니다. 협력사 계정에겐 계약·견적 등
+            고객 쪽 데이터는 노출되지 않고, 지정된 프로젝트의 일정·업무·첨부 자료·코멘트만 보입니다.
           </p>
         </div>
-        <button
-          onClick={openCreateForm}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1 self-start whitespace-nowrap rounded-full bg-[#1d1d1f] px-4 text-sm font-medium text-white transition hover:bg-black"
-        >
-          <Plus size={16} /> 협력사 계정 추가
-        </button>
+        {tab === "accounts" && (
+          <button
+            onClick={openCreateForm}
+            className="inline-flex h-9 shrink-0 items-center justify-center gap-1 self-start whitespace-nowrap rounded-full bg-[#1d1d1f] px-4 text-sm font-medium text-white transition hover:bg-black"
+          >
+            <Plus size={16} /> 협력사 계정 추가
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      <div className={`flex flex-wrap gap-2 ${supplierPreviewing ? "hidden" : ""}`}>
+        <div className="flex rounded-full bg-[#1d1d1f] p-1">
+          <button
+            onClick={() => setTab("accounts")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "accounts" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            협력사 계정
+          </button>
+          <button
+            onClick={() => setTab("supplier")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplier" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            구매 발주
+          </button>
+          <button
+            onClick={() => setTab("supplierInvoices")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierInvoices" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            협력사 청구서
+          </button>
+          <button
+            onClick={() => setTab("supplierQuotes")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierQuotes" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
+          >
+            협력사 견적서
+          </button>
+        </div>
+      </div>
+
+      {tab === "supplier" && <SupplierOrdersTab onPreview={setSupplierPreviewing} />}
+      {tab === "supplierInvoices" && <SupplierInvoicesTab />}
+      {tab === "supplierQuotes" && <SupplierQuotesTab />}
+
+      {tab === "accounts" && showForm && (
         <form onSubmit={handleSubmit} className="space-y-3 rounded-3xl bg-white p-5">
           {!editingUid && (
             <>
@@ -197,6 +246,8 @@ export default function PartnersPage() {
         </form>
       )}
 
+      {tab === "accounts" && (
+      <>
       <div className="space-y-2">
         {partners.map((p) => (
           <div key={p.uid} className="rounded-3xl bg-white p-5">
@@ -280,6 +331,8 @@ export default function PartnersPage() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

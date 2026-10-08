@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -12,9 +11,6 @@ import { listenTasksByProject } from "@/lib/firestore/tasks";
 import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD } from "@/lib/orderCalc";
 import { downloadCsv } from "@/lib/csvExport";
 import OrderTotalsBox from "@/components/OrderTotalsBox";
-import SupplierOrdersTab from "@/components/SupplierOrdersTab";
-import SupplierInvoicesTab from "@/components/SupplierInvoicesTab";
-import SupplierQuotesTab from "@/components/SupplierQuotesTab";
 import { listenSupplierOrders, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import {
   listenClientProducts,
@@ -73,13 +69,7 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 
 export default function OrdersPage() {
   const { appUser } = useAuth();
-  const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"orders" | "catalog" | "supplier" | "unpaid" | "supplierInvoices" | "supplierQuotes">(() => {
-    const t = searchParams.get("tab");
-    return t === "supplierInvoices" || t === "supplierQuotes" ? t : "orders";
-  });
-  // 구매발주서 미리보기 중에는 아래 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
-  const [supplierPreviewing, setSupplierPreviewing] = useState(false);
+  const [tab, setTab] = useState<"orders" | "catalog" | "unpaid">("orders");
 
   if (appUser?.role !== "admin") {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;
@@ -87,13 +77,13 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className={`flex flex-wrap items-center justify-between gap-3 ${supplierPreviewing ? "hidden" : ""}`}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
             <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
             발주 관리
           </h1>
-          <p className="mt-1 pl-4 text-sm text-[#86868b]">클라이언트 발주를 확인하고, 제품 카탈로그와 해외 구매발주를 관리합니다.</p>
+          <p className="mt-1 pl-4 text-sm text-[#86868b]">클라이언트 발주를 확인하고, 제품 카탈로그와 수금 현황을 관리합니다.</p>
         </div>
         <div className="flex rounded-full bg-[#1d1d1f] p-1">
           <button
@@ -108,48 +98,16 @@ export default function OrdersPage() {
           >
             제품 카탈로그
           </button>
-          {/* 구매 발주(매입)는 이 관리자 전용 화면 안에만 둔다 — 고객이 들어올 수 있는 프로젝트
-              화면에는 원가를 그리는 코드 자체를 만들지 않는다. */}
-          <button
-            onClick={() => setTab("supplier")}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplier" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
-          >
-            구매 발주
-          </button>
           <button
             onClick={() => setTab("unpaid")}
             className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "unpaid" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
           >
             미수금
           </button>
-          <button
-            onClick={() => setTab("supplierInvoices")}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierInvoices" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
-          >
-            협력사 청구서
-          </button>
-          <button
-            onClick={() => setTab("supplierQuotes")}
-            className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${tab === "supplierQuotes" ? "bg-white text-[#1d1d1f] shadow-sm" : "text-white"}`}
-          >
-            협력사 견적서
-          </button>
         </div>
       </div>
 
-      {tab === "orders" ? (
-        <OrdersTab />
-      ) : tab === "catalog" ? (
-        <CatalogTab />
-      ) : tab === "supplier" ? (
-        <SupplierOrdersTab onPreview={setSupplierPreviewing} />
-      ) : tab === "supplierInvoices" ? (
-        <SupplierInvoicesTab />
-      ) : tab === "supplierQuotes" ? (
-        <SupplierQuotesTab />
-      ) : (
-        <UnpaidInstallmentsTab />
-      )}
+      {tab === "orders" ? <OrdersTab /> : tab === "catalog" ? <CatalogTab /> : <UnpaidInstallmentsTab />}
     </div>
   );
 }

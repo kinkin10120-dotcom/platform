@@ -24,6 +24,12 @@ export default function NotificationBell() {
   const [pushError, setPushError] = useState("");
   const [showIosGuide, setShowIosGuide] = useState(false);
 
+  // 계정 전환 시(로그아웃은 전체 새로고침 없이 처리되므로) 이전 사용자의 알림 목록이
+  // 새 리스너의 첫 snapshot이 오기 전까지 잠깐이라도 화면에 남아있지 않도록 즉시 비운다.
+  useEffect(() => {
+    setItems([]);
+  }, [appUser?.uid]);
+
   useEffect(() => {
     if (!appUser) return;
     return listenNotifications(appUser.uid, setItems);

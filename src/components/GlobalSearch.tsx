@@ -85,8 +85,25 @@ export default function GlobalSearch() {
     dragState.current.dragging = false;
   }
 
+  // 로그아웃 후 다른 계정으로 로그인해도 페이지 전체가 새로고침되지 않아(SPA), 이전
+  // 사용자(특히 관리자)가 검색창을 한 번이라도 열어 로드해둔 전체 데이터가 이 컴포넌트의
+  // state에 그대로 남아있을 수 있다. 계정(uid)이 바뀌는 즉시 전부 비워서, 다음 사용자가
+  // 검색을 열었을 때 자기 권한 밖의 이전 사용자 데이터가 섞여 보이는 걸 막는다.
+  useEffect(() => {
+    setProjects([]);
+    setTasks([]);
+    setClients([]);
+    setComments([]);
+    setFiles([]);
+    setQuotes([]);
+    setOrders([]);
+    setContracts([]);
+    setNotices([]);
+  }, [appUser?.uid]);
+
   useEffect(() => {
     if (!open || !appUser) return;
+    let cancelled = false;
     const unsubs: (() => void)[] = [];
     if (isAdmin) {
       unsubs.push(listenAllProjects(setProjects));
@@ -98,17 +115,19 @@ export default function GlobalSearch() {
       // 코멘트·첨부파일은 실시간 구독 대신, 검색창 열릴 때 한 번만 collectionGroup으로 조회
       // 문서 자체에는 taskId 필드가 저장되어 있지 않으므로(tasks/{taskId}/comments 서브컬렉션 구조상
       // 상위 경로로만 알 수 있음), 문서 참조 경로(parent.parent)에서 taskId를 직접 추출한다.
+      // cancelled 체크는 이 fetch가 끝나기 전에 로그아웃·계정 전환이 일어나는 경우(드물지만
+      // 가능)에 이전 사용자 데이터가 새 사용자 state에 늦게 꽂히는 걸 막기 위함이다.
       getDocs(collectionGroup(db, "comments"))
-        .then((snap) => setComments(snap.docs.map((d) => ({ ...d.data(), id: d.id, taskId: d.ref.parent.parent?.id }) as TaskComment)))
-        .catch((e) => { console.error("코멘트 검색 데이터 로드 실패:", e); setLoadError(`코멘트 검색 불러오기 실패: ${e?.code ?? e?.message ?? e}`); });
+        .then((snap) => { if (!cancelled) setComments(snap.docs.map((d) => ({ ...d.data(), id: d.id, taskId: d.ref.parent.parent?.id }) as TaskComment)); })
+        .catch((e) => { if (!cancelled) { console.error("코멘트 검색 데이터 로드 실패:", e); setLoadError(`코멘트 검색 불러오기 실패: ${e?.code ?? e?.message ?? e}`); } });
       getDocs(collectionGroup(db, "files"))
-        .then((snap) => setFiles(snap.docs.map((d) => ({ ...d.data(), id: d.id, taskId: d.ref.parent.parent?.id }) as TaskFile)))
-        .catch((e) => { console.error("첨부파일 검색 데이터 로드 실패:", e); setLoadError(`첨부파일 검색 불러오기 실패: ${e?.code ?? e?.message ?? e}`); });
+        .then((snap) => { if (!cancelled) setFiles(snap.docs.map((d) => ({ ...d.data(), id: d.id, taskId: d.ref.parent.parent?.id }) as TaskFile)); })
+        .catch((e) => { if (!cancelled) { console.error("첨부파일 검색 데이터 로드 실패:", e); setLoadError(`첨부파일 검색 불러오기 실패: ${e?.code ?? e?.message ?? e}`); } });
     } else if (appUser.clientId) {
       // 홈 화면과 동일하게, 관리자가 아직 공개하지 않은 프로젝트는 검색 결과에서도 숨긴다.
       unsubs.push(listenProjectsByClient(appUser.clientId, (raw) => setProjects(raw.filter((p) => p.clientVisible !== false))));
     }
-    return () => unsubs.forEach((u) => u());
+    return () => { cancelled = true; unsubs.forEach((u) => u()); };
   }, [open, appUser, isAdmin]);
 
   // 공지사항은 관리자·클라이언트 모두 볼 수 있는 콘텐츠라 역할 구분 없이 항상 구독한다.

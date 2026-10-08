@@ -1201,6 +1201,12 @@ function SupplierOrderComposer({
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const rows = grouped.find(([s]) => s === supplierName)?.[1] ?? [];
+  // 왼쪽 담기 목록도 카탈로그 탭과 같은 기준(양산/개발/금형/샘플)으로 나눠서, 발주처 하나에
+  // 여러 구분의 품목이 섞여 있을 때 원하는 걸 더 빨리 찾게 한다.
+  const pickProductionRows = rows.filter((e) => (e.orderKind ?? "production") === "production");
+  const pickDevelopmentRows = rows.filter((e) => e.orderKind === "development");
+  const pickMoldRows = rows.filter((e) => e.orderKind === "mold");
+  const pickSampleRows = rows.filter((e) => e.orderKind === "sample");
 
   // 환율은 오늘 시세로 자동으로 채워준다 — 직접 찾아 입력하지 않아도 되게. 이미 값을 넣어둔
   // 상태에서 통화만 바꾼 경우에도 새 통화 기준으로 다시 받아온다(예전 통화의 환율이 남으면
@@ -1490,28 +1496,42 @@ function SupplierOrderComposer({
         <div className="overflow-hidden rounded-3xl bg-white">
           <p className="border-b border-[#f0f0f0] px-5 py-3 text-xs font-semibold text-[#86868b]">제품을 눌러 발주에 담기</p>
           {rows.length === 0 && <p className="px-5 py-6 text-center text-sm text-[#86868b]">이 발주처의 품목이 없습니다.</p>}
-          {rows.map((e) => (
-            <button
-              key={`${e.kind}-${e.id}`}
-              onClick={() => addEntry(e)}
-              className="flex w-full items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3 text-left transition last:border-b-0 hover:bg-[#f5f5f7]"
-            >
-              {e.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={e.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
-                <p className="mt-0.5 truncate text-xs text-[#86868b]">{e.subtitle}</p>
+          {([
+            ["production", "text-[#86868b]", pickProductionRows],
+            ["development", "text-violet-600", pickDevelopmentRows],
+            ["mold", "text-amber-600", pickMoldRows],
+            ["sample", "text-sky-600", pickSampleRows],
+          ] as const).map(([kind, labelClass, kindRows]) =>
+            kindRows.length > 0 && (
+              <div key={kind}>
+                <p className={`border-b border-[#f0f0f0] bg-[#fafafa] px-5 py-1.5 text-[11px] font-semibold uppercase tracking-wide ${labelClass}`}>
+                  {SUPPLIER_ORDER_KIND_LABEL[kind]}
+                </p>
+                {kindRows.map((e) => (
+                  <button
+                    key={`${e.kind}-${e.id}`}
+                    onClick={() => addEntry(e)}
+                    className="flex w-full items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3 text-left transition last:border-b-0 hover:bg-[#f5f5f7]"
+                  >
+                    {e.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={e.imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg border border-[#e5e5e5] object-cover" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{e.name}</p>
+                      <p className="mt-0.5 truncate text-xs text-[#86868b]">{e.subtitle}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="text-sm text-[#86868b]">
+                        {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "-"}
+                      </span>
+                      <Plus size={14} className="text-[#d1d1d6]" />
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="text-sm text-[#86868b]">
-                  {e.purchasePrice != null ? formatSupplierMoney(e.purchasePrice, e.currency) : "-"}
-                </span>
-                <Plus size={14} className="text-[#d1d1d6]" />
-              </div>
-            </button>
-          ))}
+            )
+          )}
         </div>
       </div>
 

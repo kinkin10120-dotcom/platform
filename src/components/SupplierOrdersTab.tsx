@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, X, Printer, FileText, Pencil, RefreshCw, Download, Send } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAllClientProducts, uploadClientProductImage } from "@/lib/firestore/products";
@@ -29,7 +29,7 @@ import {
   updateSupplierOrder,
 } from "@/lib/firestore/supplierOrders";
 import SupplierOrderDocument from "@/components/SupplierOrderDocument";
-import PdfPageScaler from "@/components/PdfPageScaler";
+import PrintablePreview from "@/components/PrintablePreview";
 import { downloadCsv } from "@/lib/csvExport";
 import NumberInput from "@/components/NumberInput";
 import { usePrintFileName } from "@/lib/usePrintFileName";
@@ -1435,7 +1435,11 @@ function SupplierOrderComposer({
 
   if (previewOpen) {
     return (
-      <PrintablePreview onClose={() => setPreviewOpen(false)} label="발행 전 미리보기 — 실제 발주서와 동일합니다.">
+      <PrintablePreview
+        onClose={() => setPreviewOpen(false)}
+        label="발행 전 미리보기 — 실제 발주서와 동일합니다."
+        right={<p className="text-xs text-[#86868b]">저장한 뒤 &quot;미리보기 / PDF&quot;에서 인쇄할 수 있습니다.</p>}
+      >
         <SupplierOrderDocument
           data={{
             supplierName,
@@ -2189,55 +2193,3 @@ function SupplierOrderDetail({
   );
 }
 
-// 견적서 미리보기와 같은 구조 — 화면에 보이는 것을 그대로 인쇄한다(인쇄용 사본을 따로 두면
-// 페이지 나눔이 어긋난다는 걸 계약서 쪽에서 이미 겪었다).
-// 작성 중인 발주서를 화면에서 확인하는 용도. 인쇄는 여기서 하지 않는다 — 사이드바·상단바가
-// 있는 (app) 레이아웃 안에서 인쇄하면 숨긴 요소들이 자리를 그대로 차지해서 빈 두 번째 장이
-// 생긴다. 저장한 뒤 /supplier-orders/[id]/print 전용 페이지에서 뽑는다.
-function PrintablePreview({ children, onClose, label }: { children: React.ReactNode; onClose: () => void; label: string }) {
-  const headerRef = useRef<HTMLDivElement>(null);
-  const [headerHeight, setHeaderHeight] = useState(0);
-
-  // 바 높이는 화면 폭에 따라 줄바꿈되며 달라지므로 고정값 대신 실제로 잰다.
-  useLayoutEffect(() => {
-    function measure() {
-      if (headerRef.current) setHeaderHeight(headerRef.current.offsetHeight);
-    }
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-
-  return (
-    <div
-      className="-mx-4 -mb-4 -mt-[calc(4.5rem+env(safe-area-inset-top))] min-h-screen bg-[#e5e5e5] md:-mx-6 md:-mb-6 md:-mt-[calc(5.5rem+env(safe-area-inset-top))]"
-    >
-      {/* 앱 상단바(h-14, fixed) 바로 아래에 이어붙인다 — 덮지 않고 그 밑에 붙어야 한다. */}
-      <div
-        ref={headerRef}
-        className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-10 border-b border-[#e5e5e5] bg-white/90 px-4 py-3 backdrop-blur-xl print:hidden md:left-56"
-      >
-        <div className="mx-auto flex w-full max-w-[210mm] flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
-              title="닫기"
-            >
-              <X size={16} />
-            </button>
-            <p className="text-sm text-[#86868b]">{label}</p>
-          </div>
-          {/* 여기서 바로 인쇄하지 않는다 — 사이드바·상단바가 있는 화면 안에서 인쇄하면
-              숨긴 요소들이 자리를 차지해 빈 두 번째 장이 생긴다. 저장한 뒤 전용 인쇄
-              페이지에서 뽑는다. */}
-          <p className="text-xs text-[#86868b]">저장한 뒤 &quot;미리보기 / PDF&quot;에서 인쇄할 수 있습니다.</p>
-        </div>
-      </div>
-
-      <div className="px-4 pb-10" style={{ paddingTop: 56 + headerHeight }}>
-        <PdfPageScaler>{children}</PdfPageScaler>
-      </div>
-    </div>
-  );
-}

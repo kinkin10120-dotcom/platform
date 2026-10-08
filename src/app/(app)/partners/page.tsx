@@ -279,15 +279,17 @@ export default function PartnersPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {(p.projectIds ?? []).map((pid) => {
-                const proj = projects.find((pr) => pr.id === pid);
-                return (
-                  <span key={pid} className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs text-[#86868b]">
-                    {proj?.name ?? pid}
+              {/* 프로젝트가 삭제되면 이름을 찾을 수 없어 원본 ID가 그대로 보였다 — 지워진
+                  프로젝트는 뱃지 자체를 숨긴다(데이터는 그대로 두고 화면에서만 거른다). */}
+              {(p.projectIds ?? [])
+                .map((pid) => projects.find((pr) => pr.id === pid))
+                .filter((proj): proj is Project => !!proj)
+                .map((proj) => (
+                  <span key={proj.id} className="rounded-full bg-[#f5f5f7] px-2.5 py-0.5 text-xs text-[#86868b]">
+                    {proj.name}
                   </span>
-                );
-              })}
-              {(p.projectIds ?? []).length === 0 && (
+                ))}
+              {(p.projectIds ?? []).filter((pid) => projects.some((pr) => pr.id === pid)).length === 0 && (
                 <span className="text-xs text-[#86868b]">지정된 프로젝트가 없습니다.</span>
               )}
             </div>

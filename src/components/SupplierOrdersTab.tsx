@@ -2002,6 +2002,24 @@ function SupplierOrderDetail({
   const kinds = Array.from(new Set(order.items.map((it) => it.orderKind ?? "production")));
   const singleKind = kinds.length === 1 ? kinds[0] : null;
 
+  // 견적서 승인으로 자동 생성된 발주서는 선금/잔금 구분이 비어 있는 채로 만들어진다 —
+  // 수정 화면까지 안 들어가도 여기서 바로 고를 수 있게 한다.
+  const [installmentType, setInstallmentType] = useState<"" | "deposit" | "balance" | "full">(order.installmentType ?? "");
+  const [installmentPercent, setInstallmentPercent] = useState(String(order.installmentPercent ?? 50));
+  const [savingInstallment, setSavingInstallment] = useState(false);
+
+  async function saveInstallment(type: "" | "deposit" | "balance" | "full", percent: string) {
+    setSavingInstallment(true);
+    try {
+      await updateSupplierOrder(order.id, {
+        installmentType: type || undefined,
+        installmentPercent: type === "deposit" || type === "balance" ? Math.min(100, Math.max(1, Number(percent) || 50)) : undefined,
+      });
+    } finally {
+      setSavingInstallment(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-4 rounded-3xl bg-white p-6">
       <div className="flex items-start justify-between gap-3">
@@ -2104,6 +2122,39 @@ function SupplierOrderDetail({
             </p>
           ) : null}
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#f0f0f0] pt-4">
+        <span className="text-xs font-medium text-[#86868b]">청구 조건</span>
+        <select
+          value={installmentType}
+          onChange={(e) => {
+            const next = e.target.value as "" | "deposit" | "balance" | "full";
+            setInstallmentType(next);
+            saveInstallment(next, installmentPercent);
+          }}
+          className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+        >
+          <option value="">구분 없음</option>
+          <option value="deposit">선금</option>
+          <option value="balance">잔금</option>
+          <option value="full">완납</option>
+        </select>
+        {(installmentType === "deposit" || installmentType === "balance") && (
+          <span className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={installmentPercent}
+              onChange={(e) => setInstallmentPercent(e.target.value)}
+              onBlur={() => saveInstallment(installmentType, installmentPercent)}
+              className="w-14 rounded-xl border border-[#d1d1d6] bg-white px-2 py-1.5 text-xs outline-none focus:border-[#86868b]"
+            />
+            <span className="text-xs text-[#86868b]">% 청구</span>
+          </span>
+        )}
+        {savingInstallment && <span className="text-xs text-[#d1d1d6]">저장 중...</span>}
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-[#f0f0f0] pt-4">

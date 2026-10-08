@@ -28,6 +28,7 @@ const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
   approved: "bg-green-50 text-green-600",
   rejected: "bg-red-50 text-red-500",
+  revision_requested: "bg-blue-50 text-blue-600",
 };
 
 function newId(): string {
@@ -222,7 +223,9 @@ export default function MyQuotesPage() {
   }
 
   async function handleDelete(q: SupplierQuote) {
-    if (q.status !== "submitted") return;
+    // 본인이 만든 견적서는 상태(승인/반려 포함)와 무관하게 삭제할 수 있다 — 수정은
+    // "검토 대기"일 때만 허용하지만, 삭제는 본인 이력 정리라 막을 이유가 없다. 승인된
+    // 건을 지워도 이미 생성된 매입 발주서는 그대로 남는다.
     if (!confirm(zh(isZh, "이 견적서를 삭제할까요?"))) return;
     await deleteSupplierQuote(q.id);
   }
@@ -508,24 +511,24 @@ export default function MyQuotesPage() {
                             >
                               <FileText size={12} /> {zh(isZh, "미리보기 / PDF")}
                             </Link>
-                            {/* 가격이 나중에 조정되는 경우가 많아서 생긴 기능 — 관리자가 아직
-                                검토 전(submitted)일 때만 수정·삭제할 수 있다. */}
-                            {q.status === "submitted" && (
-                              <>
-                                <button
-                                  onClick={() => openEditForm(q)}
-                                  className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
-                                >
-                                  <Pencil size={12} /> {zh(isZh, "수정")}
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(q)}
-                                  className="rounded-full border border-[#d1d1d6] p-1.5 text-[#86868b] transition hover:border-red-400 hover:text-red-500"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </>
+                            {/* 가격이 나중에 조정되는 경우가 많아서 생긴 기능 — 수정은 관리자가
+                                아직 검토 전(submitted)이거나 수정을 요청한(revision_requested)
+                                상태일 때만 가능하다. 저장하면 자동으로 "검토 대기"로 돌아간다. */}
+                            {(q.status === "submitted" || q.status === "revision_requested") && (
+                              <button
+                                onClick={() => openEditForm(q)}
+                                className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+                              >
+                                <Pencil size={12} /> {zh(isZh, "수정")}
+                              </button>
                             )}
+                            {/* 삭제는 본인이 만든 견적서라 상태(승인/반려 포함)와 무관하게 할 수 있다. */}
+                            <button
+                              onClick={() => handleDelete(q)}
+                              className="rounded-full border border-[#d1d1d6] p-1.5 text-[#86868b] transition hover:border-red-400 hover:text-red-500"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
 
                           <div className="mt-4 space-y-2">
@@ -547,6 +550,11 @@ export default function MyQuotesPage() {
                           )}
                           {q.status === "rejected" && q.rejectReason && (
                             <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600">{zh(isZh, "반려 사유")}: {q.rejectReason}</p>
+                          )}
+                          {q.status === "revision_requested" && (q.revisionNoteZh || q.revisionNote) && (
+                            <p className="mt-3 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-600">
+                              {zh(isZh, "수정 요청")}: {(isZh && q.revisionNoteZh) || q.revisionNote}
+                            </p>
                           )}
                           {q.status === "approved" && (
                             <p className="mt-3 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-600">{zh(isZh, "승인되어 발주서로 전환되었습니다.")}</p>

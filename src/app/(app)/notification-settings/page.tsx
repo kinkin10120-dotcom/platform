@@ -34,6 +34,7 @@ const ALL_TYPES: NotificationType[] = [
   "supplier_quote_submitted",
   "supplier_quote_approved",
   "supplier_quote_rejected",
+  "supplier_quote_revision_requested",
 ];
 
 const TYPE_DESC: Record<NotificationType, string> = {
@@ -63,6 +64,7 @@ const TYPE_DESC: Record<NotificationType, string> = {
   supplier_quote_submitted: "협력사가 견적서를 제출했을 때",
   supplier_quote_approved: "제출한 견적서가 승인되었을 때",
   supplier_quote_rejected: "제출한 견적서가 반려되었을 때",
+  supplier_quote_revision_requested: "제출한 견적서에 수정 요청이 왔을 때",
 };
 
 export default function NotificationSettingsPage() {

@@ -219,7 +219,8 @@ service cloud.firestore {
         "order_status_change", "order_cancel_request", "contract_signed",
         "contract_revision_requested", "contract_expiring", "partner_archive",
         "supplier_invoice_submitted", "supplier_invoice_paid",
-        "supplier_quote_submitted", "supplier_quote_approved", "supplier_quote_rejected"
+        "supplier_quote_submitted", "supplier_quote_approved", "supplier_quote_rejected",
+        "supplier_quote_revision_requested"
       ];
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -362,15 +363,17 @@ service cloud.firestore {
         && request.resource.data.partnerId == request.auth.uid
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'submitted';
-      // 제출 직후 실수를 본인이 되돌리는 것만 허용 — 관리자가 승인/반려 처리한 뒤로는
-      // 협력사가 건드릴 수 없다.
-      allow delete: if isSignedIn() && myProfile().role == 'partner'
-        && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';
-      // 가격이 나중에 조정되는 경우가 많아 내용 수정을 허용한다 — 단, 관리자가 아직
-      // 검토 전(submitted)일 때만, 그리고 소유자·상태·작성자는 이 수정으로 못 바꾼다
-      // (상태를 끼워 넣어 승인된 것처럼 만드는 경로를 원천적으로 막는다).
+      // 본인이 만든 견적서는 상태와 무관하게 삭제할 수 있다(승인/반려된 뒤에도) — 수정은
+      // submitted일 때만 허용하지만, 삭제는 그냥 본인 이력 정리라 막을 이유가 없다. 승인된
+      // 건을 지워도 이미 생성된 매입 발주서는 그대로 남는다(별도 문서라 연쇄 삭제하지 않는다).
+      allow delete: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+      // 가격이 나중에 조정되는 경우가 많아 내용 수정을 허용한다 — 아직 검토 전(submitted)
+      // 이거나 관리자가 수정을 요청한(revision_requested) 상태일 때만, 그리고 수정 저장은
+      // 항상 "검토 대기"로 되돌아간다(관리자가 다시 봐야 하므로). 소유자·작성자는 이 수정으로
+      // 못 바꾼다 — 상태를 끼워 넣어 승인된 것처럼 만드는 경로를 원천적으로 막는다.
       allow update: if isSignedIn() && myProfile().role == 'partner'
-        && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted'
+        && resource.data.partnerId == request.auth.uid
+        && (resource.data.status == 'submitted' || resource.data.status == 'revision_requested')
         && request.resource.data.partnerId == resource.data.partnerId
         && request.resource.data.status == 'submitted'
         && request.resource.data.createdBy == resource.data.createdBy;

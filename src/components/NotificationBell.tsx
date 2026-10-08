@@ -83,7 +83,11 @@ export default function NotificationBell() {
     } else if (n.type === "supplier_quote_submitted") {
       setOpen(false);
       router.push("/partners?tab=supplierQuotes");
-    } else if (n.type === "supplier_quote_approved" || n.type === "supplier_quote_rejected") {
+    } else if (
+      n.type === "supplier_quote_approved" ||
+      n.type === "supplier_quote_rejected" ||
+      n.type === "supplier_quote_revision_requested"
+    ) {
       setOpen(false);
       router.push("/my-quotes");
     }

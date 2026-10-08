@@ -283,7 +283,8 @@ export type NotificationType =
   | "supplier_invoice_paid"
   | "supplier_quote_submitted"
   | "supplier_quote_approved"
-  | "supplier_quote_rejected";
+  | "supplier_quote_rejected"
+  | "supplier_quote_revision_requested";
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   assigned: "업무 배정",
@@ -312,6 +313,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   supplier_quote_submitted: "협력사 견적서 제출",
   supplier_quote_approved: "견적서 승인됨",
   supplier_quote_rejected: "견적서 반려됨",
+  supplier_quote_revision_requested: "견적서 수정 요청",
 };
 
 export interface AppNotification {
@@ -858,12 +860,13 @@ export interface SupplierInvoice {
 // 거라면, 이건 아직 발주 전인 건에 대해 "이 가격에 만들 수 있다"고 먼저 제안하는 것이다.
 // 관리자가 승인하면 그 내용 그대로 매입 발주서(SupplierOrder, 작성중 상태)가 자동 생성되어,
 // 다시 입력할 필요 없이 바로 거기서 검토·발행하면 된다.
-export type SupplierQuoteStatus = "submitted" | "approved" | "rejected";
+export type SupplierQuoteStatus = "submitted" | "approved" | "rejected" | "revision_requested";
 
 export const SUPPLIER_QUOTE_STATUS_LABEL: Record<SupplierQuoteStatus, string> = {
   submitted: "검토 대기",
   approved: "승인됨",
   rejected: "반려됨",
+  revision_requested: "수정 요청됨",
 };
 
 export interface SupplierQuoteItem {
@@ -897,6 +900,10 @@ export interface SupplierQuote {
   decidedAt?: number;
   decidedBy?: string;
   rejectReason?: string;
+  // 관리자가 수정 요청 시 남기는 내용 — 중국 협력사는 한국어 원문 대신 revisionNoteZh를
+  // 본다(저장 시점에 미리 번역, memoKo와 반대 방향).
+  revisionNote?: string;
+  revisionNoteZh?: string;
   // 승인 시 자동 생성된 매입 발주서 id — 협력사 쪽 이력에서 "그 발주서로 이어졌다"는 걸
   // 바로 찾아갈 수 있게 남겨둔다.
   linkedSupplierOrderId?: string;

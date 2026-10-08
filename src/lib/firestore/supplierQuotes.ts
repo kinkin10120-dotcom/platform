@@ -13,6 +13,7 @@ import { db } from "@/lib/firebase";
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { createSupplierOrder } from "@/lib/firestore/supplierOrders";
+import { translateForCache } from "@/lib/i18n";
 import { SupplierCurrency, SupplierOrderKind, SupplierQuote, SupplierQuoteItem, SupplierQuoteStatus } from "@/lib/types";
 
 // 협력사 → HANDYHAND 견적서. 청구서(supplierInvoices)와 방향은 같지만(협력사가 만든다)
@@ -34,11 +35,16 @@ function fromDoc(d: any): SupplierQuote {
     linkedProjectName: data.linkedProjectName || undefined,
     memo: data.memo || undefined,
     memoKo: data.memoKo || undefined,
-    status: data.status === "approved" || data.status === "rejected" ? data.status : "submitted",
+    status:
+      data.status === "approved" || data.status === "rejected" || data.status === "revision_requested"
+        ? data.status
+        : "submitted",
     submittedAt: data.submittedAt?.toMillis ? data.submittedAt.toMillis() : Date.now(),
     decidedAt: data.decidedAt?.toMillis ? data.decidedAt.toMillis() : undefined,
     decidedBy: data.decidedBy || undefined,
     rejectReason: data.rejectReason || undefined,
+    revisionNote: data.revisionNote || undefined,
+    revisionNoteZh: data.revisionNoteZh || undefined,
     linkedSupplierOrderId: data.linkedSupplierOrderId || undefined,
     createdBy: data.createdBy ?? "",
   };
@@ -140,9 +146,11 @@ export type UpdateSupplierQuoteInput = Pick<
   "currency" | "items" | "orderKind" | "linkedProjectId" | "linkedProjectName" | "memo" | "memoKo"
 >;
 
-// 협력사 본인이 "검토 대기" 상태일 때만 수정할 수 있다 — 가격이 나중에 조정되는 경우가
-// 많아서 생긴 기능이지만, 관리자가 이미 승인/반려 판단을 내린 뒤에 내용이 바뀌면 안 되므로
-// 제출 직후(아직 검토 전) 상태로만 제한한다(Firestore 규칙에서도 동일하게 강제한다).
+// 협력사 본인이 "검토 대기" 또는 "수정 요청됨" 상태일 때만 수정할 수 있다 — 가격이 나중에
+// 조정되는 경우가 많아서 생긴 기능이지만, 관리자가 이미 승인/반려 판단을 내린 뒤에 내용이
+// 바뀌면 안 되므로 그 두 상태로만 제한한다(Firestore 규칙에서도 동일하게 강제한다). 수정
+// 저장은 항상 "검토 대기"로 되돌아간다 — 수정 요청에 대한 응답이든 그냥 고친 것이든, 관리자가
+// 다시 봐야 하는 상태이기 때문이다. 이전 수정 요청 메모는 더 이상 유효하지 않으니 비운다.
 export async function updateSupplierQuote(id: string, input: UpdateSupplierQuoteInput) {
   const totalAmount = calcSupplierQuoteTotal(input.items);
   return updateDoc(doc(db, "supplierQuotes", id), {
@@ -154,6 +162,9 @@ export async function updateSupplierQuote(id: string, input: UpdateSupplierQuote
     linkedProjectName: input.linkedProjectName ?? "",
     memo: input.memo ?? "",
     memoKo: input.memoKo ?? "",
+    status: "submitted" as SupplierQuoteStatus,
+    revisionNote: null,
+    revisionNoteZh: null,
   });
 }
 
@@ -201,6 +212,32 @@ export async function approveSupplierQuote(quote: SupplierQuote, decidedBy: stri
   }
 
   return orderRef;
+}
+
+// 관리자가 그냥 반려하는 대신, 구체적으로 뭘 고쳐야 하는지 적어서 협력사에게 돌려준다.
+// 협력사는 이 메모를 보고 "수정" 버튼으로 내용을 고쳐 다시 제출할 수 있다(updateSupplierQuote
+// 가 저장 시 자동으로 "검토 대기"로 되돌린다). 중국 협력사는 한국어 원문 대신
+// revisionNoteZh(저장 시점에 미리 번역)를 본다.
+export async function requestSupplierQuoteRevision(quote: SupplierQuote, decidedBy: string, note: string) {
+  const [noteZh] = await translateForCache([note]);
+  await updateDoc(doc(db, "supplierQuotes", quote.id), {
+    status: "revision_requested" as SupplierQuoteStatus,
+    decidedAt: serverTimestamp(),
+    decidedBy,
+    revisionNote: note,
+    revisionNoteZh: noteZh ?? null,
+  });
+
+  try {
+    await createNotification({
+      userId: quote.partnerId,
+      type: "supplier_quote_revision_requested",
+      supplierQuoteId: quote.id,
+      message: `제출하신 견적서(${quote.quoteNumber})에 수정 요청이 왔습니다: ${note}`,
+    });
+  } catch (e) {
+    console.error("견적서 수정 요청 알림 발송 실패:", e);
+  }
 }
 
 export async function rejectSupplierQuote(quote: SupplierQuote, decidedBy: string, reason?: string) {

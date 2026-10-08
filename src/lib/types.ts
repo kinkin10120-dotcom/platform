@@ -545,6 +545,10 @@ export interface PurchaseOrder {
   cancelRequested?: boolean; // 클라이언트가 취소를 요청했고 관리자 처리 대기 중
   cancelRequestedAt?: number;
   cancelReason?: string;
+  // 모든 회차의 입금·발행이 끝나면(마지막 회차 입금확인 시점) 자동으로 찍힌다 — 이후엔
+  // 발행취소·결제정보 수정·연결 업무 변경·메모 등 전부 잠기고 목록에서도 아카이브로
+  // 빠진다. 기록을 고쳐야 할 일이 생기면 이 값 자체를 지우기 전까진 되돌릴 방법이 없다.
+  completedAt?: number;
   memo?: string;
   createdAt: number;
   updatedAt: number;

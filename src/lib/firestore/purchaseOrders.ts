@@ -57,6 +57,7 @@ function fromDoc(d: any): PurchaseOrder {
     cancelRequested: !!data.cancelRequested,
     cancelRequestedAt: data.cancelRequestedAt?.toMillis ? data.cancelRequestedAt.toMillis() : data.cancelRequestedAt,
     cancelReason: data.cancelReason ?? undefined,
+    completedAt: data.completedAt?.toMillis ? data.completedAt.toMillis() : data.completedAt,
     memo: data.memo,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
@@ -167,7 +168,15 @@ export async function createPurchaseOrder(input: {
   return ref;
 }
 
+// 모든 회차가 끝나 completedAt이 찍힌 발주는 전부 읽기 전용이다 — 기록을 고쳐야 할 일이
+// 생기면 완료 처리 자체를 되돌리는 것부터 해야 한다(지금은 그 되돌리기 기능 자체를 일부러
+// 안 만들었다 — 실수로 눌렀을 때 바로 고치라는 목적이지, 완료된 기록을 다시 여는 용도가 아니다).
+function assertNotCompleted(order: PurchaseOrder) {
+  if (order.completedAt) throw new Error("완료 처리된 발주는 수정할 수 없습니다.");
+}
+
 export async function updatePurchaseOrderStatus(order: PurchaseOrder, status: PurchaseOrderStatus) {
+  assertNotCompleted(order);
   await updateDoc(doc(db, "purchaseOrders", order.id), {
     status,
     ...(status === "confirmed" ? { confirmedAt: serverTimestamp() } : {}),
@@ -188,6 +197,7 @@ export async function updatePurchaseOrderStatus(order: PurchaseOrder, status: Pu
 }
 
 export async function requestOrderCancel(order: PurchaseOrder, reason?: string) {
+  assertNotCompleted(order);
   await updateDoc(doc(db, "purchaseOrders", order.id), {
     cancelRequested: true,
     cancelRequestedAt: serverTimestamp(),
@@ -214,6 +224,7 @@ export async function requestOrderCancel(order: PurchaseOrder, reason?: string) 
 }
 
 export async function dismissCancelRequest(order: PurchaseOrder) {
+  assertNotCompleted(order);
   await updateDoc(doc(db, "purchaseOrders", order.id), {
     cancelRequested: false,
     updatedAt: serverTimestamp(),
@@ -248,6 +259,7 @@ export async function setPurchaseOrderInstallments(
   order: PurchaseOrder,
   input: { installments: { label: string; amount: number }[]; note?: string }
 ) {
+  assertNotCompleted(order);
   const installments: PaymentInstallment[] = input.installments.map((it) => ({
     label: it.label,
     amount: it.amount,
@@ -271,6 +283,7 @@ export async function setPurchaseOrderLinkedTask(
   order: PurchaseOrder,
   input: { projectId?: string; taskId?: string; taskName?: string }
 ) {
+  assertNotCompleted(order);
   return updateDoc(doc(db, "purchaseOrders", order.id), {
     linkedProjectId: input.projectId ?? null,
     linkedTaskId: input.taskId ?? null,
@@ -292,6 +305,7 @@ export async function markInstallmentPaid(order: PurchaseOrder, index: number, a
   const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     const current = fromDoc(snap);
+    assertNotCompleted(current);
     if (!current.payment) return null;
     const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, paid: true, paidAt: now } : it));
     const label = installments[index].label;
@@ -302,11 +316,17 @@ export async function markInstallmentPaid(order: PurchaseOrder, index: number, a
     // 묶여 숨겨지는 그 상태)로 넘긴다. 실제 클라이언트 발주는 물리적인 생산/출고가 남아있을 수
     // 있으므로 이 자동완료 대상이 아니다.
     const allSettled = installments.every((it) => it.paid && it.issuedAt);
-    const autoComplete = current.createdByAdmin && allSettled && current.status !== "shipped";
+    const autoShip = current.createdByAdmin && allSettled && current.status !== "shipped";
+
+    // 발주 종류와 무관하게, 모든 회차의 입금·발행이 다 끝나는 순간(보통 마지막 회차인
+    // 잔금 입금확인) 발주 전체를 완료 처리해 아카이브로 보낸다 — 더 이상 손댈 일이 없는
+    // 건이라, 발행취소·수정 전부 잠그고 목록에서도 빠지게 한다.
+    const justCompleted = allSettled && !current.completedAt;
 
     tx.update(ref, {
       payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
-      ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      ...(autoShip ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      ...(justCompleted ? { completedAt: serverTimestamp() } : {}),
       updatedAt: serverTimestamp(),
     });
     return { label };
@@ -367,6 +387,7 @@ export async function unmarkInstallmentPaid(order: PurchaseOrder, index: number)
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     const current = fromDoc(snap);
+    assertNotCompleted(current);
     if (!current.payment) return;
     const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, paid: false, paidAt: undefined } : it));
     tx.update(ref, {
@@ -383,6 +404,7 @@ export async function issueInstallmentInvoice(order: PurchaseOrder, index: numbe
   const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     const current = fromDoc(snap);
+    assertNotCompleted(current);
     if (!current.payment) return null;
     const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: now } : it));
     const installment = installments[index];
@@ -390,11 +412,13 @@ export async function issueInstallmentInvoice(order: PurchaseOrder, index: numbe
     // markInstallmentPaid와 동일한 이유 — 순서 상관없이(입금확인을 먼저 하고 나중에 발행하는
     // 경우도 있으므로) 여기서도 전부 갖춰졌는지 확인해서 자동완료 처리한다.
     const allSettled = installments.every((it) => it.paid && it.issuedAt);
-    const autoComplete = current.createdByAdmin && allSettled && current.status !== "shipped";
+    const autoShip = current.createdByAdmin && allSettled && current.status !== "shipped";
+    const justCompleted = allSettled && !current.completedAt;
 
     tx.update(ref, {
       payment: { installments: installments.map(serializeInstallment), note: current.payment.note ?? "" },
-      ...(autoComplete ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      ...(autoShip ? { status: "shipped" as PurchaseOrderStatus } : {}),
+      ...(justCompleted ? { completedAt: serverTimestamp() } : {}),
       updatedAt: serverTimestamp(),
     });
     return { label: installment.label };
@@ -425,6 +449,7 @@ export async function unissueInstallmentInvoice(order: PurchaseOrder, index: num
   const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(ref);
     const current = fromDoc(snap);
+    assertNotCompleted(current);
     if (!current.payment) return null;
     const installment = current.payment.installments[index];
     const installments = current.payment.installments.map((it, i) => (i === index ? { ...it, issuedAt: undefined } : it));

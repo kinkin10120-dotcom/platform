@@ -118,6 +118,7 @@ function OrdersTab() {
   const [memo, setMemo] = useState("");
   const [saving, setSaving] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -158,8 +159,11 @@ function OrdersTab() {
     setDeleteConfirmText("");
   }
 
-  const active = orders.filter((o) => o.status !== "shipped" && o.status !== "cancelled");
-  const done = orders.filter((o) => o.status === "shipped" || o.status === "cancelled");
+  // 모든 회차가 끝나 completedAt이 찍힌 발주는 "진행중"도 "발행완료"도 아니라 별도
+  // 아카이브 묶음으로 뺀다 — 더 손댈 일이 없는 건이라 기본적으로는 목록에서도 안 보인다.
+  const archived = orders.filter((o) => o.completedAt);
+  const active = orders.filter((o) => !o.completedAt && o.status !== "shipped" && o.status !== "cancelled");
+  const done = orders.filter((o) => !o.completedAt && (o.status === "shipped" || o.status === "cancelled"));
 
   // 세무/회계 처리용 — 화면에 보이는 발주 상태와 무관하게 전체 발주를 회차(installment) 단위로
   // 한 줄씩 뽑는다. 발주 총액이 아니라 회차별로 나누는 이유는, 실제 입금/미입금은 회차 단위로
@@ -246,6 +250,19 @@ function OrdersTab() {
             onClick={() => { setSelected(o); setMemo(o.memo ?? ""); }} />
         ))}
 
+        {archived.length > 0 && (
+          <button
+            onClick={() => setShowArchived((v) => !v)}
+            className="mt-4 block text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]"
+          >
+            {showArchived ? "아카이브 숨기기" : `아카이브 ${archived.length}건 숨겨짐 · 보기`}
+          </button>
+        )}
+        {showArchived && archived.map((o) => (
+          <OrderCard key={o.id} order={o} selected={selected?.id === o.id}
+            onClick={() => { setSelected(o); setMemo(o.memo ?? ""); }} />
+        ))}
+
         {orders.length === 0 && (
           <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
             접수된 발주가 없습니다.
@@ -263,12 +280,18 @@ function OrdersTab() {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {selected.completedAt && (
+                <span className="rounded-full bg-[#1d1d1f] px-2.5 py-0.5 text-xs font-medium text-white">완료 · 아카이브</span>
+              )}
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[selected.status]}`}>
                 {PURCHASE_ORDER_STATUS_LABEL[selected.status]}
               </span>
-              <button onClick={() => setDeleteConfirmOpen(true)} className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500" title="삭제">
-                <Trash2 size={15} />
-              </button>
+              {/* 완료 처리된 발주는 기록 보존 차원에서 삭제도 막는다. */}
+              {!selected.completedAt && (
+                <button onClick={() => setDeleteConfirmOpen(true)} className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-red-50 hover:text-red-500" title="삭제">
+                  <Trash2 size={15} />
+                </button>
+              )}
               <button onClick={() => { setSelected(null); setMemo(""); }} className="rounded-full p-1.5 text-[#d1d1d6] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]" title="닫기">
                 <X size={15} />
               </button>
@@ -326,15 +349,16 @@ function OrdersTab() {
               onChange={(e) => setMemo(e.target.value)}
               onBlur={handleMemoSave}
               rows={2}
+              disabled={!!selected.completedAt}
               placeholder="담당자 메모 (고객에게 노출되지 않음)"
-              className="w-full resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+              className="w-full resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] disabled:bg-[#f5f5f7] disabled:text-[#86868b]"
             />
           </div>
 
           {selected.status !== "cancelled" && (
             <button
               onClick={() => handleStatus("confirmed")}
-              disabled={saving || selected.status !== "received"}
+              disabled={saving || selected.status !== "received" || !!selected.completedAt}
               className={`flex w-full items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-medium transition disabled:opacity-100 ${
                 selected.status === "received"
                   ? "bg-black text-white hover:bg-[#1d1d1f]"
@@ -642,6 +666,9 @@ function OrderCard({ order, selected, onClick }: { order: PurchaseOrder; selecte
           {order.cancelRequested && order.status !== "cancelled" && (
             <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-500">취소요청</span>
           )}
+          {order.completedAt && (
+            <span className="rounded-full bg-[#1d1d1f] px-2 py-0.5 text-xs font-medium text-white">완료</span>
+          )}
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[order.status]}`}>
             {PURCHASE_ORDER_STATUS_LABEL[order.status]}
           </span>
@@ -681,6 +708,7 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
   const defaultBankInfo = orderIsHk ? DEFAULT_BANK_INFO_USD : DEFAULT_BANK_INFO;
   const [note, setNote] = useState(order.payment?.note || defaultBankInfo);
   const [saving, setSaving] = useState(false);
+  const locked = !!order.completedAt;
 
   const rowsTotal = rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
@@ -887,9 +915,11 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
     <div className="space-y-2.5 rounded-2xl border border-[#e5e5e5] p-4">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-[#86868b]">결제 정보</p>
-        <button onClick={startEdit} className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]">
-          수정
-        </button>
+        {!locked && (
+          <button onClick={startEdit} className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f]">
+            수정
+          </button>
+        )}
       </div>
 
       {payment.installments.map((it, i) => {
@@ -902,14 +932,18 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
               {vat > 0 && <span className="ml-1 text-xs text-[#86868b]">(VAT 별도 {vat.toLocaleString()}원, 합계 {(it.amount + vat).toLocaleString()}원)</span>}
             </span>
             {it.paid ? (
-              <button
-                onClick={() => handleUnmarkPaid(i)}
-                disabled={saving}
-                title="잘못 눌렀다면 다시 눌러 취소"
-                className="shrink-0 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
-              >
-                입금확인
-              </button>
+              locked ? (
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600">입금확인</span>
+              ) : (
+                <button
+                  onClick={() => handleUnmarkPaid(i)}
+                  disabled={saving}
+                  title="잘못 눌렀다면 다시 눌러 취소"
+                  className="shrink-0 whitespace-nowrap rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600 transition hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+                >
+                  입금확인
+                </button>
+              )
             ) : (
               <button
                 onClick={() => handleMarkPaid(i)}
@@ -926,13 +960,16 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
                 <Link href={`/orders/${order.id}/invoice/${i}`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
                   {it.paid ? "영수증 PDF" : "청구서 PDF"}
                 </Link>
-                <button
-                  onClick={() => handleUnissue(i)}
-                  disabled={saving}
-                  className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-red-500 disabled:opacity-50"
-                >
-                  발행취소
-                </button>
+                {/* 완료 처리된 발주는 발행취소를 막는다 — 요청의 핵심 조건. */}
+                {!locked && (
+                  <button
+                    onClick={() => handleUnissue(i)}
+                    disabled={saving}
+                    className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-red-500 disabled:opacity-50"
+                  >
+                    발행취소
+                  </button>
+                )}
               </>
             ) : (
               <button
@@ -1105,6 +1142,15 @@ function LinkedTaskPicker({ order }: { order: PurchaseOrder }) {
             취소
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (order.completedAt) {
+    return (
+      <div className="flex w-full items-center justify-between rounded-2xl border border-[#e5e5e5] bg-[#f5f5f7] px-4 py-3 text-xs font-medium text-[#86868b]">
+        <span>연결 업무 (계약금 확인 시 자동 착수 처리)</span>
+        <span className="font-semibold text-[#1d1d1f]">{order.linkedTaskName ?? "설정 안 함"}</span>
       </div>
     );
   }

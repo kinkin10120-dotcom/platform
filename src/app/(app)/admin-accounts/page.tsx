@@ -1,10 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, Trash2, KeyRound, ShieldCheck } from "lucide-react";
+import { Plus, Trash2, KeyRound, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenAdmins } from "@/lib/firestore/users";
-import { createAdminAccount, deleteClientAccount, sendPasswordResetEmail } from "@/lib/functions";
+import { createAdminAccount, deleteClientAccount, sendPasswordResetEmail, cleanupSharedPushTokens } from "@/lib/functions";
 import { AppUser } from "@/lib/types";
 
 // 관리자 계정 관리 — 최초 관리자는 Firebase 콘솔에서 수동으로 만들었지만, 그 뒤로 추가하는
@@ -23,6 +23,24 @@ export default function AdminAccountsPage() {
   const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null);
   const [deleteInput, setDeleteInput] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ checkedUsers: number; sharedTokens: number; affectedUsers: number } | null>(null);
+  const [cleanupError, setCleanupError] = useState("");
+
+  async function handleCleanupPushTokens() {
+    setCleaning(true);
+    setCleanupError("");
+    setCleanupResult(null);
+    try {
+      const res = await cleanupSharedPushTokens();
+      setCleanupResult(res);
+    } catch (err: any) {
+      setCleanupError(err?.message ?? "점검 중 오류가 발생했습니다.");
+    } finally {
+      setCleaning(false);
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -86,6 +104,31 @@ export default function AdminAccountsPage() {
         >
           <Plus size={16} /> 관리자 계정 추가
         </button>
+      </div>
+
+      <div className="space-y-2 rounded-3xl bg-white p-5">
+        <div className="flex items-start gap-2.5">
+          <ShieldAlert size={16} className="mt-0.5 shrink-0 text-amber-500" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-[#1d1d1f]">공유된 기기 푸시 토큰 정리</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-[#86868b]">
+              같은 브라우저에서 로그아웃 없이(또는 이 점검 로직이 생기기 전에) 다른 계정으로 전환하면, 그 기기의 푸시 토큰이 두 계정에 동시에 남아 다른 계정에게 갈 알림이 이 기기로도 함께 오는 문제가 있었습니다. 지금 한 번 실행하면 그렇게 두 계정 이상에 걸쳐 남아있는 토큰을 찾아 전부 제거합니다(해당 계정은 다음에 알림을 다시 켜면 새로 등록됩니다).
+            </p>
+            <button
+              onClick={handleCleanupPushTokens}
+              disabled={cleaning}
+              className="mt-3 rounded-full border border-[#d1d1d6] px-4 py-1.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+            >
+              {cleaning ? "점검 중..." : "지금 점검 및 정리"}
+            </button>
+            {cleanupError && <p className="mt-2 text-xs text-red-500">{cleanupError}</p>}
+            {cleanupResult && (
+              <p className="mt-2 text-xs text-green-600">
+                전체 {cleanupResult.checkedUsers}개 계정 확인 · 공유된 토큰 {cleanupResult.sharedTokens}개 · 영향받은 계정 {cleanupResult.affectedUsers}개 정리 완료
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {showForm && (

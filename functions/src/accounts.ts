@@ -239,6 +239,49 @@ export const deleteClientAccount = onCall({ invoker: "public" }, async (request)
   return { ok: true, uid: targetUid };
 });
 
+/* ------------------------------------------------------------------ */
+/* 공유된 기기 푸시 토큰 정리 (관리자 전용, 1회성 점검 도구)                 */
+/*    - FCM 토큰은 로그인 계정이 아니라 "브라우저/기기"에 묶인다. 로그아웃을  */
+/*      거치지 않고(또는 이 수정 이전 버전에서) 같은 기기로 다른 계정에       */
+/*      로그인하면, 같은 토큰 값이 두 계정의 fcmTokens에 동시에 남을 수       */
+/*      있다 — 그 상태면 한 계정에게 가는 푸시 알림이 다른 계정이 로그인한     */
+/*      기기로도 그대로 전달된다. users 전체를 훑어 두 계정 이상에 걸쳐       */
+/*      등록된 토큰을 찾아 전부 제거한다(해당 계정들은 다음에 알림을 다시      */
+/*      켜면 새로 등록된다).                                               */
+/* ------------------------------------------------------------------ */
+export const cleanupSharedPushTokens = onCall({ invoker: "public" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "관리자만 사용할 수 있습니다.");
+  }
+
+  const usersSnap = await db.collection("users").get();
+  const tokenOwners = new Map<string, string[]>();
+  for (const doc of usersSnap.docs) {
+    const tokens = (doc.data().fcmTokens as string[] | undefined) ?? [];
+    for (const t of tokens) {
+      tokenOwners.set(t, [...(tokenOwners.get(t) ?? []), doc.id]);
+    }
+  }
+
+  const sharedTokens = Array.from(tokenOwners.entries()).filter(([, owners]) => owners.length > 1);
+  const affectedUids = new Set<string>();
+  for (const [, owners] of sharedTokens) owners.forEach((u) => affectedUids.add(u));
+
+  await Promise.all(
+    Array.from(affectedUids).map(async (uid) => {
+      const doc = usersSnap.docs.find((d) => d.id === uid)!;
+      const tokens = (doc.data().fcmTokens as string[] | undefined) ?? [];
+      const sharedSet = new Set(sharedTokens.map(([t]) => t));
+      const cleaned = tokens.filter((t) => !sharedSet.has(t));
+      await doc.ref.update({ fcmTokens: cleaned });
+    })
+  );
+
+  return { checkedUsers: usersSnap.size, sharedTokens: sharedTokens.length, affectedUsers: affectedUids.size };
+});
+
 async function sendAccountEmail(email: string, name: string, kind: "created" | "reset", company?: string) {
   const resetLink = await auth.generatePasswordResetLink(email, {
     url: "https://handyhand.co.kr/login",

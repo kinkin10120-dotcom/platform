@@ -80,6 +80,17 @@ export async function deleteClientAccount(uid: string) {
   return res.data;
 }
 
+// 같은 기기(브라우저)가 로그아웃 없이 또는 이 정리 로직 추가 이전에 다른 계정으로 전환되며
+// 푸시 토큰이 두 계정에 동시에 남은 경우를 찾아 정리한다 — 1회성 점검 도구.
+export async function cleanupSharedPushTokens() {
+  const fn = httpsCallable<Record<string, never>, { checkedUsers: number; sharedTokens: number; affectedUsers: number }>(
+    functions,
+    "cleanupSharedPushTokens"
+  );
+  const res = await fn({});
+  return res.data;
+}
+
 // ---- 계약 전자서명 (로그인 없이 호출 — 상대방은 계정이 없는 상태) ----
 
 export interface ContractSigningAttachment {

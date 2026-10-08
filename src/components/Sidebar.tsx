@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { useState, useRef, useEffect } from "react";
@@ -42,6 +42,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/contracts", label: "계약 관리", icon: FileSignature, show: isAdmin },
     { href: "/schedule-report", label: "일정 변경 리포트", icon: TrendingUp, show: isAdmin },
     { href: "/templates", label: "업무 템플릿", icon: ListChecks, show: isAdmin },
+    { href: "/admin-accounts", label: "관리자 계정", icon: ShieldCheck, show: isAdmin },
     { href: "/my-orders", label: "발주하기", icon: ShoppingCart, show: isClient },
     { href: "/my-contracts", label: "계약", icon: FileSignature, show: isClient },
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },

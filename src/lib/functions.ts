@@ -45,6 +45,17 @@ export async function createPartnerAccount(input: CreatePartnerAccountInput) {
   return res.data;
 }
 
+export interface CreateAdminAccountInput {
+  email: string;
+  name: string;
+}
+
+export async function createAdminAccount(input: CreateAdminAccountInput) {
+  const fn = httpsCallable<CreateAdminAccountInput, { uid: string }>(functions, "createAdminAccount");
+  const res = await fn(input);
+  return res.data;
+}
+
 export async function updatePartnerProjects(uid: string, projectIds: string[], partnerLang: "ko" | "zh") {
   const fn = httpsCallable<{ uid: string; projectIds: string[]; partnerLang: "ko" | "zh" }, { ok: boolean }>(
     functions,

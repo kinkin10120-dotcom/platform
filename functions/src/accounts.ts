@@ -120,6 +120,50 @@ export const createPartnerAccount = onCall({ invoker: "public", secrets: [intern
 });
 
 /* ------------------------------------------------------------------ */
+/* 1-0-0-1) 관리자 계정 생성 (관리자 전용 callable)                        */
+/*    - 최초 관리자(형준님)는 Firebase 콘솔에서 수동으로 만들었지만, 그 뒤로   */
+/*      추가하는 관리자는 콘솔에서 Auth 계정과 Firestore 문서를 따로 만드는   */
+/*      게 번거롭고 실수하기 쉬워서(문서 ID가 UID와 안 맞는 등) 이 함수로     */
+/*      한 번에 처리한다.                                                */
+/* ------------------------------------------------------------------ */
+export const createAdminAccount = onCall({ invoker: "public", secrets: [internalNotifySecret] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "관리자만 계정을 생성할 수 있습니다.");
+  }
+
+  const { email, name } = request.data as { email?: string; name?: string };
+  if (!email || !name) {
+    throw new HttpsError("invalid-argument", "email, name은 필수입니다.");
+  }
+
+  let userRecord;
+  try {
+    userRecord = await auth.createUser({ email, displayName: name });
+  } catch (err: any) {
+    if (err?.code === "auth/email-already-exists") {
+      throw new HttpsError("already-exists", "이미 사용 중인 이메일입니다.");
+    }
+    throw new HttpsError("internal", `계정 생성 중 오류가 발생했습니다: ${err?.message ?? err}`);
+  }
+
+  await db.collection("users").doc(userRecord.uid).set({
+    email,
+    name,
+    role: "admin",
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  await sendAccountEmail(email, name, "created");
+
+  return { uid: userRecord.uid };
+});
+
+/* ------------------------------------------------------------------ */
 /* 1-0-2) 협력사 계정의 프로젝트 접근 범위·UI 언어 수정 (관리자 전용 callable)   */
 /* ------------------------------------------------------------------ */
 export const updatePartnerProjects = onCall({ invoker: "public" }, async (request) => {

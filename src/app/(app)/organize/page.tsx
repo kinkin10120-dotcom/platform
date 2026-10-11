@@ -578,15 +578,18 @@ export default function OrganizePage() {
       if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
 
       if (data.intent === "quote" || data.intent === "invoice") {
-        setAiAssistantDraft({ kind: data.intent, items: data.items ?? [], currency: data.currency, memo: data.memo });
+        // 세션스토리지 한 칸짜리 "보낸 시점에 심어두기" 방식은, 뒤이어 견적/청구 요청을 하나
+        // 더 보내거나 같은 버튼을 두 번 누르면 앞서 만든 내용이 사라져 보이는 문제가 있었다
+        // — 이제 draft를 메시지 자체에 들고 있다가, 버튼을 누르는 "그 순간"에 심어준다.
+        const draft = { items: data.items ?? [], currency: data.currency, memo: data.memo };
         const itemsSummary = (data.items ?? []).map((it) => `${it.name} ${it.quantity}${it.unit ?? "EA"}`).join(", ");
         // 단가·수량을 못 찾아 0으로 남은 품목이 있으면 작성 화면에서 제출 버튼이 "합계 0"
         // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
         const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
         const warning = missingPrice ? zh(isZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
         const draftReplyText = `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}${warning}`;
-        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: data.intent, createdAt: Date.now() }]);
-        await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: data.intent });
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: data.intent, draft, createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: data.intent, draft });
         return;
       }
       if (data.intent === "question") {
@@ -919,7 +922,10 @@ export default function OrganizePage() {
                       key={m.id}
                       message={m}
                       isZh={isZh}
-                      onOpenDraft={(kind) => router.push(kind === "quote" ? "/my-quotes" : "/my-invoices")}
+                      onOpenDraft={(kind, draft) => {
+                        if (draft) setAiAssistantDraft({ kind, items: draft.items, currency: draft.currency, memo: draft.memo });
+                        router.push(kind === "quote" ? "/my-quotes" : "/my-invoices");
+                      }}
                     />
                   ))
                 )}
@@ -1119,7 +1125,7 @@ function ChatBubble({
 }: {
   message: AssistantMessage;
   isZh: boolean;
-  onOpenDraft: (kind: "quote" | "invoice") => void;
+  onOpenDraft: (kind: "quote" | "invoice", draft: AssistantMessage["draft"]) => void;
 }) {
   const isUser = message.role === "user";
   return (
@@ -1147,7 +1153,7 @@ function ChatBubble({
           )}
           {!isUser && (message.intent === "quote" || message.intent === "invoice") && (
             <button
-              onClick={() => onOpenDraft(message.intent as "quote" | "invoice")}
+              onClick={() => onOpenDraft(message.intent as "quote" | "invoice", message.draft)}
               className="mt-1.5 flex items-center gap-1 rounded-full bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black"
             >
               {message.intent === "quote" ? zh(isZh, "견적서 작성 화면 열기") : zh(isZh, "청구서 작성 화면 열기")}

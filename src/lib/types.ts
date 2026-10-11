@@ -947,5 +947,14 @@ export interface AssistantMessage {
   // file_intake일 때만 — 실제 업로드는 이 메시지가 아니라 /organize의 기존 담긴 자료
   // 목록에서 일어나므로, 여기엔 "그 목록 어디에 들어갔는지" 참고용 요약만 남긴다.
   fileIntakeSummary?: { projectName?: string; taskName?: string; confidence?: "high" | "medium" | "low" };
+  // quote/invoice일 때만 — "작성 화면 열기" 버튼을 누른 시점에 이 메시지의 내용 그대로
+  // 작성 페이지에 넘긴다. 보낸 시점에 한 군데(세션스토리지)에만 심어두면, 그 뒤에 또
+  // 견적·청구 요청을 하나 더 보내거나 같은 버튼을 두 번 누르는 순간 앞의 내용이
+  // 사라져 보이는 문제가 있었다 — 메시지마다 내용을 들고 있게 해서 그 문제를 없앤다.
+  draft?: {
+    items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    currency?: "USD" | "CNY" | "KRW" | null;
+    memo?: string;
+  };
   createdAt: number;
 }

@@ -37,6 +37,7 @@ function fromMsgDoc(d: any): AssistantMessage {
     attachmentNames: data.attachmentNames ?? undefined,
     intent: data.intent ?? undefined,
     fileIntakeSummary: data.fileIntakeSummary ?? undefined,
+    draft: data.draft ?? undefined,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
   };
 }
@@ -79,6 +80,11 @@ export interface AddMessageInput {
   attachmentNames?: string[];
   intent?: AssistantIntent;
   fileIntakeSummary?: { projectName?: string; taskName?: string; confidence?: "high" | "medium" | "low" };
+  draft?: {
+    items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    currency?: "USD" | "CNY" | "KRW" | null;
+    memo?: string;
+  };
 }
 
 export async function addMessage(conversationId: string, input: AddMessageInput) {
@@ -92,12 +98,27 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
         ...(input.fileIntakeSummary.confidence ? { confidence: input.fileIntakeSummary.confidence } : {}),
       }
     : undefined;
+  // draft.items의 각 품목도 spec/unit이 개별적으로 비어있을 수 있어 같은 방식으로 정리한다.
+  const draft = input.draft
+    ? {
+        items: input.draft.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          ...(it.spec ? { spec: it.spec } : {}),
+          ...(it.unit ? { unit: it.unit } : {}),
+        })),
+        ...(input.draft.currency ? { currency: input.draft.currency } : {}),
+        ...(input.draft.memo ? { memo: input.draft.memo } : {}),
+      }
+    : undefined;
   await addDoc(collection(db, "assistantConversations", conversationId, "messages"), {
     role: input.role,
     text: input.text,
     ...(input.attachmentNames && input.attachmentNames.length > 0 ? { attachmentNames: input.attachmentNames } : {}),
     ...(input.intent ? { intent: input.intent } : {}),
     ...(fileIntakeSummary && Object.keys(fileIntakeSummary).length > 0 ? { fileIntakeSummary } : {}),
+    ...(draft ? { draft } : {}),
     createdAt: serverTimestamp(),
   });
   await setDoc(doc(db, "assistantConversations", conversationId), { updatedAt: serverTimestamp() }, { merge: true });

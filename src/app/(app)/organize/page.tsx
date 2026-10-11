@@ -312,6 +312,11 @@ export default function OrganizePage() {
   // React 상태 반영이 한 템포 늦어 거의 동시에 두 번 눌리는 경우(엔터+클릭 등) 막지 못해
   // 같은 메시지가 두 번 전송되는 문제가 있었다 — ref로 즉시(동기적으로) 막는다.
   const sendingRef = useRef(false);
+  // 메시지를 막 보낸 직후, Firestore 실시간 리스너가 아직 그 쓰기를 못 따라잡은 "과거 스냅샷"을
+  // 돌려줘서 방금 화면에 올린 메시지가 잠깐 사라지는 걸 막는다(이게 "다른 페이지 갔다 와야
+  // 보인다"처럼 느껴지는 원인이었다) — 보낸 직후 일정 시간 동안은 메시지 수가 줄어드는
+  // 스냅샷을 무시하고, 리스너가 따라잡으면(같거나 많아지면) 그대로 받아들인다.
+  const lastSentAtRef = useRef(0);
   // AI 비서 — 클로드 같은 대화형 인터페이스. 메시지 하나(텍스트 + 선택적 첨부파일)를
   // 보내면 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘 원하는지 AI가 스스로
   // 판단한다(/api/assistant). 자료 정리면 이 페이지의 업로드 큐에 담고, 견적서·청구서면
@@ -353,7 +358,9 @@ export default function OrganizePage() {
       setMessages([]);
       return;
     }
-    return listenMessages(activeConversationId, setMessages);
+    return listenMessages(activeConversationId, (list) => {
+      setMessages((prev) => (list.length < prev.length && Date.now() - lastSentAtRef.current < 8000 ? prev : list));
+    });
   }, [activeConversationId]);
 
   function startNewConversation() {
@@ -499,6 +506,7 @@ export default function OrganizePage() {
     if ((!text && chatAttachments.length === 0) || !appUser) return;
     if (sendingRef.current) return;
     sendingRef.current = true;
+    lastSentAtRef.current = Date.now();
     setAssistantLoading(true);
     setAssistantError("");
     const attachments = chatAttachments;
@@ -510,6 +518,12 @@ export default function OrganizePage() {
         conversationId = await createConversation(appUser.uid, text.slice(0, 40) || (attachments[0]?.name ?? zh(isZh, "새 대화")));
         setActiveConversationId(conversationId);
       }
+      // Firestore 실시간 리스너가 반영되기를 기다리면(특히 막 만든 대화는 리스너가 막
+      // 구독을 맺는 시점과 겹쳐) 화면에 바로 안 뜨고 다른 페이지를 갔다 와야 보이는 것처럼
+      // 보일 수 있다 — 쓰기와 별개로 화면에는 즉시 반영한다(리스너는 나중에 같은 내용으로
+      // 자연스럽게 덮어써서 맞춰진다).
+      const userMsg: AssistantMessage = { id: newId(), role: "user", text, attachmentNames: attachments.map((f) => f.name), createdAt: Date.now() };
+      setMessages((prev) => [...prev, userMsg]);
       await addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) });
 
       const priceHistory = await fetchPriceHistory(appUser.uid);
@@ -570,15 +584,15 @@ export default function OrganizePage() {
         // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
         const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
         const warning = missingPrice ? zh(isZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
-        await addMessage(conversationId, {
-          role: "assistant",
-          text: `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}${warning}`,
-          intent: data.intent,
-        });
+        const draftReplyText = `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}${warning}`;
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: data.intent, createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: data.intent });
         return;
       }
       if (data.intent === "question") {
-        await addMessage(conversationId, { role: "assistant", text: data.answer ?? "", intent: "question" });
+        const answerText = data.answer ?? "";
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: answerText, intent: "question", createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: answerText, intent: "question" });
         return;
       }
       // file_intake (또는 판단 실패 시 기본값)
@@ -599,13 +613,16 @@ export default function OrganizePage() {
       setItems((prev) => [...prev, item]);
       const project = candidates.find((p) => p.projectId === data.projectId);
       const task = project?.tasks.find((t) => t.taskId === data.taskId);
+      const fileIntakeText = project
+        ? `"${project.projectName}"${task ? ` / "${task.taskName}"` : ""}${zh(isZh, "로 분류했어요. 아래 담은 자료 목록에서 확인 후 업로드하세요.")}`
+        : zh(isZh, "맞는 프로젝트/업무를 확실히 찾지 못했어요. 아래 담은 자료 목록에서 직접 골라주세요.");
+      const fileIntakeSummary = { projectName: project?.projectName, taskName: task?.taskName, confidence: data.confidence };
+      setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: fileIntakeText, intent: "file_intake", fileIntakeSummary, createdAt: Date.now() }]);
       await addMessage(conversationId, {
         role: "assistant",
-        text: project
-          ? `"${project.projectName}"${task ? ` / "${task.taskName}"` : ""}${zh(isZh, "로 분류했어요. 아래 담은 자료 목록에서 확인 후 업로드하세요.")}`
-          : zh(isZh, "맞는 프로젝트/업무를 확실히 찾지 못했어요. 아래 담은 자료 목록에서 직접 골라주세요."),
+        text: fileIntakeText,
         intent: "file_intake",
-        fileIntakeSummary: { projectName: project?.projectName, taskName: task?.taskName, confidence: data.confidence },
+        fileIntakeSummary,
       });
     } catch (e) {
       setAssistantError(e instanceof Error ? e.message : zh(isZh, "AI 비서 요청에 실패했습니다."));

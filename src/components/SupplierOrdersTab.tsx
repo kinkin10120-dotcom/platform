@@ -131,6 +131,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
+  const [bulkLinking, setBulkLinking] = useState(false);
+  const [bulkLinkResult, setBulkLinkResult] = useState("");
 
   useEffect(() => listenAllClientProducts(setProducts), []);
   useEffect(() => listenAllClientProductInternals(setInternals), []);
@@ -216,6 +218,39 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], "ko"));
   }, [entries]);
+
+  // 발주처명(자유 텍스트)과 이름이 정확히 같은 협력사 계정이 있는 품목을 한 번에 연동한다 —
+  // 이미 연동돼 있거나 이름이 안 맞는 건 건드리지 않고 그대로 둔다(수동으로 골라야 한다).
+  async function handleBulkLinkPartners() {
+    setBulkLinking(true);
+    setBulkLinkResult("");
+    let linked = 0;
+    try {
+      for (const e of entries) {
+        if (e.partnerId) continue;
+        const name = e.supplierName.trim().toLowerCase();
+        if (!name || e.supplierName === NO_SUPPLIER) continue;
+        const match = partners.find((p) => p.name.trim().toLowerCase() === name);
+        if (!match) continue;
+        if (e.kind === "client") {
+          // eslint-disable-next-line no-await-in-loop
+          await setClientProductInternal(e.id, e.clientId!, {
+            partnerId: match.uid,
+            partnerName: match.name,
+            productName: e.name,
+            productUnit: e.unit,
+          });
+        } else {
+          // eslint-disable-next-line no-await-in-loop
+          await updateSupplierProduct(e.id, { partnerId: match.uid, partnerName: match.name });
+        }
+        linked++;
+      }
+      setBulkLinkResult(linked > 0 ? `${linked}개 품목을 자동으로 연동했습니다.` : "이름이 일치하는 협력사 계정을 찾지 못했습니다.");
+    } finally {
+      setBulkLinking(false);
+    }
+  }
 
   const clientNameOptions = useMemo(
     () => Array.from(new Set([...clients.map((c) => c.name), ...supplierProducts.map((p) => p.clientName).filter((n): n is string => !!n)])).sort((a, b) => a.localeCompare(b, "ko")),
@@ -329,6 +364,17 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             <Plus size={14} /> 새 품목 등록
           </button>
         </div>
+
+        {/* 발주처명은 자유 텍스트라 협력사 계정과 자동으로 안 이어진다 — 이름이 정확히 같은
+            협력사 계정이 있으면 한 번에 찾아서 연동해준다(없는 것만 수동으로 고르면 된다). */}
+        <button
+          onClick={handleBulkLinkPartners}
+          disabled={bulkLinking}
+          className="w-full text-center text-xs font-medium text-[#86868b] underline underline-offset-4 transition hover:text-[#1d1d1f] disabled:opacity-50"
+        >
+          {bulkLinking ? "연동하는 중..." : "발주처명으로 협력사 계정 자동 연동"}
+        </button>
+        {bulkLinkResult && <p className="text-center text-xs text-[#86868b]">{bulkLinkResult}</p>}
 
         {/* 고객에게도 파는 제품은 이미 제품 카탈로그에 있으므로, 새로 만들지 않고 거기에 매입
             정보만 채운다 — 같은 물건을 두 군데 만들면 단가가 갈라진다. */}
@@ -763,6 +809,15 @@ function PurchaseInfoEditor({
   // 이 품목을 실제로 공급하는 협력사 계정 — 연동해두면 그 계정이 "내 제품 단가" 화면에서
   // 자기 매입 단가를 직접 조회할 수 있다(발주서 작성 화면의 협력사 계정 연동과 같은 방식).
   const [partnerId, setPartnerId] = useState(entry?.partnerId ?? "");
+  // 발주처명과 이름이 정확히 같은 협력사 계정이 있으면 자동으로 연동해준다 — 아직 연동
+  // 안 된 상태에서만 채우고, 이미 골라둔(또는 저장된) 값은 덮어쓰지 않는다.
+  useEffect(() => {
+    if (partnerId) return;
+    const name = supplierName.trim().toLowerCase();
+    if (!name) return;
+    const match = partners.find((p) => p.name.trim().toLowerCase() === name);
+    if (match) setPartnerId(match.uid);
+  }, [supplierName, partners, partnerId]);
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);

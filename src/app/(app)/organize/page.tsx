@@ -39,7 +39,7 @@ import {
 } from "@/lib/firestore/partnerArchive";
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
-import { listenConversations, listenMessages, createConversation, addMessage } from "@/lib/firestore/assistantChat";
+import { listenConversations, listenMessages, createConversation, addMessage, deleteConversation } from "@/lib/firestore/assistantChat";
 import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
@@ -290,6 +290,10 @@ export default function OrganizePage() {
   const [splittingBriefing, setSplittingBriefing] = useState(false);
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // 일부 브라우저(특히 사파리)는 한글·중문 IME 조합을 끝내는 Enter 키 자체에서
+  // e.nativeEvent.isComposing이 이미 false로 바뀌어 있어, 그것만으로는 못 거른다 —
+  // compositionstart/end로 직접 조합 상태를 추적해 이중으로 막는다.
+  const composingRef = useRef(false);
   // AI 비서 — 클로드 같은 대화형 인터페이스. 메시지 하나(텍스트 + 선택적 첨부파일)를
   // 보내면 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘 원하는지 AI가 스스로
   // 판단한다(/api/assistant). 자료 정리면 이 페이지의 업로드 큐에 담고, 견적서·청구서면
@@ -339,6 +343,12 @@ export default function OrganizePage() {
     setMessages([]);
     setAssistantError("");
     setSidebarOpen(false);
+  }
+
+  async function handleDeleteConversation(c: AssistantConversation) {
+    if (!confirm(zh(isZh, `"${c.title || "대화"}" 대화 기록을 삭제할까요?`))) return;
+    if (c.id === activeConversationId) startNewConversation();
+    await deleteConversation(c.id);
   }
 
   useEffect(() => {
@@ -792,15 +802,28 @@ export default function OrganizePage() {
               <p className="px-2 py-3 text-xs text-[#86868b]">{zh(isZh, "대화 기록이 없습니다.")}</p>
             )}
             {conversations.map((c) => (
-              <button
+              <div
                 key={c.id}
-                onClick={() => { setActiveConversationId(c.id); setSidebarOpen(false); }}
-                className={`block w-full truncate rounded-xl px-3 py-2 text-left text-sm transition ${
-                  c.id === activeConversationId ? "bg-[#f5f5f7] font-medium text-[#1d1d1f]" : "text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                className={`group flex items-center gap-1 rounded-xl pr-1 transition ${
+                  c.id === activeConversationId ? "bg-[#f5f5f7]" : "hover:bg-[#f5f5f7]"
                 }`}
               >
-                {c.title || zh(isZh, "대화")}
-              </button>
+                <button
+                  onClick={() => { setActiveConversationId(c.id); setSidebarOpen(false); }}
+                  className={`min-w-0 flex-1 truncate px-3 py-2 text-left text-sm ${
+                    c.id === activeConversationId ? "font-medium text-[#1d1d1f]" : "text-[#86868b] group-hover:text-[#1d1d1f]"
+                  }`}
+                >
+                  {c.title || zh(isZh, "대화")}
+                </button>
+                <button
+                  onClick={() => handleDeleteConversation(c)}
+                  title={zh(isZh, "이 대화 삭제")}
+                  className="shrink-0 rounded-full p-1.5 text-[#d1d1d6] opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -895,7 +918,15 @@ export default function OrganizePage() {
                   <textarea
                     value={draftText}
                     onChange={(e) => setDraftText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
+                    onCompositionStart={() => { composingRef.current = true; }}
+                    onCompositionEnd={() => { composingRef.current = false; }}
+                    // 한글·중문은 IME로 글자를 조합하는 도중에도 Enter 키 이벤트가 발생한다
+                    // (글자 하나를 확정 짓는 Enter) — isComposing 체크 없이 Enter=전송으로
+                    // 처리하면 그 확정 시점마다 그때까지 조합된 일부 글자만 끊어서 메시지가
+                    // 여러 개로 쪼개져 전송된다("자", "줘"처럼 한 글자씩 따로 남는 원인).
+                    // 사파리는 조합을 끝내는 그 Enter 키 자체에서 nativeEvent.isComposing이
+                    // 이미 false라 그것만으론 못 거르므로, compositionend 추적을 더한다.
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) { e.preventDefault(); handleSendChat(); } }}
                     rows={1}
                     placeholder={zh(isZh, "무엇이든 물어보세요... (이미지 Ctrl+V 붙여넣기 가능, Shift+Enter로 줄바꿈)")}
                     className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"

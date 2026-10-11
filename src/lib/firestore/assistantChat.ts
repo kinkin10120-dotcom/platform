@@ -1,7 +1,9 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -89,4 +91,12 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
     createdAt: serverTimestamp(),
   });
   await setDoc(doc(db, "assistantConversations", conversationId), { updatedAt: serverTimestamp() }, { merge: true });
+}
+
+// Firestore는 상위 문서를 지워도 서브컬렉션(messages)이 자동으로 안 지워지므로, 대화를
+// 지울 때는 메시지들을 먼저 하나씩 지운 뒤 대화 문서 자체를 지운다.
+export async function deleteConversation(conversationId: string) {
+  const msgsSnap = await getDocs(collection(db, "assistantConversations", conversationId, "messages"));
+  await Promise.all(msgsSnap.docs.map((d) => deleteDoc(d.ref)));
+  await deleteDoc(doc(db, "assistantConversations", conversationId));
 }

@@ -425,7 +425,9 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read, write: if isAdmin();
-        allow get, list, create: if isSignedIn() && myProfile().role == 'partner'
+        // delete는 대화 자체를 지울 때 메시지 서브컬렉션을 함께 정리하기 위함이다(Firestore는
+        // 상위 문서를 지워도 서브컬렉션을 자동으로 비우지 않는다).
+        allow get, list, create, delete: if isSignedIn() && myProfile().role == 'partner'
           && get(/databases/$(database)/documents/assistantConversations/$(conversationId)).data.partnerId == request.auth.uid;
       }
     }

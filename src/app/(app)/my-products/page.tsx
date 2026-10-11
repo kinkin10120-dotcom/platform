@@ -151,17 +151,21 @@ export default function MyProductsPage() {
                         </div>
                       </div>
                       {namedParts.length > 0 && (
-                        <div className="mt-2.5 space-y-1 rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
-                          <p className="text-[11px] font-semibold text-[#86868b]">{zh(isZh, "부품별 단가")}</p>
-                          {namedParts.map((p, i) => (
-                            <div key={i} className="flex items-center justify-between gap-2 text-xs text-[#1d1d1f]">
-                              <span className="min-w-0 truncate">{p.name}{p.nameEn ? ` · ${p.nameEn}` : ""}</span>
-                              <span className="shrink-0 text-[#86868b]">
-                                {formatSupplierMoney(p.unitPrice, r.purchaseCurrency)} × {p.quantity}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        <details className="mt-2.5 rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
+                          <summary className="cursor-pointer text-[11px] font-semibold text-[#86868b]">
+                            {zh(isZh, "부품별 단가")} ({namedParts.length})
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            {namedParts.map((p, i) => (
+                              <div key={i} className="flex items-start justify-between gap-3 text-xs text-[#1d1d1f]">
+                                <span className="min-w-0 flex-1 break-words">{p.name}{p.nameEn ? ` · ${p.nameEn}` : ""}</span>
+                                <span className="shrink-0 whitespace-nowrap text-[#86868b]">
+                                  {formatSupplierMoney(p.unitPrice, r.purchaseCurrency)} × {p.quantity}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
                       )}
                     </div>
                   );

@@ -220,14 +220,29 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
   }, [entries]);
 
   // 발주처명(자유 텍스트)과 이름이 정확히 같은 협력사 계정이 있는 품목을 한 번에 연동한다 —
-  // 이미 연동돼 있거나 이름이 안 맞는 건 건드리지 않고 그대로 둔다(수동으로 골라야 한다).
+  // 이름이 안 맞는 건 건드리지 않고 그대로 둔다(수동으로 골라야 한다). 이미 연동된 고객 제품
+  // 품목도 사진(productImageUrl)이 이 필드가 생기기 전에 연동됐으면 비어있을 수 있어 같이
+  // 다시 채워준다(협력사 화면에 사진이 안 보이던 원인).
   async function handleBulkLinkPartners() {
     setBulkLinking(true);
     setBulkLinkResult("");
     let linked = 0;
+    let resynced = 0;
     try {
       for (const e of entries) {
-        if (e.partnerId) continue;
+        if (e.partnerId) {
+          // 이미 연동된 고객 제품 품목 — 품명·단위·사진이 최신인지 다시 맞춰준다.
+          if (e.kind === "client") {
+            // eslint-disable-next-line no-await-in-loop
+            await setClientProductInternal(e.id, e.clientId!, {
+              productName: e.name,
+              productUnit: e.unit,
+              productImageUrl: e.imageUrl,
+            });
+            resynced++;
+          }
+          continue;
+        }
         const name = e.supplierName.trim().toLowerCase();
         if (!name || e.supplierName === NO_SUPPLIER) continue;
         const match = partners.find((p) => p.name.trim().toLowerCase() === name);
@@ -239,6 +254,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
             partnerName: match.name,
             productName: e.name,
             productUnit: e.unit,
+            productImageUrl: e.imageUrl,
           });
         } else {
           // eslint-disable-next-line no-await-in-loop
@@ -246,7 +262,11 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         }
         linked++;
       }
-      setBulkLinkResult(linked > 0 ? `${linked}개 품목을 자동으로 연동했습니다.` : "이름이 일치하는 협력사 계정을 찾지 못했습니다.");
+      setBulkLinkResult(
+        linked > 0 || resynced > 0
+          ? `${linked}개 새로 연동, ${resynced}개 사진·품명 갱신했습니다.`
+          : "이름이 일치하는 협력사 계정을 찾지 못했습니다."
+      );
     } finally {
       setBulkLinking(false);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   collection,
   documentId,
@@ -19,12 +20,14 @@ import {
   Mic,
   Paperclip,
   Scissors,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import { setAiAssistantDraft } from "@/lib/aiAssistantHandoff";
 import {
   uploadPartnerArchiveFile,
   addPartnerArchiveComment,
@@ -61,6 +64,50 @@ interface ProjectCandidate {
   projectNameZh?: string;
   clientName: string;
   tasks: TaskCandidate[];
+}
+
+interface PriceHistoryEntry {
+  name: string;
+  spec?: string;
+  unit?: string;
+  unitPrice: number;
+  currency: string;
+  quantity?: number;
+  source: "견적서" | "발주서";
+  date: string;
+}
+
+// AI 비서가 "견적서/청구서 작성"이나 "가격 질문"을 판단할 때 참고할, 이 협력사 본인의
+// 과거 견적서·발주서 품목 단가를 모은다. 실시간 구독까지는 필요 없어(비서를 부를 때만
+// 한 번 쓰는 참고 자료) getDocs로 한 번만 읽는다.
+async function fetchPriceHistory(partnerId: string): Promise<PriceHistoryEntry[]> {
+  const toDateStr = (v: unknown): string => {
+    const ts = v as { toDate?: () => Date } | undefined;
+    return ts?.toDate ? ts.toDate().toISOString().slice(0, 10) : "";
+  };
+  const [quoteSnap, orderSnap] = await Promise.all([
+    getDocs(query(collection(db, "supplierQuotes"), where("partnerId", "==", partnerId))),
+    getDocs(query(collection(db, "supplierOrders"), where("partnerId", "==", partnerId))),
+  ]);
+  const out: PriceHistoryEntry[] = [];
+  quoteSnap.docs.forEach((d) => {
+    const data = d.data();
+    const date = toDateStr(data.submittedAt);
+    (data.items ?? []).forEach((it: { nameKo?: string; name: string; spec?: string; unit?: string; unitPrice: number; quantity?: number }) => {
+      if (!it.unitPrice) return;
+      out.push({ name: it.nameKo || it.name, spec: it.spec, unit: it.unit, unitPrice: it.unitPrice, currency: data.currency, quantity: it.quantity, source: "견적서", date });
+    });
+  });
+  orderSnap.docs.forEach((d) => {
+    const data = d.data();
+    const date = toDateStr(data.createdAt);
+    (data.items ?? []).forEach((it: { name: string; spec?: string; unit?: string; unitPrice: number; quantity?: number }) => {
+      if (!it.unitPrice) return;
+      out.push({ name: it.name, spec: it.spec, unit: it.unit, unitPrice: it.unitPrice, currency: data.currency, quantity: it.quantity, source: "발주서", date });
+    });
+  });
+  out.sort((a, b) => b.date.localeCompare(a.date));
+  return out.slice(0, 200);
 }
 
 interface IntakeItem {
@@ -223,6 +270,7 @@ export default function OrganizePage() {
   const { appUser } = useAuth();
   const isZh = usePartnerZh();
   const actorName = appUser?.name ?? "협력사";
+  const router = useRouter();
 
   const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(true);
@@ -238,6 +286,13 @@ export default function OrganizePage() {
   const [splittingBriefing, setSplittingBriefing] = useState(false);
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // AI 비서 — 텍스트 하나로 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘
+  // 원하는지 AI가 스스로 판단한다(/api/assistant). 자료 정리면 바로 이 페이지의 업로드
+  // 큐에 담고, 견적서·청구서면 각자의 작성 페이지로 내용을 채운 채 넘겨주고, 질문이면
+  // 바로 이 자리에서 답한다.
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
+  const [assistantAnswer, setAssistantAnswer] = useState("");
 
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -378,6 +433,76 @@ export default function OrganizePage() {
       setGlobalError(e instanceof Error ? e.message : zh(isZh, "나누기에 실패했습니다."));
     } finally {
       setSplittingBriefing(false);
+    }
+  }
+
+  // 입력창 텍스트 하나를 AI 비서(/api/assistant)에게 보낸다 — 의도를 스스로 판단해서
+  // 자료 정리/견적서/청구서/질문 중 맞는 결과만 돌려준다. 결과에 따라 이 페이지
+  // 업로드 큐에 바로 담거나, 작성 페이지로 넘기거나, 바로 이 자리에 답을 보여준다.
+  async function handleAiAssistant() {
+    if (!draftText.trim() || !appUser) return;
+    setAssistantLoading(true);
+    setGlobalError("");
+    setAssistantError("");
+    setAssistantAnswer("");
+    try {
+      const priceHistory = await fetchPriceHistory(appUser.uid);
+      const res = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: draftText.trim(), candidates, priceHistory, lang: appUser.partnerLang ?? "ko" }),
+      });
+      const raw = await res.text();
+      let data: {
+        error?: string;
+        intent?: "file_intake" | "quote" | "invoice" | "question";
+        projectId?: string | null;
+        taskId?: string | null;
+        confidence?: "high" | "medium" | "low";
+        comment?: string;
+        items?: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+        currency?: "USD" | "CNY" | "KRW" | null;
+        memo?: string;
+        answer?: string;
+      };
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
+      }
+      if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
+
+      if (data.intent === "quote" || data.intent === "invoice") {
+        setAiAssistantDraft({ kind: data.intent, items: data.items ?? [], currency: data.currency, memo: data.memo });
+        setDraftText("");
+        router.push(data.intent === "quote" ? "/my-quotes" : "/my-invoices");
+        return;
+      }
+      if (data.intent === "question") {
+        setAssistantAnswer(data.answer ?? "");
+        return;
+      }
+      // file_intake (또는 판단 실패 시 기본값)
+      const item: IntakeItem = {
+        id: newId(),
+        file: null,
+        text: draftText.trim(),
+        previewUrl: null,
+        status: "ready",
+        selectedProjectId: data.projectId ?? "",
+        selectedTaskId: data.taskId ?? "",
+        commentText: data.comment ?? "",
+        confidence: data.confidence,
+        errorMessage: "",
+        uploadProgress: 0,
+        groupId: null,
+      };
+      setItems((prev) => [...prev, item]);
+      setDraftText("");
+    } catch (e) {
+      setAssistantError(e instanceof Error ? e.message : zh(isZh, "AI 비서 요청에 실패했습니다."));
+    } finally {
+      setAssistantLoading(false);
     }
   }
 
@@ -585,7 +710,7 @@ export default function OrganizePage() {
           {zh(isZh, "정리 도구")}
         </h1>
         <p className="mt-1 pl-4 text-sm text-[#86868b]">
-          {zh(isZh, "텍스트·사진을 올리면 AI가 맞는 프로젝트·업무를 찾아 자료함에 정리해드립니다.")}
+          {zh(isZh, "텍스트·사진을 올리면 AI가 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
         </p>
       </div>
 
@@ -645,6 +770,23 @@ export default function OrganizePage() {
                         {recording ? (<><span className="h-2 w-2 rounded-full bg-red-500" />{zh(isZh, "듣는 중... (탭하여 종료)")}</>) : (<><Mic size={14} />{zh(isZh, "음성으로 입력")}</>)}
                       </button>
                     </div>
+                    {draftText.trim() && (
+                      <button
+                        onClick={handleAiAssistant}
+                        disabled={assistantLoading || loadingCandidates}
+                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full bg-[#1d1d1f] py-2 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                      >
+                        <Sparkles size={14} />
+                        {assistantLoading ? zh(isZh, "AI 비서가 처리하는 중...") : zh(isZh, "AI 비서에게 요청 — 자료 정리 / 견적서 / 청구서 / 가격 질문")}
+                      </button>
+                    )}
+                    {assistantError && <p className="mt-1.5 text-xs text-red-500">{assistantError}</p>}
+                    {assistantAnswer && (
+                      <div className="mt-2 flex items-start gap-2 rounded-xl bg-[#f0f7ff] px-3 py-2.5 text-sm text-[#1d1d1f]">
+                        <Sparkles size={14} className="mt-0.5 shrink-0 text-[#4a7fd6]" />
+                        <p className="whitespace-pre-wrap leading-relaxed">{assistantAnswer}</p>
+                      </div>
+                    )}
                     {draftText.trim() && (
                       <button
                         onClick={handleSplitBriefing}

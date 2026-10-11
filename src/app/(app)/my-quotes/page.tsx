@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth-context";
 import { listenSupplierQuotesByPartner, createSupplierQuote, updateSupplierQuote, deleteSupplierQuote } from "@/lib/firestore/supplierQuotes";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import { parseLineItems } from "@/lib/aiLineItems";
+import { takeAiAssistantDraft } from "@/lib/aiAssistantHandoff";
 import {
   SupplierQuote,
   SupplierQuoteItem,
@@ -103,6 +104,28 @@ export default function MyQuotesPage() {
       }
     );
   }, [appUser, isPartner]);
+
+  // /organize의 AI 비서가 "견적서 작성"으로 판단한 결과를 여기로 넘겨받는다 — 받는 즉시
+  // 작성 폼을 그 내용으로 채워서 열어준다(실제 제출은 사람이 확인하고 직접 눌러야 한다).
+  useEffect(() => {
+    if (!isPartner) return;
+    const draft = takeAiAssistantDraft("quote");
+    if (!draft) return;
+    setEditingId(null);
+    if (draft.currency) setCurrencyChoice(draft.currency);
+    setOrderKind("production");
+    setLinkedProjectId("");
+    setItems(
+      draft.items.length > 0
+        ? draft.items.map((it) => ({ id: newId(), name: it.name, spec: it.spec, quantity: it.quantity, unit: it.unit || "EA", unitPrice: it.unitPrice }))
+        : [emptyItem()]
+    );
+    setMemo(draft.memo ?? "");
+    setSubmitError("");
+    setAiText("");
+    setAiError("");
+    setShowForm(true);
+  }, [isPartner]);
 
   useEffect(() => {
     const ids = appUser?.projectIds ?? [];

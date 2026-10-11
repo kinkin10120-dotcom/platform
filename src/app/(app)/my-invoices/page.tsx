@@ -27,6 +27,7 @@ import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from 
 import NumberInput from "@/components/NumberInput";
 import PrintablePreview from "@/components/PrintablePreview";
 import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
+import { takeAiAssistantDraft } from "@/lib/aiAssistantHandoff";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -81,6 +82,30 @@ export default function MyInvoicesPage() {
     if (!appUser || !isPartner) return;
     return listenSupplierOrdersByPartner(appUser.uid, setOrders);
   }, [appUser, isPartner]);
+
+  // /organize의 AI 비서가 "청구서 작성"으로 판단한 결과를 여기로 넘겨받는다. 청구서는
+  // 발주서 선택 + "직접 추가" 항목(설명·금액) 조합이라, AI가 뽑은 품목은 직접 추가
+  // 항목으로 채워 넣는다 — 실제 제출은 사람이 확인하고 직접 눌러야 한다.
+  useEffect(() => {
+    if (!isPartner) return;
+    const draft = takeAiAssistantDraft("invoice");
+    if (!draft) return;
+    setSelectedOrderIds([]);
+    setOrderBillingOverrides({});
+    if (draft.currency) setCurrencyChoice(draft.currency);
+    const now = new Date();
+    setTitle(isZh ? `${now.getMonth() + 1}月账单` : `${now.getMonth() + 1}월 청구서`);
+    setCustomItems(
+      draft.items.map((it) => {
+        const qtyLabel = it.quantity > 1 ? ` ${it.quantity}${it.unit || "EA"} × ${it.unitPrice.toLocaleString()}` : "";
+        const amount = it.quantity > 0 ? it.quantity * it.unitPrice : it.unitPrice;
+        return { id: newId(), description: `${it.name}${it.spec ? ` (${it.spec})` : ""}${qtyLabel}`, amount, projectId: "" };
+      })
+    );
+    setMemo(draft.memo ?? "");
+    setSubmitError("");
+    setShowForm(true);
+  }, [isPartner, isZh]);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;

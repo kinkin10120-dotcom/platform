@@ -82,12 +82,22 @@ export interface AddMessageInput {
 }
 
 export async function addMessage(conversationId: string, input: AddMessageInput) {
+  // fileIntakeSummary 안의 taskName/confidence는 업무를 못 찾거나 확신도가 없을 때 개별적으로
+  // undefined일 수 있다 — Firestore는 중첩 객체 안의 undefined 값도 거부하므로, 있는 키만 골라
+  // 넣는다(객체 전체가 아니라 필드 단위로 conditional spread).
+  const fileIntakeSummary = input.fileIntakeSummary
+    ? {
+        ...(input.fileIntakeSummary.projectName ? { projectName: input.fileIntakeSummary.projectName } : {}),
+        ...(input.fileIntakeSummary.taskName ? { taskName: input.fileIntakeSummary.taskName } : {}),
+        ...(input.fileIntakeSummary.confidence ? { confidence: input.fileIntakeSummary.confidence } : {}),
+      }
+    : undefined;
   await addDoc(collection(db, "assistantConversations", conversationId, "messages"), {
     role: input.role,
     text: input.text,
     ...(input.attachmentNames && input.attachmentNames.length > 0 ? { attachmentNames: input.attachmentNames } : {}),
     ...(input.intent ? { intent: input.intent } : {}),
-    ...(input.fileIntakeSummary ? { fileIntakeSummary: input.fileIntakeSummary } : {}),
+    ...(fileIntakeSummary && Object.keys(fileIntakeSummary).length > 0 ? { fileIntakeSummary } : {}),
     createdAt: serverTimestamp(),
   });
   await setDoc(doc(db, "assistantConversations", conversationId), { updatedAt: serverTimestamp() }, { merge: true });

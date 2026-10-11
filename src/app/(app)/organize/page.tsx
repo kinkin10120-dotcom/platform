@@ -863,7 +863,7 @@ export default function OrganizePage() {
               <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
               {zh(isZh, "AI 비서")}
             </h1>
-            <p className="mt-1 pl-4 text-sm text-[#86868b]">
+            <p className="mt-1 hidden pl-4 text-sm text-[#86868b] sm:block">
               {zh(isZh, "텍스트·사진을 올리면 AI가 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
             </p>
           </div>
@@ -884,16 +884,14 @@ export default function OrganizePage() {
 
         {candidates.length > 0 && (
           <>
-            <OrganizeWeeklyReport candidates={candidates} isZh={isZh} lang={appUser.partnerLang ?? "ko"} />
-
-            {/* 대화창 */}
+            {/* 대화창 — 가장 자주 쓰는 기능이라 화면 맨 위, 다른 도구보다 먼저 보이게 둔다. */}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
               onDragLeave={() => setDragActive(false)}
               onDrop={(e) => { e.preventDefault(); setDragActive(false); addChatAttachments(e.dataTransfer.files); }}
               className={`flex flex-col overflow-hidden rounded-3xl bg-white transition ${dragActive ? "ring-2 ring-[#1d1d1f]" : ""}`}
             >
-              <div className="h-[65vh] min-h-[22rem] space-y-3 overflow-y-auto p-4 lg:h-[36rem]">
+              <div className="h-[50dvh] min-h-[16rem] space-y-3 overflow-y-auto p-4 lg:h-[36rem]">
                 {messages.length === 0 ? (
                   <p className="flex h-24 items-center justify-center text-center text-sm text-[#86868b]">
                     {zh(isZh, "무엇이든 적어보세요 — 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
@@ -979,6 +977,8 @@ export default function OrganizePage() {
                 {assistantError && <p className="mt-1.5 text-xs text-red-500">{assistantError}</p>}
               </div>
             </div>
+
+            <OrganizeWeeklyReport candidates={candidates} isZh={isZh} lang={appUser.partnerLang ?? "ko"} />
 
             {/* 캡션 없이 바로 담기 — 사진 여러 장을 한꺼번에 던질 때는 AI 비서를 거치지 않고
                 바로 아래 "담은 자료" 큐에 담아, 한 번에 "맞는 프로젝트/업무 찾기"로 처리한다. */}

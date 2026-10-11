@@ -832,7 +832,7 @@ export default function OrganizePage() {
           <div>
             <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
               <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
-              {zh(isZh, "정리 도구")}
+              {zh(isZh, "AI 비서")}
             </h1>
             <p className="mt-1 pl-4 text-sm text-[#86868b]">
               {zh(isZh, "텍스트·사진을 올리면 AI가 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}

@@ -349,6 +349,21 @@ export default function OrganizePage() {
   const [classifyingAll, setClassifyingAll] = useState(false);
   const [uploadingAll, setUploadingAll] = useState(false);
   const [recording, setRecording] = useState(false);
+  // 음성 인식은 브라우저 API 특성상 "말하기 시작하기 전에" 언어를 하나 정해야 한다(텍스트처럼
+  // 다 듣고 나서 언어를 알아내는 게 불가능하다) — 계정 기본 언어로 시작하되, 직접 바꾸면
+  // 이 기기에서는 다음에도 그 언어를 기억해둔다.
+  const [voiceLang, setVoiceLang] = useState<"ko" | "zh">(isZh ? "zh" : "ko");
+  useEffect(() => {
+    const saved = localStorage.getItem("organizeVoiceLang");
+    if (saved === "ko" || saved === "zh") setVoiceLang(saved);
+  }, []);
+  function toggleVoiceLang() {
+    setVoiceLang((prev) => {
+      const next = prev === "ko" ? "zh" : "ko";
+      localStorage.setItem("organizeVoiceLang", next);
+      return next;
+    });
+  }
   const [dragActive, setDragActive] = useState(false);
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
   const [globalError, setGlobalError] = useState("");
@@ -761,7 +776,7 @@ export default function OrganizePage() {
       return;
     }
     const recognition = new Ctor();
-    recognition.lang = isZh ? "zh-CN" : "ko-KR";
+    recognition.lang = voiceLang === "zh" ? "zh-CN" : "ko-KR";
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.onresult = (event) => {
@@ -1061,6 +1076,15 @@ export default function OrganizePage() {
                     placeholder={zh(isZh, "무엇이든 물어보세요...")}
                     className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
                   />
+                  {!recording && (
+                    <button
+                      onClick={toggleVoiceLang}
+                      title={zh(isZh, "음성 인식 언어")}
+                      className="h-9 shrink-0 rounded-full border border-[#d1d1d6] px-2 text-[11px] font-semibold text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+                    >
+                      {voiceLang === "zh" ? "中" : "한"}
+                    </button>
+                  )}
                   <button
                     onClick={toggleVoiceInput}
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${recording ? "border-red-300 bg-red-50 text-red-600" : "border-[#d1d1d6] text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"}`}

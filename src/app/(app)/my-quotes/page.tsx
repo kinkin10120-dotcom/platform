@@ -3,11 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { Calculator, ChevronDown, ChevronUp, Eye, FileText, Pencil, Plus, Trash2 } from "lucide-react";
+import { Calculator, ChevronDown, ChevronUp, Eye, FileText, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierQuotesByPartner, createSupplierQuote, updateSupplierQuote, deleteSupplierQuote } from "@/lib/firestore/supplierQuotes";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
+import { parseLineItems } from "@/lib/aiLineItems";
 import {
   SupplierQuote,
   SupplierQuoteItem,
@@ -70,6 +71,9 @@ export default function MyQuotesPage() {
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [aiText, setAiText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewData, setPreviewData] = useState<{ items: SupplierQuoteItem[]; memoKo?: string } | null>(null);
@@ -137,6 +141,8 @@ export default function MyQuotesPage() {
     setItems([emptyItem()]);
     setMemo("");
     setSubmitError("");
+    setAiText("");
+    setAiError("");
     setShowForm(true);
   }
 
@@ -148,6 +154,8 @@ export default function MyQuotesPage() {
     setItems(q.items.length > 0 ? q.items.map((it) => ({ ...it })) : [emptyItem()]);
     setMemo(q.memo ?? "");
     setSubmitError("");
+    setAiText("");
+    setAiError("");
     setShowForm(true);
   }
 
@@ -161,6 +169,44 @@ export default function MyQuotesPage() {
 
   function removeItem(id: string) {
     setItems((prev) => (prev.length > 1 ? prev.filter((it) => it.id !== id) : prev));
+  }
+
+  // "A제품 100개 5000원씩" 같은 문장을 던지면 AI가 품목 배열로 구조화해서 돌려준다 — 그
+  // 결과는 바로 제출되지 않고 아래 품목 입력란에 채워넣기만 한다. 금액이 걸린 문서라
+  // AI가 잘못 읽었을 가능성까지 그대로 제출되면 안 되므로, 사람이 눈으로 확인·수정한
+  // 뒤 기존과 똑같이 "미리보기"→"제출" 버튼을 직접 눌러야 한다.
+  async function handleAiFill() {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const result = await parseLineItems(aiText.trim(), isZh ? "zh" : "ko");
+      if (result.items.length === 0) {
+        setAiError(zh(isZh, "품목을 인식하지 못했습니다. 조금 더 구체적으로 적어주세요."));
+        return;
+      }
+      const newItems: SupplierQuoteItem[] = result.items.map((it) => ({
+        id: newId(),
+        name: it.name,
+        spec: it.spec || undefined,
+        quantity: it.quantity || 0,
+        unit: it.unit || "EA",
+        unitPrice: it.unitPrice || 0,
+      }));
+      setItems((prev) => {
+        const isBlank = prev.length === 1 && !prev[0].name.trim() && prev[0].unitPrice === 0;
+        return isBlank ? newItems : [...prev, ...newItems];
+      });
+      if (!isZh && result.currency && (["USD", "CNY", "KRW"] as SupplierCurrency[]).includes(result.currency)) {
+        setCurrencyChoice(result.currency);
+      }
+      if (result.memo && !memo.trim()) setMemo(result.memo);
+      setAiText("");
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : zh(isZh, "AI 인식에 실패했습니다."));
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   const validItems = items.filter((it) => it.name.trim() && it.quantity > 0 && it.unitPrice > 0);
@@ -347,6 +393,29 @@ export default function MyQuotesPage() {
               </select>
             </div>
           )}
+
+          <div className="space-y-1.5 rounded-xl border border-dashed border-[#d1d1d6] bg-[#fafafa] p-2.5">
+            <p className="flex items-center gap-1 text-xs font-medium text-[#86868b]">
+              <Sparkles size={12} /> {zh(isZh, "AI로 작성 — 문장으로 품목을 적으면 아래 입력란을 채워줍니다")}
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input
+                value={aiText}
+                onChange={(e) => setAiText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !aiLoading) { e.preventDefault(); handleAiFill(); } }}
+                placeholder={zh(isZh, "예) A제품 100개 5000원씩, B부품 50개 개당 2000원")}
+                className="min-w-[12rem] flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1.5 text-xs outline-none focus:border-[#86868b]"
+              />
+              <button
+                onClick={handleAiFill}
+                disabled={aiLoading || !aiText.trim()}
+                className="flex items-center gap-1 rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+              >
+                <Sparkles size={12} /> {aiLoading ? zh(isZh, "인식 중...") : zh(isZh, "채우기")}
+              </button>
+            </div>
+            {aiError && <p className="text-xs text-red-500">{aiError}</p>}
+          </div>
 
           <div>
             <p className="mb-1.5 text-xs font-medium text-[#86868b]">{zh(isZh, "품목")}</p>

@@ -813,8 +813,11 @@ export default function OrganizePage() {
   return (
     <div className="flex items-start gap-4">
       {/* 왼쪽 — 지난 대화 기록 (클로드처럼). Firestore에 남아서 새로고침·기기 교체에도 안 사라진다. */}
-      <aside className={`${sidebarOpen ? "fixed inset-0 z-40 flex bg-black/40 lg:static lg:z-auto lg:bg-transparent" : "hidden lg:flex"} shrink-0`}>
-        <div className="flex h-[calc(100vh-7rem)] w-64 flex-col gap-2 overflow-hidden rounded-3xl bg-white p-3 lg:sticky lg:top-20">
+      <aside className={`${sidebarOpen ? "fixed inset-0 z-40 lg:static lg:z-auto" : "hidden lg:block"} shrink-0`}>
+        {/* 모바일에서만 — 뒤 화면을 어둡게 덮는 배경. 탭하면 닫힌다. 데스크톱(lg)에서는
+            사이드바가 항상 고정으로 보이니 오버레이 자체가 필요 없다. */}
+        {sidebarOpen && <div className="fixed inset-0 bg-black/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+        <div className="relative z-10 flex h-full w-72 max-w-[82vw] flex-col gap-2 overflow-hidden bg-white p-3 lg:sticky lg:top-20 lg:h-[calc(100vh-7rem)] lg:w-64 lg:max-w-none lg:rounded-3xl">
           <button
             onClick={startNewConversation}
             className="flex items-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] px-3 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
@@ -851,7 +854,6 @@ export default function OrganizePage() {
             ))}
           </div>
         </div>
-        {sidebarOpen && <button className="flex-1" onClick={() => setSidebarOpen(false)} aria-label="close" />}
       </aside>
 
       <div className="min-w-0 flex-1 space-y-5">
@@ -891,7 +893,7 @@ export default function OrganizePage() {
               onDrop={(e) => { e.preventDefault(); setDragActive(false); addChatAttachments(e.dataTransfer.files); }}
               className={`flex flex-col overflow-hidden rounded-3xl bg-white transition ${dragActive ? "ring-2 ring-[#1d1d1f]" : ""}`}
             >
-              <div className="max-h-[28rem] min-h-[10rem] space-y-3 overflow-y-auto p-4">
+              <div className="h-[65vh] min-h-[22rem] space-y-3 overflow-y-auto p-4 lg:h-[36rem]">
                 {messages.length === 0 ? (
                   <p className="flex h-24 items-center justify-center text-center text-sm text-[#86868b]">
                     {zh(isZh, "무엇이든 적어보세요 — 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
@@ -947,7 +949,7 @@ export default function OrganizePage() {
                     // 이미 false라 그것만으론 못 거르므로, compositionend 추적을 더한다.
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) { e.preventDefault(); handleSendChat(); } }}
                     rows={1}
-                    placeholder={zh(isZh, "무엇이든 물어보세요... (이미지 Ctrl+V 붙여넣기 가능, Shift+Enter로 줄바꿈)")}
+                    placeholder={zh(isZh, "무엇이든 물어보세요...")}
                     className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
                   />
                   <button

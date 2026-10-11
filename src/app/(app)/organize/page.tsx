@@ -281,6 +281,10 @@ export default function OrganizePage() {
   // e.nativeEvent.isComposing이 이미 false로 바뀌어 있어, 그것만으로는 못 거른다 —
   // compositionstart/end로 직접 조합 상태를 추적해 이중으로 막는다.
   const composingRef = useRef(false);
+  // Enter 핸들러와 전송 버튼 양쪽에서 호출될 수 있는데, assistantLoading 상태만으로 막으면
+  // React 상태 반영이 한 템포 늦어 거의 동시에 두 번 눌리는 경우(엔터+클릭 등) 막지 못해
+  // 같은 메시지가 두 번 전송되는 문제가 있었다 — ref로 즉시(동기적으로) 막는다.
+  const sendingRef = useRef(false);
   // AI 비서 — 클로드 같은 대화형 인터페이스. 메시지 하나(텍스트 + 선택적 첨부파일)를
   // 보내면 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘 원하는지 AI가 스스로
   // 판단한다(/api/assistant). 자료 정리면 이 페이지의 업로드 큐에 담고, 견적서·청구서면
@@ -466,6 +470,8 @@ export default function OrganizePage() {
   async function handleSendChat() {
     const text = draftText.trim();
     if ((!text && chatAttachments.length === 0) || !appUser) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setAssistantLoading(true);
     setAssistantError("");
     const attachments = chatAttachments;
@@ -533,9 +539,13 @@ export default function OrganizePage() {
       if (data.intent === "quote" || data.intent === "invoice") {
         setAiAssistantDraft({ kind: data.intent, items: data.items ?? [], currency: data.currency, memo: data.memo });
         const itemsSummary = (data.items ?? []).map((it) => `${it.name} ${it.quantity}${it.unit ?? "EA"}`).join(", ");
+        // 단가·수량을 못 찾아 0으로 남은 품목이 있으면 작성 화면에서 제출 버튼이 "합계 0"
+        // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
+        const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
+        const warning = missingPrice ? zh(isZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
         await addMessage(conversationId, {
           role: "assistant",
-          text: `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}`,
+          text: `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}${warning}`,
           intent: data.intent,
         });
         return;
@@ -574,6 +584,7 @@ export default function OrganizePage() {
       setAssistantError(e instanceof Error ? e.message : zh(isZh, "AI 비서 요청에 실패했습니다."));
     } finally {
       setAssistantLoading(false);
+      sendingRef.current = false;
     }
   }
 

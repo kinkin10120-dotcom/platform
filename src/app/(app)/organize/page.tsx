@@ -44,7 +44,6 @@ import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
 import { sortProjectsByUsage, recordProjectUsage } from "@/lib/projectUsage";
-import { downloadCsv } from "@/lib/csvExport";
 
 // 협력사 전용 "정리 도구" — work-intake(intake.handyhand.co.kr)의 협력사 화면과 같은
 // 아이디어(텍스트/사진을 던지면 AI가 맞는 프로젝트·업무를 찾아 코멘트까지 써준다)를
@@ -127,17 +126,6 @@ interface IntakeItem {
   errorMessage: string;
   uploadProgress: number;
   groupId: string | null;
-}
-
-interface RecentLog {
-  id: string;
-  kind: "file" | "comment";
-  projectId: string;
-  taskName: string;
-  name: string;
-  createdAt: number;
-  storagePath?: string;
-  ownerId: string;
 }
 
 // 업로드 직후 "취소" 토스트가 되돌리는 데 필요한 최소 정보.
@@ -286,7 +274,6 @@ export default function OrganizePage() {
   const [dragActive, setDragActive] = useState(false);
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
   const [globalError, setGlobalError] = useState("");
-  const [stickyTarget, setStickyTarget] = useState<{ projectId: string; taskId: string } | null>(null);
   const [splittingBriefing, setSplittingBriefing] = useState(false);
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -598,8 +585,8 @@ export default function OrganizePage() {
       text: "",
       previewUrl: URL.createObjectURL(file),
       status: "queued",
-      selectedProjectId: stickyTarget?.projectId ?? "",
-      selectedTaskId: stickyTarget?.taskId ?? "",
+      selectedProjectId: "",
+      selectedTaskId: "",
       commentText: "",
       errorMessage: "",
       uploadProgress: 0,
@@ -623,8 +610,7 @@ export default function OrganizePage() {
     }
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stickyTarget]);
+  }, []);
 
   function toggleVoiceInput() {
     if (recording) {
@@ -858,11 +844,6 @@ export default function OrganizePage() {
 
         {candidates.length > 0 && (
           <>
-            <OrganizeRecentUploads
-              appUser={appUser}
-              isZh={isZh}
-              onReuseTarget={(projectId, taskId) => setStickyTarget({ projectId, taskId })}
-            />
             <OrganizeWeeklyReport candidates={candidates} isZh={isZh} lang={appUser.partnerLang ?? "ko"} />
 
             {/* 대화창 */}
@@ -1212,136 +1193,6 @@ function OrganizeItemCard({
       )}
       {first.status === "done" && <p className="text-xs font-medium text-green-600">✓</p>}
       {first.status === "error" && <p className="text-xs text-red-500">{first.errorMessage}</p>}
-    </div>
-  );
-}
-
-function OrganizeRecentUploads({
-  appUser,
-  isZh,
-  onReuseTarget,
-}: {
-  appUser: { uid: string; projectIds?: string[] };
-  isZh: boolean;
-  onReuseTarget: (projectId: string, taskId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [logs, setLogs] = useState<RecentLog[] | null>(null);
-  const [search, setSearch] = useState("");
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const ids = appUser.projectIds ?? [];
-    if (ids.length === 0) {
-      setLogs([]);
-      return;
-    }
-    const unsubs: (() => void)[] = [];
-    const fileMap = new Map<string, RecentLog>();
-    const commentMap = new Map<string, RecentLog>();
-    function publish() {
-      setLogs(Array.from(fileMap.values()).concat(Array.from(commentMap.values())).sort((a, b) => b.createdAt - a.createdAt).slice(0, 50));
-    }
-    for (const part of chunk(ids, 10)) {
-      unsubs.push(
-        onSnapshot(query(collection(db, "partnerArchiveFiles"), where("projectId", "in", part)), (snap) => {
-          snap.docs.forEach((d) => {
-            const data = d.data();
-            fileMap.set(d.id, {
-              id: d.id,
-              kind: "file",
-              projectId: data.projectId,
-              taskName: data.taskName ?? "",
-              name: data.name,
-              storagePath: data.storagePath,
-              createdAt: data.uploadedAt?.toMillis ? data.uploadedAt.toMillis() : 0,
-              ownerId: data.uploadedBy,
-            });
-          });
-          publish();
-        })
-      );
-      unsubs.push(
-        onSnapshot(query(collection(db, "partnerArchiveComments"), where("projectId", "in", part)), (snap) => {
-          snap.docs.forEach((d) => {
-            const data = d.data();
-            commentMap.set(d.id, {
-              id: d.id,
-              kind: "comment",
-              projectId: data.projectId,
-              taskName: data.taskName ?? "",
-              name: (data.text as string).slice(0, 40),
-              createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : 0,
-              ownerId: data.authorId,
-            });
-          });
-          publish();
-        })
-      );
-    }
-    return () => unsubs.forEach((u) => u());
-  }, [open, appUser.projectIds]);
-
-  async function handleDelete(log: RecentLog) {
-    if (log.kind === "file") {
-      await deletePartnerArchiveFile(log.id, log.storagePath ?? "");
-    } else {
-      await deletePartnerArchiveComment(log.id);
-    }
-    setConfirmingId(null);
-  }
-
-  const q = search.trim().toLowerCase();
-  const visible = (logs ?? []).filter((l) => !q || [l.name, l.taskName].some((f) => f.toLowerCase().includes(q)));
-
-  return (
-    <div className="rounded-3xl bg-white">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between px-5 py-3 text-sm font-medium text-[#86868b]">
-        {zh(isZh, "최근 업로드 내역")}
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-      {open && (
-        <div className="max-h-80 overflow-y-auto border-t border-[#f0f0f2] px-5 py-3">
-          {logs === null && <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>}
-          {logs && logs.length > 0 && (
-            <div className="mb-3 flex gap-2">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={zh(isZh, "파일명·업무로 검색...")}
-                className="w-full rounded-xl border border-[#d1d1d6] px-3 py-1.5 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
-              />
-              <button
-                onClick={() => downloadCsv(`업로드내역_${new Date().toISOString().slice(0, 10)}.csv`, ["구분", "내용", "업무"], visible.map((l) => [l.kind, l.name, l.taskName]))}
-                className="shrink-0 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"
-              >
-                CSV
-              </button>
-            </div>
-          )}
-          {logs && logs.length === 0 && <p className="text-sm text-[#86868b]">-</p>}
-          <ul className="space-y-2">
-            {visible.map((log) => (
-              <li key={log.id} className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <button onClick={() => onReuseTarget(log.projectId, "")} className="min-w-0 flex-1 truncate text-left text-[#1d1d1f] underline-offset-2 hover:underline">
-                    {log.name}{log.taskName && <span className="text-[#86868b]"> · {log.taskName}</span>}
-                  </button>
-                  {log.ownerId !== appUser.uid ? null : confirmingId === log.id ? (
-                    <span className="flex shrink-0 items-center gap-1">
-                      <button onClick={() => handleDelete(log)} className="text-red-500">{zh(isZh, "삭제")}</button>
-                      <button onClick={() => setConfirmingId(null)} className="text-[#86868b]">{zh(isZh, "취소")}</button>
-                    </span>
-                  ) : (
-                    <button onClick={() => setConfirmingId(log.id)} className="shrink-0 text-[#86868b] hover:text-red-500"><Trash2 size={12} /></button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

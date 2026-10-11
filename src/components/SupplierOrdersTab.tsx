@@ -85,6 +85,10 @@ export interface CatalogEntry {
   orderKind?: SupplierOrderKind;
   // kind === "client"일 때만 — 매입 정보를 clientProductInternal에 저장할 때 필요하다.
   clientId?: string;
+  // 이 품목을 실제로 공급하는 협력사 계정 — 연동해두면 그 계정이 "내 제품 단가" 화면에서
+  // 자기 매입 단가를 직접 조회할 수 있다.
+  partnerId?: string;
+  partnerName?: string;
 }
 
 // 카탈로그에서 제품을 담을 때 만들어지는 발주 품목. 제품의 기본 부대비용은 전부 담되 체크는
@@ -175,6 +179,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         clientName: clientNameById[p.clientId],
         orderKind: internal.orderKind,
         clientId: p.clientId,
+        partnerId: internal.partnerId,
+        partnerName: internal.partnerName,
       });
     }
     // 매입 전용 품목(금형·부자재 등) — 고객 제품과 무관하게 여기서 직접 등록한 것들.
@@ -195,6 +201,8 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
         clientName: sp.clientName,
         orderKind: sp.orderKind,
         subtitle: sp.clientName ?? "",
+        partnerId: sp.partnerId,
+        partnerName: sp.partnerName,
       });
     }
     return list;
@@ -365,6 +373,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               entry={null}
               supplierNames={supplierNames}
               clientNameOptions={clientNameOptions}
+              partners={partners}
               onDone={() => setCreatingNew(false)}
             />
           </div>
@@ -386,6 +395,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
               }}
               supplierNames={supplierNames}
               clientNameOptions={clientNameOptions}
+              partners={partners}
               onDone={() => setEditingId(null)}
             />
           </div>
@@ -452,7 +462,7 @@ export default function SupplierOrdersTab({ onPreview }: { onPreview: (open: boo
                 </div>
                 {editingId === e.id && (
                   <div className="mt-3 border-t border-[#f0f0f0] pt-3">
-                    <PurchaseInfoEditor entry={e} supplierNames={supplierNames} clientNameOptions={clientNameOptions} onDone={() => setEditingId(null)} />
+                    <PurchaseInfoEditor entry={e} supplierNames={supplierNames} clientNameOptions={clientNameOptions} partners={partners} onDone={() => setEditingId(null)} />
                   </div>
                 )}
               </div>
@@ -727,12 +737,14 @@ function PurchaseInfoEditor({
   entry,
   supplierNames,
   clientNameOptions,
+  partners,
   onDone,
 }: {
   // null이면 "매입 전용 품목 새로 만들기" — 고객 제품과 무관하게 supplierProducts에 저장한다.
   entry: CatalogEntry | null;
   supplierNames: string[];
   clientNameOptions: string[];
+  partners: AppUser[];
   onDone: () => void;
 }) {
   const isNew = entry === null;
@@ -748,6 +760,9 @@ function PurchaseInfoEditor({
   const [costItems, setCostItems] = useState<SupplierCostItem[]>(entry?.costItems ?? []);
   const [parts, setParts] = useState<SupplierPartItem[]>(entry?.parts ?? []);
   const [imageUrl, setImageUrl] = useState(entry?.imageUrl);
+  // 이 품목을 실제로 공급하는 협력사 계정 — 연동해두면 그 계정이 "내 제품 단가" 화면에서
+  // 자기 매입 단가를 직접 조회할 수 있다(발주서 작성 화면의 협력사 계정 연동과 같은 방식).
+  const [partnerId, setPartnerId] = useState(entry?.partnerId ?? "");
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -805,6 +820,7 @@ function PurchaseInfoEditor({
     if (isNew && !name.trim()) return;
     setSaving(true);
     setSaveError("");
+    const linkedPartner = partners.find((p) => p.uid === partnerId);
     try {
       if (isNew) {
         const ref = await createSupplierProduct({
@@ -819,6 +835,8 @@ function PurchaseInfoEditor({
           unit: unit.trim() || undefined,
           parts: cleanParts,
           costItems: cleanCosts,
+          partnerId: partnerId || undefined,
+          partnerName: linkedPartner?.name,
         });
         if (pendingImage) await uploadSupplierProductImage(ref.id, pendingImage);
       } else if (entry!.kind === "client") {
@@ -830,6 +848,12 @@ function PurchaseInfoEditor({
           costItems: cleanCosts,
           parts: cleanParts,
           orderKind,
+          partnerId: partnerId || undefined,
+          partnerName: linkedPartner?.name,
+          // clientProducts(판매 단가 포함)는 협력사에게 못 열어주므로, 품명·단위를 여기에
+          // 복사해둔다 — "내 제품 단가" 화면은 이 문서만 읽는다.
+          productName: name.trim() || entry!.name,
+          productUnit: unit.trim() || undefined,
         });
       } else {
         await updateSupplierProduct(entry!.id, {
@@ -844,6 +868,8 @@ function PurchaseInfoEditor({
           unit: unit.trim() || undefined,
           parts: cleanParts,
           costItems: cleanCosts,
+          partnerId: partnerId || undefined,
+          partnerName: linkedPartner?.name,
         });
       }
       onDone();
@@ -929,6 +955,19 @@ function PurchaseInfoEditor({
           placeholder="발주처명 (공장)"
           className="w-40 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
         />
+        {/* 발주처명은 자유 텍스트라 실제 협력사 계정과 자동으로 안 이어진다 — 여기서 계정을
+            직접 지정해두면 그 협력사가 "내 제품 단가" 화면에서 이 매입 단가를 조회할 수 있다. */}
+        <select
+          value={partnerId}
+          onChange={(e) => setPartnerId(e.target.value)}
+          className="rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs outline-none focus:border-[#86868b]"
+          title="연결된 협력사 계정 — 이 계정이 자기 제품 단가를 조회할 수 있습니다"
+        >
+          <option value="">협력사 계정 연동 없음</option>
+          {partners.map((p) => (
+            <option key={p.uid} value={p.uid}>{p.name} ({p.email})</option>
+          ))}
+        </select>
         <select
           value={purchaseCurrency}
           onChange={(e) => setPurchaseCurrency(e.target.value as SupplierCurrency)}

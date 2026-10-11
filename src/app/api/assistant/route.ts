@@ -11,7 +11,7 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 interface ChecklistItemCandidate { id: string; text: string }
 interface TaskCandidate { taskId: string; taskName: string; status: string; description?: string; checklist?: ChecklistItemCandidate[] }
 interface ProjectCandidate { projectId: string; projectName: string; clientName: string; tasks: TaskCandidate[] }
-interface PriceHistoryEntry { name: string; spec?: string; unit?: string; unitPrice: number; currency: string; quantity?: number; source: "견적서" | "발주서"; date: string }
+interface PriceHistoryEntry { name: string; spec?: string; unit?: string; unitPrice: number; currency: string; quantity?: number; source: "견적서" | "발주서" | "카탈로그"; date: string }
 
 export async function POST(req: NextRequest) {
   const body = await req.json();

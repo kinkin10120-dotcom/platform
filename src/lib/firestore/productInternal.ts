@@ -21,6 +21,10 @@ function fromDoc(d: any): ClientProductInternal {
     orderKind: data.orderKind || undefined,
     refParts: Array.isArray(data.refParts) ? data.refParts : undefined,
     refCurrency: data.refCurrency || undefined,
+    partnerId: data.partnerId || undefined,
+    partnerName: data.partnerName || undefined,
+    productName: data.productName || undefined,
+    productUnit: data.productUnit || undefined,
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
 }
@@ -46,6 +50,20 @@ export function listenAllClientProductInternals(cb: (map: Record<string, ClientP
   });
 }
 
+// 협력사 계정 전용 — 자기 앞으로 연동된(partnerId == 본인 uid) 제품만 "내 제품 단가"
+// 화면에서 조회한다.
+export function listenClientProductInternalsByPartner(partnerId: string, cb: (items: ClientProductInternal[]) => void, onError?: (e: Error) => void) {
+  const q = query(colRef, where("partnerId", "==", partnerId));
+  return onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map(fromDoc)),
+    (e) => {
+      console.error("[listenClientProductInternalsByPartner] 조회 실패", e);
+      onError?.(e as Error);
+    }
+  );
+}
+
 // 통관 정보 화면과 매입 정보 화면이 같은 문서의 서로 다른 필드를 따로 저장하므로, 넘어온 키만
 // 골라 merge로 쓴다 — 예전처럼 문서를 통째로 덮어쓰면 통관 메모만 고쳐도 매입 단가·부대비용이
 // 조용히 지워진다.
@@ -65,6 +83,10 @@ export async function setClientProductInternal(
     orderKind?: SupplierOrderKind;
     refParts?: SupplierPartItem[];
     refCurrency?: SupplierCurrency;
+    partnerId?: string;
+    partnerName?: string;
+    productName?: string;
+    productUnit?: string;
   }
 ) {
   const payload: Record<string, unknown> = { clientId, updatedAt: serverTimestamp() };
@@ -80,6 +102,10 @@ export async function setClientProductInternal(
   if ("orderKind" in input) payload.orderKind = input.orderKind ?? null;
   if ("refParts" in input) payload.refParts = input.refParts ?? [];
   if ("refCurrency" in input) payload.refCurrency = input.refCurrency ?? null;
+  if ("partnerId" in input) payload.partnerId = input.partnerId ?? null;
+  if ("partnerName" in input) payload.partnerName = input.partnerName ?? null;
+  if ("productName" in input) payload.productName = input.productName ?? null;
+  if ("productUnit" in input) payload.productUnit = input.productUnit ?? null;
   return setDoc(doc(db, "clientProductInternal", productId), payload, { merge: true });
 }
 

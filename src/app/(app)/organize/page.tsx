@@ -76,7 +76,7 @@ interface PriceHistoryEntry {
   unitPrice: number;
   currency: string;
   quantity?: number;
-  source: "견적서" | "발주서";
+  source: "견적서" | "발주서" | "카탈로그";
   date: string;
 }
 
@@ -88,9 +88,11 @@ async function fetchPriceHistory(partnerId: string): Promise<PriceHistoryEntry[]
     const ts = v as { toDate?: () => Date } | undefined;
     return ts?.toDate ? ts.toDate().toISOString().slice(0, 10) : "";
   };
-  const [quoteSnap, orderSnap] = await Promise.all([
+  const [quoteSnap, orderSnap, internalSnap, supplierProductSnap] = await Promise.all([
     getDocs(query(collection(db, "supplierQuotes"), where("partnerId", "==", partnerId))),
     getDocs(query(collection(db, "supplierOrders"), where("partnerId", "==", partnerId))),
+    getDocs(query(collection(db, "clientProductInternal"), where("partnerId", "==", partnerId))),
+    getDocs(query(collection(db, "supplierProducts"), where("partnerId", "==", partnerId))),
   ]);
   const out: PriceHistoryEntry[] = [];
   quoteSnap.docs.forEach((d) => {
@@ -107,6 +109,31 @@ async function fetchPriceHistory(partnerId: string): Promise<PriceHistoryEntry[]
     (data.items ?? []).forEach((it: { name: string; spec?: string; unit?: string; unitPrice: number; quantity?: number }) => {
       if (!it.unitPrice) return;
       out.push({ name: it.name, spec: it.spec, unit: it.unit, unitPrice: it.unitPrice, currency: data.currency, quantity: it.quantity, source: "발주서", date });
+    });
+  });
+  internalSnap.docs.forEach((d) => {
+    const data = d.data();
+    if (!data.purchasePrice) return;
+    out.push({
+      name: data.productName || "",
+      unit: data.productUnit,
+      unitPrice: data.purchasePrice,
+      currency: data.purchaseCurrency ?? "USD",
+      source: "카탈로그",
+      date: toDateStr(data.updatedAt),
+    });
+  });
+  supplierProductSnap.docs.forEach((d) => {
+    const data = d.data();
+    if (!data.purchasePrice) return;
+    out.push({
+      name: data.name ?? "",
+      spec: data.spec,
+      unit: data.unit,
+      unitPrice: data.purchasePrice,
+      currency: data.purchaseCurrency ?? "USD",
+      source: "카탈로그",
+      date: toDateStr(data.updatedAt),
     });
   });
   out.sort((a, b) => b.date.localeCompare(a.date));

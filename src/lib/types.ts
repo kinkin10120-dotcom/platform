@@ -480,6 +480,14 @@ export interface ClientProductInternal {
   // 숫자를 섞으면 엉뚱한 금액·통화가 실제 발주서 초안에 그대로 들어가 버린다.
   refParts?: SupplierPartItem[];
   refCurrency?: SupplierCurrency;
+  // 이 제품을 실제로 공급하는 협력사 계정과 연동해두면, 그 계정이 자기 매입 단가를
+  // 플랫폼에서 직접 조회할 수 있다("내 제품 단가"). clientProducts 문서(판매 단가·고객
+  // 마진이 담겨 있다)는 협력사에게 절대 열어주지 않고, 여기 이 문서(매입 단가)만 보여주기
+  // 위해 품명/단위를 아래 두 필드에 복사해둔다 — clientProducts 규칙은 그대로 둔다.
+  partnerId?: string;
+  partnerName?: string;
+  productName?: string;
+  productUnit?: string;
   updatedAt: number;
 }
 
@@ -747,6 +755,11 @@ export interface SupplierProduct {
   unit?: string;
   parts?: SupplierPartItem[];
   costItems?: SupplierCostItem[];
+  // 이 품목을 실제로 공급하는 협력사 계정과 연동해두면, 그 계정이 자기 매입 단가를
+  // 플랫폼에서 직접 조회할 수 있다("내 제품 단가"). 이 컬렉션은 원래부터 관리자 전용이라
+  // 품명·단가가 전부 이 문서 안에 있어 clientProductInternal과 달리 별도 복사가 필요 없다.
+  partnerId?: string;
+  partnerName?: string;
   createdAt: number;
   updatedAt: number;
 }

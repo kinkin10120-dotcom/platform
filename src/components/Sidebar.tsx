@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck, Tag } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { disablePushNotifications } from "@/lib/messaging";
@@ -49,6 +49,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/my-inquiries", label: "문의하기", icon: MessageCircleQuestion, show: isClient },
     { href: "/my-quotes", label: zh(isZh, "견적서"), icon: Calculator, show: isPartner },
     { href: "/my-supplier-orders", label: zh(isZh, "발주 목록"), icon: ShoppingCart, show: isPartner },
+    { href: "/my-products", label: zh(isZh, "내 제품 단가"), icon: Tag, show: isPartner },
     { href: "/my-invoices", label: zh(isZh, "청구서"), icon: Receipt, show: isPartner },
     { href: "/my-archive", label: zh(isZh, "자료함"), icon: Lock, show: isPartner },
     // 별도 앱(work-intake)으로 두면 이미 로그인된 세션인데도 새 탭+재로그인이 필요해서,

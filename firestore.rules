@@ -275,9 +275,13 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // ---- client product internal (매입/통관 내부 정보, 관리자 전용) ----
+    // ---- client product internal (매입/통관 내부 정보) ----
     match /clientProductInternal/{productId} {
       allow get, list, create, update, delete: if isAdmin();
+      // 협력사 계정은 자기 앞으로 연동된(partnerId == 본인 uid) 품목의 매입 단가만 조회
+      // 가능 — 쓰기는 여전히 관리자 전용. clientProducts(판매 단가·고객 마진)는 여기서
+      // 전혀 건드리지 않는다(이 문서 자체엔 판매 단가가 없다).
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
     }
 
     // ---- purchase orders (발주) ----
@@ -319,11 +323,14 @@ service cloud.firestore {
       allow create: if false;
     }
 
-    // ---- supplier products (매입 전용 품목: 금형·부자재 등, 관리자 전용) ----
+    // ---- supplier products (매입 전용 품목: 금형·부자재 등) ----
     // 고객 제품(clientProducts)과 달리 clientId가 없다 — supplierOrders와 같은 원칙으로,
     // 고객에게 열어줄 근거 자체를 만들지 않는다.
     match /supplierProducts/{productId} {
       allow read, write: if isAdmin();
+      // 협력사 계정은 자기 앞으로 연동된(partnerId == 본인 uid) 품목만 조회 가능 — 쓰기는
+      // 여전히 관리자 전용.
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
     }
 
     // ---- supplier orders (구매발주: 핸디핸드 → 해외 공급사, 관리자 전용) ----

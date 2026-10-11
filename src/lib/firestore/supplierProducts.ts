@@ -3,9 +3,11 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -33,6 +35,8 @@ function fromDoc(d: any): SupplierProduct {
     unit: data.unit || undefined,
     parts: Array.isArray(data.parts) ? data.parts : undefined,
     costItems: Array.isArray(data.costItems) ? data.costItems : undefined,
+    partnerId: data.partnerId || undefined,
+    partnerName: data.partnerName || undefined,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
@@ -42,6 +46,20 @@ export function listenSupplierProducts(cb: (items: SupplierProduct[]) => void) {
   return onSnapshot(colRef, (snap) => {
     cb(snap.docs.map(fromDoc).sort((a, b) => a.name.localeCompare(b.name, "ko")));
   });
+}
+
+// 협력사 계정 전용 — 자기 앞으로 연동된(partnerId == 본인 uid) 품목만 "내 제품 단가"
+// 화면에서 조회한다.
+export function listenSupplierProductsByPartner(partnerId: string, cb: (items: SupplierProduct[]) => void, onError?: (e: Error) => void) {
+  const q = query(colRef, where("partnerId", "==", partnerId));
+  return onSnapshot(
+    q,
+    (snap) => cb(snap.docs.map(fromDoc).sort((a, b) => a.name.localeCompare(b.name, "ko"))),
+    (e) => {
+      console.error("[listenSupplierProductsByPartner] 조회 실패", e);
+      onError?.(e as Error);
+    }
+  );
 }
 
 export type SupplierProductInput = Omit<SupplierProduct, "id" | "createdAt" | "updatedAt" | "imageUrl">;
@@ -60,6 +78,8 @@ export async function createSupplierProduct(input: SupplierProductInput) {
     unit: input.unit ?? "",
     parts: input.parts ?? [],
     costItems: input.costItems ?? [],
+    partnerId: input.partnerId ?? null,
+    partnerName: input.partnerName ?? null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

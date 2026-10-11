@@ -17,9 +17,11 @@ import {
   ChevronUp,
   Copy,
   FileBarChart,
+  MessageSquarePlus,
   Mic,
   Paperclip,
   Scissors,
+  Send,
   Sparkles,
   Trash2,
   X,
@@ -37,6 +39,8 @@ import {
 } from "@/lib/firestore/partnerArchive";
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
+import { listenConversations, listenMessages, createConversation, addMessage } from "@/lib/firestore/assistantChat";
+import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
 import { sortProjectsByUsage, recordProjectUsage } from "@/lib/projectUsage";
@@ -286,13 +290,19 @@ export default function OrganizePage() {
   const [splittingBriefing, setSplittingBriefing] = useState(false);
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  // AI 비서 — 텍스트 하나로 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘
-  // 원하는지 AI가 스스로 판단한다(/api/assistant). 자료 정리면 바로 이 페이지의 업로드
-  // 큐에 담고, 견적서·청구서면 각자의 작성 페이지로 내용을 채운 채 넘겨주고, 질문이면
-  // 바로 이 자리에서 답한다.
+  // AI 비서 — 클로드 같은 대화형 인터페이스. 메시지 하나(텍스트 + 선택적 첨부파일)를
+  // 보내면 "자료 정리 / 견적서 작성 / 청구서 작성 / 가격 질문" 중 뭘 원하는지 AI가 스스로
+  // 판단한다(/api/assistant). 자료 정리면 이 페이지의 업로드 큐에 담고, 견적서·청구서면
+  // 각자의 작성 페이지로 내용을 채운 채 넘겨주고, 질문이면 대화창에 바로 답한다. 대화
+  // 자체(무슨 요청을 했고 AI가 뭘로 이해했는지)는 새로고침·기기 교체에도 안 사라지도록
+  // Firestore(assistantConversations)에 남긴다.
+  const [conversations, setConversations] = useState<AssistantConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
-  const [assistantAnswer, setAssistantAnswer] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -305,6 +315,30 @@ export default function OrganizePage() {
     dismissToast(toast.id);
     if (toast.fileDocId && toast.storagePath) await deletePartnerArchiveFile(toast.fileDocId, toast.storagePath);
     if (toast.commentDocId) await deletePartnerArchiveComment(toast.commentDocId);
+  }
+
+  useEffect(() => {
+    if (!appUser) return;
+    return listenConversations(appUser.uid, (list) => {
+      setConversations(list);
+      // 처음 들어왔을 때는 가장 최근 대화를 자동으로 열어준다(없으면 "새 대화" 상태로 둔다).
+      setActiveConversationId((prev) => (prev === null && list.length > 0 ? list[0].id : prev));
+    });
+  }, [appUser]);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setMessages([]);
+      return;
+    }
+    return listenMessages(activeConversationId, setMessages);
+  }, [activeConversationId]);
+
+  function startNewConversation() {
+    setActiveConversationId(null);
+    setMessages([]);
+    setAssistantError("");
+    setSidebarOpen(false);
   }
 
   useEffect(() => {
@@ -374,25 +408,6 @@ export default function OrganizePage() {
     setSelectedForGroup([]);
   }
 
-  function addTextItem() {
-    if (!draftText.trim()) return;
-    const item: IntakeItem = {
-      id: newId(),
-      file: null,
-      text: draftText.trim(),
-      previewUrl: null,
-      status: "queued",
-      selectedProjectId: stickyTarget?.projectId ?? "",
-      selectedTaskId: stickyTarget?.taskId ?? "",
-      commentText: "",
-      errorMessage: "",
-      uploadProgress: 0,
-      groupId: null,
-    };
-    setItems((prev) => [...prev, item]);
-    setDraftText("");
-  }
-
   // 회의/현장에서 여러 프로젝트를 한 번에 언급한 긴 메모 하나를, 프로젝트/업무별로 이미
   // 분류·코멘트까지 끝난 "ready" 상태의 여러 항목으로 바로 쪼개 담는다.
   async function handleSplitBriefing() {
@@ -439,18 +454,64 @@ export default function OrganizePage() {
   // 입력창 텍스트 하나를 AI 비서(/api/assistant)에게 보낸다 — 의도를 스스로 판단해서
   // 자료 정리/견적서/청구서/질문 중 맞는 결과만 돌려준다. 결과에 따라 이 페이지
   // 업로드 큐에 바로 담거나, 작성 페이지로 넘기거나, 바로 이 자리에 답을 보여준다.
-  async function handleAiAssistant() {
-    if (!draftText.trim() || !appUser) return;
+  function addChatAttachments(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    setChatAttachments((prev) => [...prev, ...Array.from(fileList)]);
+  }
+  function removeChatAttachment(index: number) {
+    setChatAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  // 대화창 전송 — 텍스트(+첨부파일)를 메시지로 기록하고 AI 비서(/api/assistant)에게
+  // 보낸다. 의도에 따라: 자료 정리면 기존 업로드 큐에 담고, 견적서·청구서면 각자의 작성
+  // 페이지로 넘길 준비를 해두고(실제 이동은 답변 말풍선의 버튼을 눌러야 한다), 질문이면
+  // 바로 말풍선으로 답한다.
+  async function handleSendChat() {
+    const text = draftText.trim();
+    if ((!text && chatAttachments.length === 0) || !appUser) return;
     setAssistantLoading(true);
-    setGlobalError("");
     setAssistantError("");
-    setAssistantAnswer("");
+    const attachments = chatAttachments;
+    setDraftText("");
+    setChatAttachments([]);
     try {
+      let conversationId = activeConversationId;
+      if (!conversationId) {
+        conversationId = await createConversation(appUser.uid, text.slice(0, 40) || (attachments[0]?.name ?? zh(isZh, "새 대화")));
+        setActiveConversationId(conversationId);
+      }
+      await addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) });
+
       const priceHistory = await fetchPriceHistory(appUser.uid);
+
+      // 첨부파일 묶음을 /api/classify와 같은 방식으로 payload화한다.
+      let filePayload: Record<string, unknown> = {};
+      if (attachments.length > 1) {
+        const groupFiles = await Promise.all(
+          attachments.map(async (file) => {
+            const { imageBase64, imageFileType } = await prepareImagePayload(file);
+            return { fileName: file.name, fileType: imageFileType ?? file.type, imageBase64 };
+          })
+        );
+        filePayload = { groupFiles };
+      } else if (attachments.length === 1) {
+        const file = attachments[0];
+        const { imageBase64, imageFileType } = await prepareImagePayload(file);
+        const fileTextExcerpt = !file.type.startsWith("image/") ? await extractFileText(file) : null;
+        const { pdfBase64 } = await preparePdfPayload(file);
+        filePayload = {
+          fileName: file.name,
+          fileType: imageFileType ?? file.type,
+          imageBase64,
+          fileTextExcerpt: fileTextExcerpt ?? undefined,
+          pdfBase64,
+        };
+      }
+
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: draftText.trim(), candidates, priceHistory, lang: appUser.partnerLang ?? "ko" }),
+        body: JSON.stringify({ text: text || undefined, candidates, priceHistory, lang: appUser.partnerLang ?? "ko", ...filePayload }),
       });
       const raw = await res.text();
       let data: {
@@ -474,20 +535,24 @@ export default function OrganizePage() {
 
       if (data.intent === "quote" || data.intent === "invoice") {
         setAiAssistantDraft({ kind: data.intent, items: data.items ?? [], currency: data.currency, memo: data.memo });
-        setDraftText("");
-        router.push(data.intent === "quote" ? "/my-quotes" : "/my-invoices");
+        const itemsSummary = (data.items ?? []).map((it) => `${it.name} ${it.quantity}${it.unit ?? "EA"}`).join(", ");
+        await addMessage(conversationId, {
+          role: "assistant",
+          text: `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}`,
+          intent: data.intent,
+        });
         return;
       }
       if (data.intent === "question") {
-        setAssistantAnswer(data.answer ?? "");
+        await addMessage(conversationId, { role: "assistant", text: data.answer ?? "", intent: "question" });
         return;
       }
       // file_intake (또는 판단 실패 시 기본값)
       const item: IntakeItem = {
         id: newId(),
-        file: null,
-        text: draftText.trim(),
-        previewUrl: null,
+        file: attachments[0] ?? null,
+        text,
+        previewUrl: attachments[0] ? URL.createObjectURL(attachments[0]) : null,
         status: "ready",
         selectedProjectId: data.projectId ?? "",
         selectedTaskId: data.taskId ?? "",
@@ -498,7 +563,16 @@ export default function OrganizePage() {
         groupId: null,
       };
       setItems((prev) => [...prev, item]);
-      setDraftText("");
+      const project = candidates.find((p) => p.projectId === data.projectId);
+      const task = project?.tasks.find((t) => t.taskId === data.taskId);
+      await addMessage(conversationId, {
+        role: "assistant",
+        text: project
+          ? `"${project.projectName}"${task ? ` / "${task.taskName}"` : ""}${zh(isZh, "로 분류했어요. 아래 담은 자료 목록에서 확인 후 업로드하세요.")}`
+          : zh(isZh, "맞는 프로젝트/업무를 확실히 찾지 못했어요. 아래 담은 자료 목록에서 직접 골라주세요."),
+        intent: "file_intake",
+        fileIntakeSummary: { projectName: project?.projectName, taskName: task?.taskName, confidence: data.confidence },
+      });
     } catch (e) {
       setAssistantError(e instanceof Error ? e.message : zh(isZh, "AI 비서 요청에 실패했습니다."));
     } finally {
@@ -703,180 +777,246 @@ export default function OrganizePage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
-          <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
-          {zh(isZh, "정리 도구")}
-        </h1>
-        <p className="mt-1 pl-4 text-sm text-[#86868b]">
-          {zh(isZh, "텍스트·사진을 올리면 AI가 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
-        </p>
-      </div>
-
-      {loadingCandidates && <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>}
-      {!loadingCandidates && candidates.length === 0 && (
-        <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
-          {zh(isZh, "배정된 프로젝트가 없습니다.")}
-        </div>
-      )}
-
-      {candidates.length > 0 && (
-        <>
-          <OrganizeRecentUploads
-            appUser={appUser}
-            isZh={isZh}
-            onReuseTarget={(projectId, taskId) => setStickyTarget({ projectId, taskId })}
-          />
-          <OrganizeWeeklyReport candidates={candidates} isZh={isZh} lang={appUser.partnerLang ?? "ko"} />
-
-          {allDone ? (
-            <div className="space-y-4 rounded-3xl bg-white p-6">
-              <p className="text-base font-medium text-[#1d1d1f]">{items.length}{zh(isZh, "개 자료 업로드를 모두 완료했습니다.")}</p>
-              <button onClick={resetAll} className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white hover:bg-black">
-                {zh(isZh, "새로 시작하기")}
+    <div className="flex items-start gap-4">
+      {/* 왼쪽 — 지난 대화 기록 (클로드처럼). Firestore에 남아서 새로고침·기기 교체에도 안 사라진다. */}
+      <aside className={`${sidebarOpen ? "fixed inset-0 z-40 flex bg-black/40 lg:static lg:z-auto lg:bg-transparent" : "hidden lg:flex"} shrink-0`}>
+        <div className="flex h-[calc(100vh-7rem)] w-64 flex-col gap-2 overflow-hidden rounded-3xl bg-white p-3 lg:sticky lg:top-20">
+          <button
+            onClick={startNewConversation}
+            className="flex items-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] px-3 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+          >
+            <MessageSquarePlus size={15} /> {zh(isZh, "새 대화")}
+          </button>
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+            {conversations.length === 0 && (
+              <p className="px-2 py-3 text-xs text-[#86868b]">{zh(isZh, "대화 기록이 없습니다.")}</p>
+            )}
+            {conversations.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => { setActiveConversationId(c.id); setSidebarOpen(false); }}
+                className={`block w-full truncate rounded-xl px-3 py-2 text-left text-sm transition ${
+                  c.id === activeConversationId ? "bg-[#f5f5f7] font-medium text-[#1d1d1f]" : "text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+                }`}
+              >
+                {c.title || zh(isZh, "대화")}
               </button>
-            </div>
-          ) : (
-            <>
-              {isStaging && (
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-                  onDragLeave={() => setDragActive(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragActive(false); addFileItems(e.dataTransfer.files); }}
-                  className={`space-y-4 rounded-3xl border-2 border-dashed bg-white p-6 transition ${dragActive ? "border-[#1d1d1f] bg-[#f5f5f7]" : "border-[#e5e5e5]"}`}
-                >
-                  <div>
-                    <label className="mb-1.5 block text-xs text-[#86868b]">{zh(isZh, "텍스트 붙여넣기 (메모·채팅 내용 등)")}</label>
-                    <textarea
-                      value={draftText}
-                      onChange={(e) => setDraftText(e.target.value)}
-                      rows={5}
-                      placeholder={zh(isZh, "여기에 붙여넣으세요... (이미지도 Ctrl+V로 바로 붙여넣을 수 있습니다)")}
-                      className="w-full resize-none rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+            ))}
+          </div>
+        </div>
+        {sidebarOpen && <button className="flex-1" onClick={() => setSidebarOpen(false)} aria-label="close" />}
+      </aside>
+
+      <div className="min-w-0 flex-1 space-y-5">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h1 className="flex items-center gap-2 text-xl font-semibold text-[#1d1d1f]">
+              <span className="h-2 w-2 rounded-full bg-[#1d1d1f]" />
+              {zh(isZh, "정리 도구")}
+            </h1>
+            <p className="mt-1 pl-4 text-sm text-[#86868b]">
+              {zh(isZh, "텍스트·사진을 올리면 AI가 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
+            </p>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#1d1d1f] lg:hidden"
+          >
+            <MessageSquarePlus size={13} /> {zh(isZh, "대화 기록")}
+          </button>
+        </div>
+
+        {loadingCandidates && <p className="text-sm text-[#86868b]">{zh(isZh, "불러오는 중...")}</p>}
+        {!loadingCandidates && candidates.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-[#d1d1d6] bg-white p-10 text-center text-sm text-[#86868b]">
+            {zh(isZh, "배정된 프로젝트가 없습니다.")}
+          </div>
+        )}
+
+        {candidates.length > 0 && (
+          <>
+            <OrganizeRecentUploads
+              appUser={appUser}
+              isZh={isZh}
+              onReuseTarget={(projectId, taskId) => setStickyTarget({ projectId, taskId })}
+            />
+            <OrganizeWeeklyReport candidates={candidates} isZh={isZh} lang={appUser.partnerLang ?? "ko"} />
+
+            {/* 대화창 */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => { e.preventDefault(); setDragActive(false); addChatAttachments(e.dataTransfer.files); }}
+              className={`flex flex-col overflow-hidden rounded-3xl bg-white transition ${dragActive ? "ring-2 ring-[#1d1d1f]" : ""}`}
+            >
+              <div className="max-h-[28rem] min-h-[10rem] space-y-3 overflow-y-auto p-4">
+                {messages.length === 0 ? (
+                  <p className="flex h-24 items-center justify-center text-center text-sm text-[#86868b]">
+                    {zh(isZh, "무엇이든 적어보세요 — 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}
+                  </p>
+                ) : (
+                  messages.map((m) => (
+                    <ChatBubble
+                      key={m.id}
+                      message={m}
+                      isZh={isZh}
+                      onOpenDraft={(kind) => router.push(kind === "quote" ? "/my-quotes" : "/my-invoices")}
                     />
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={addTextItem}
-                        disabled={!draftText.trim()}
-                        className="flex-1 rounded-full border border-dashed border-[#d1d1d6] py-2 text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f] disabled:opacity-50"
-                      >
-                        {zh(isZh, "+ 텍스트 항목으로 담기")}
-                      </button>
-                      <button
-                        onClick={toggleVoiceInput}
-                        className={`flex items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition ${recording ? "border-red-300 bg-red-50 text-red-600" : "border-[#d1d1d6] text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"}`}
-                      >
-                        {recording ? (<><span className="h-2 w-2 rounded-full bg-red-500" />{zh(isZh, "듣는 중... (탭하여 종료)")}</>) : (<><Mic size={14} />{zh(isZh, "음성으로 입력")}</>)}
-                      </button>
-                    </div>
-                    {draftText.trim() && (
-                      <button
-                        onClick={handleAiAssistant}
-                        disabled={assistantLoading || loadingCandidates}
-                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full bg-[#1d1d1f] py-2 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
-                      >
-                        <Sparkles size={14} />
-                        {assistantLoading ? zh(isZh, "AI 비서가 처리하는 중...") : zh(isZh, "AI 비서에게 요청 — 자료 정리 / 견적서 / 청구서 / 가격 질문")}
-                      </button>
-                    )}
-                    {assistantError && <p className="mt-1.5 text-xs text-red-500">{assistantError}</p>}
-                    {assistantAnswer && (
-                      <div className="mt-2 flex items-start gap-2 rounded-xl bg-[#f0f7ff] px-3 py-2.5 text-sm text-[#1d1d1f]">
-                        <Sparkles size={14} className="mt-0.5 shrink-0 text-[#4a7fd6]" />
-                        <p className="whitespace-pre-wrap leading-relaxed">{assistantAnswer}</p>
-                      </div>
-                    )}
-                    {draftText.trim() && (
-                      <button
-                        onClick={handleSplitBriefing}
-                        disabled={splittingBriefing || loadingCandidates}
-                        className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-[#d1d1d6] py-2 text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f] disabled:opacity-50"
-                      >
-                        <Scissors size={14} />
-                        {splittingBriefing ? zh(isZh, "나누는 중...") : zh(isZh, "회의 브리핑 — 여러 업무로 나누기")}
+                  ))
+                )}
+                {assistantLoading && (
+                  <div className="flex items-center gap-1.5 text-xs text-[#86868b]">
+                    <Sparkles size={13} className="animate-pulse" /> {zh(isZh, "AI 비서가 처리하는 중...")}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-[#f0f0f0] p-3">
+                {chatAttachments.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {chatAttachments.map((f, i) => (
+                      <span key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs text-[#1d1d1f]">
+                        <Paperclip size={11} />
+                        <span className="max-w-[8rem] truncate">{f.name}</span>
+                        <button onClick={() => removeChatAttachment(i)} className="text-[#86868b] hover:text-red-500"><X size={11} /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-end gap-2">
+                  <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                    <Paperclip size={15} />
+                    <input type="file" multiple onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
+                  </label>
+                  <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                    <Camera size={15} />
+                    <input type="file" accept="image/*" capture="environment" onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
+                  </label>
+                  <textarea
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
+                    rows={1}
+                    placeholder={zh(isZh, "무엇이든 물어보세요... (이미지 Ctrl+V 붙여넣기 가능, Shift+Enter로 줄바꿈)")}
+                    className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+                  />
+                  <button
+                    onClick={toggleVoiceInput}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${recording ? "border-red-300 bg-red-50 text-red-600" : "border-[#d1d1d6] text-[#86868b] hover:border-[#86868b] hover:text-[#1d1d1f]"}`}
+                  >
+                    <Mic size={15} />
+                  </button>
+                  <button
+                    onClick={handleSendChat}
+                    disabled={assistantLoading || loadingCandidates || (!draftText.trim() && chatAttachments.length === 0)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1d1d1f] text-white transition hover:bg-black disabled:opacity-40"
+                  >
+                    <Send size={15} />
+                  </button>
+                </div>
+                {draftText.trim() && (
+                  <button
+                    onClick={handleSplitBriefing}
+                    disabled={splittingBriefing || loadingCandidates}
+                    className="mt-2 flex items-center gap-1 text-xs font-medium text-[#86868b] transition hover:text-[#1d1d1f] disabled:opacity-50"
+                  >
+                    <Scissors size={12} />
+                    {splittingBriefing ? zh(isZh, "나누는 중...") : zh(isZh, "회의 브리핑 — 여러 업무로 한번에 나누기")}
+                  </button>
+                )}
+                {assistantError && <p className="mt-1.5 text-xs text-red-500">{assistantError}</p>}
+              </div>
+            </div>
+
+            {/* 캡션 없이 바로 담기 — 사진 여러 장을 한꺼번에 던질 때는 AI 비서를 거치지 않고
+                바로 아래 "담은 자료" 큐에 담아, 한 번에 "맞는 프로젝트/업무 찾기"로 처리한다. */}
+            <details className="rounded-3xl bg-white p-4 text-sm">
+              <summary className="cursor-pointer font-medium text-[#86868b]">
+                {zh(isZh, "또는 캡션 없이 사진·파일 여러 개 한번에 담기")}
+              </summary>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <label className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                  <Paperclip size={14} />
+                  {zh(isZh, "파일 선택")}
+                  <input type="file" multiple onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="hidden" />
+                </label>
+                <label className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                  <Camera size={14} />
+                  {zh(isZh, "카메라로 바로 촬영")}
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="hidden" />
+                </label>
+              </div>
+            </details>
+
+            {globalError && <p className="text-sm text-red-500">{globalError}</p>}
+
+            {allDone && (
+              <div className="space-y-4 rounded-3xl bg-white p-6">
+                <p className="text-base font-medium text-[#1d1d1f]">{items.length}{zh(isZh, "개 자료 업로드를 모두 완료했습니다.")}</p>
+                <button onClick={resetAll} className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  {zh(isZh, "목록 비우기")}
+                </button>
+              </div>
+            )}
+
+            {items.length > 0 && !allDone && (
+              <div className="space-y-3">
+                {isStaging && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium text-[#86868b]">{zh(isZh, "담은 자료")} {items.length}{zh(isZh, "개")}</p>
+                    {selectedForGroup.length >= 2 && (
+                      <button onClick={handleGroupSelected} className="rounded-full bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-black">
+                        {zh(isZh, "선택한")} {selectedForGroup.length}{zh(isZh, "개 묶기 (같은 내용)")}
                       </button>
                     )}
                   </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs text-[#86868b]">
-                      {zh(isZh, "또는 파일 여러 개 (사진·영상 등, 한 번에 여러 개 선택 가능 — 이 영역에 끌어다 놓아도 됩니다)")}
-                    </label>
-                    <label className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-                      <Paperclip size={14} />
-                      {zh(isZh, "파일 선택")}
-                      <input type="file" multiple onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="hidden" />
-                    </label>
-                    <label className="mt-2 flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#d1d1d6] py-2 text-center text-sm font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-                      <Camera size={14} />
-                      {zh(isZh, "카메라로 바로 촬영")}
-                      <input type="file" accept="image/*" capture="environment" onChange={(e) => { addFileItems(e.target.files); e.target.value = ""; }} className="hidden" />
-                    </label>
-                  </div>
-                </div>
-              )}
+                )}
 
-              {globalError && <p className="text-sm text-red-500">{globalError}</p>}
+                {getRenderGroups(items).map((g) => {
+                  const groupItems = Array.isArray(g) ? g : [g];
+                  const key = groupItems[0].groupId ?? groupItems[0].id;
+                  return (
+                    <OrganizeItemCard
+                      key={key}
+                      items={groupItems}
+                      candidates={candidates}
+                      isZh={isZh}
+                      selectable={isStaging}
+                      selected={groupItems.every((it) => selectedForGroup.includes(it.id))}
+                      onToggleSelect={() => groupItems.forEach((it) => toggleSelectForGroup(it.id))}
+                      onRemove={() => groupItems.forEach((it) => removeItem(it.id))}
+                      onUngroup={groupItems[0].groupId ? () => setItems((prev) => prev.map((it) => (it.groupId === groupItems[0].groupId ? { ...it, groupId: null } : it))) : undefined}
+                      onChangeTarget={(projectId, taskId) => {
+                        groupItems.forEach((it) => updateItem(it.id, { selectedProjectId: projectId, selectedTaskId: taskId }));
+                        handleRegenerateComment(groupItems, projectId, taskId);
+                      }}
+                      onChangeComment={(text) => groupItems.forEach((it) => updateItem(it.id, { commentText: text }))}
+                    />
+                  );
+                })}
 
-              {items.length > 0 && (
-                <div className="space-y-3">
-                  {isStaging && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-[#86868b]">{zh(isZh, "담은 자료")} {items.length}{zh(isZh, "개")}</p>
-                      {selectedForGroup.length >= 2 && (
-                        <button onClick={handleGroupSelected} className="rounded-full bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white hover:bg-black">
-                          {zh(isZh, "선택한")} {selectedForGroup.length}{zh(isZh, "개 묶기 (같은 내용)")}
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {getRenderGroups(items).map((g) => {
-                    const groupItems = Array.isArray(g) ? g : [g];
-                    const key = groupItems[0].groupId ?? groupItems[0].id;
-                    return (
-                      <OrganizeItemCard
-                        key={key}
-                        items={groupItems}
-                        candidates={candidates}
-                        isZh={isZh}
-                        selectable={isStaging}
-                        selected={groupItems.every((it) => selectedForGroup.includes(it.id))}
-                        onToggleSelect={() => groupItems.forEach((it) => toggleSelectForGroup(it.id))}
-                        onRemove={() => groupItems.forEach((it) => removeItem(it.id))}
-                        onUngroup={groupItems[0].groupId ? () => setItems((prev) => prev.map((it) => (it.groupId === groupItems[0].groupId ? { ...it, groupId: null } : it))) : undefined}
-                        onChangeTarget={(projectId, taskId) => {
-                          groupItems.forEach((it) => updateItem(it.id, { selectedProjectId: projectId, selectedTaskId: taskId }));
-                          handleRegenerateComment(groupItems, projectId, taskId);
-                        }}
-                        onChangeComment={(text) => groupItems.forEach((it) => updateItem(it.id, { commentText: text }))}
-                      />
-                    );
-                  })}
-
-                  {isStaging ? (
-                    <button
-                      onClick={handleClassifyAll}
-                      disabled={classifyingAll || candidates.length === 0}
-                      className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
-                    >
-                      {classifyingAll ? zh(isZh, "찾는 중...") : zh(isZh, "맞는 프로젝트/업무 찾기")}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleUploadAll}
-                      disabled={uploadingAll || items.every((it) => it.status !== "ready")}
-                      className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
-                    >
-                      {uploadingAll ? zh(isZh, "업로드 중...") : `${zh(isZh, "업로드")} (${items.filter((it) => it.status === "ready").length})`}
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </>
-      )}
+                {isStaging ? (
+                  <button
+                    onClick={handleClassifyAll}
+                    disabled={classifyingAll || candidates.length === 0}
+                    className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                  >
+                    {classifyingAll ? zh(isZh, "찾는 중...") : zh(isZh, "맞는 프로젝트/업무 찾기")}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleUploadAll}
+                    disabled={uploadingAll || items.every((it) => it.status !== "ready")}
+                    className="w-full rounded-full bg-[#1d1d1f] py-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                  >
+                    {uploadingAll ? zh(isZh, "업로드 중...") : `${zh(isZh, "업로드")} (${items.filter((it) => it.status === "ready").length})`}
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
 
       {toasts.length > 0 && (
         <div className="fixed bottom-5 left-1/2 z-50 w-[calc(100%-2.5rem)] max-w-sm -translate-x-1/2 space-y-2">
@@ -891,6 +1031,53 @@ export default function OrganizePage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ChatBubble({
+  message,
+  isZh,
+  onOpenDraft,
+}: {
+  message: AssistantMessage;
+  isZh: boolean;
+  onOpenDraft: (kind: "quote" | "invoice") => void;
+}) {
+  const isUser = message.role === "user";
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[85%] space-y-1.5 ${isUser ? "" : "flex items-start gap-2"}`}>
+        {!isUser && <Sparkles size={14} className="mt-2 shrink-0 text-[#4a7fd6]" />}
+        <div>
+          {message.attachmentNames && message.attachmentNames.length > 0 && (
+            <div className="mb-1 flex flex-wrap justify-end gap-1">
+              {message.attachmentNames.map((name, i) => (
+                <span key={i} className="flex items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-[10px] text-[#86868b]">
+                  <Paperclip size={9} /> {name}
+                </span>
+              ))}
+            </div>
+          )}
+          {message.text && (
+            <div
+              className={`rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                isUser ? "bg-[#1d1d1f] text-white" : "bg-[#f0f7ff] text-[#1d1d1f]"
+              }`}
+            >
+              {message.text}
+            </div>
+          )}
+          {!isUser && (message.intent === "quote" || message.intent === "invoice") && (
+            <button
+              onClick={() => onOpenDraft(message.intent as "quote" | "invoice")}
+              className="mt-1.5 flex items-center gap-1 rounded-full bg-[#1d1d1f] px-3 py-1.5 text-xs font-medium text-white transition hover:bg-black"
+            >
+              {message.intent === "quote" ? zh(isZh, "견적서 작성 화면 열기") : zh(isZh, "청구서 작성 화면 열기")}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

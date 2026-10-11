@@ -412,5 +412,22 @@ service cloud.firestore {
     match /workIntakeUploads/{logId} {
       allow read, write: if isAdmin();
     }
+
+    // ---- AI 비서 대화 기록 (/organize, 협력사 전용) ----
+    // 실제 업무 데이터(자료함 파일, 견적서 등)는 각자의 컬렉션에 그대로 남고, 여기는 그걸
+    // 만들어낸 "대화"(무슨 요청을 했고 AI가 뭘로 이해했는지) 자체만 따로 보관한다 — 새로고침·
+    // 기기 교체에도 지난 대화가 안 사라지도록 로컬스토리지 대신 Firestore에 둔다.
+    match /assistantConversations/{conversationId} {
+      allow read, write: if isAdmin();
+      allow get, list: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+      allow create: if isSignedIn() && myProfile().role == 'partner' && request.resource.data.partnerId == request.auth.uid;
+      allow update, delete: if isSignedIn() && myProfile().role == 'partner' && resource.data.partnerId == request.auth.uid;
+
+      match /messages/{messageId} {
+        allow read, write: if isAdmin();
+        allow get, list, create: if isSignedIn() && myProfile().role == 'partner'
+          && get(/databases/$(database)/documents/assistantConversations/$(conversationId)).data.partnerId == request.auth.uid;
+      }
+    }
   }
 }

@@ -913,3 +913,26 @@ export interface SupplierQuote {
   linkedSupplierOrderId?: string;
   createdBy: string;
 }
+
+// ---- AI 비서 대화 기록 (/organize) ----
+export type AssistantIntent = "file_intake" | "quote" | "invoice" | "question";
+
+export interface AssistantConversation {
+  id: string;
+  partnerId: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AssistantMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  attachmentNames?: string[];
+  intent?: AssistantIntent;
+  // file_intake일 때만 — 실제 업로드는 이 메시지가 아니라 /organize의 기존 담긴 자료
+  // 목록에서 일어나므로, 여기엔 "그 목록 어디에 들어갔는지" 참고용 요약만 남긴다.
+  fileIntakeSummary?: { projectName?: string; taskName?: string; confidence?: "high" | "medium" | "low" };
+  createdAt: number;
+}

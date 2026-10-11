@@ -569,6 +569,7 @@ export default function OrganizePage() {
         currency?: "USD" | "CNY" | "KRW" | null;
         memo?: string;
         answer?: string;
+        replyLang?: "ko" | "zh";
       };
       try {
         data = JSON.parse(raw);
@@ -576,6 +577,9 @@ export default function OrganizePage() {
         throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
       }
       if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
+      // 답변 언어는 계정 기본 설정이 아니라 클로드처럼 이번에 입력한 문장의 언어를 따라간다
+      // (중국어 계정이라도 이번에 한국어로 물었으면 한국어로 답한다) — AI가 판단해 돌려준다.
+      const replyIsZh = data.replyLang ? data.replyLang === "zh" : isZh;
 
       if (data.intent === "quote" || data.intent === "invoice") {
         // 세션스토리지 한 칸짜리 "보낸 시점에 심어두기" 방식은, 뒤이어 견적/청구 요청을 하나
@@ -586,8 +590,8 @@ export default function OrganizePage() {
         // 단가·수량을 못 찾아 0으로 남은 품목이 있으면 작성 화면에서 제출 버튼이 "합계 0"
         // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
         const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
-        const warning = missingPrice ? zh(isZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
-        const draftReplyText = `${data.intent === "quote" ? zh(isZh, "견적서") : zh(isZh, "청구서")} 초안을 만들었어요: ${itemsSummary || zh(isZh, "(품목 없음)")}${warning}`;
+        const warning = missingPrice ? zh(replyIsZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
+        const draftReplyText = `${data.intent === "quote" ? zh(replyIsZh, "견적서") : zh(replyIsZh, "청구서")} ${zh(replyIsZh, "초안을 만들었어요")}: ${itemsSummary || zh(replyIsZh, "(품목 없음)")}${warning}`;
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: data.intent, draft, createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: data.intent, draft });
         return;
@@ -617,8 +621,8 @@ export default function OrganizePage() {
       const project = candidates.find((p) => p.projectId === data.projectId);
       const task = project?.tasks.find((t) => t.taskId === data.taskId);
       const fileIntakeText = project
-        ? `"${project.projectName}"${task ? ` / "${task.taskName}"` : ""}${zh(isZh, "로 분류했어요. 아래 담은 자료 목록에서 확인 후 업로드하세요.")}`
-        : zh(isZh, "맞는 프로젝트/업무를 확실히 찾지 못했어요. 아래 담은 자료 목록에서 직접 골라주세요.");
+        ? `"${project.projectName}"${task ? ` / "${task.taskName}"` : ""}${zh(replyIsZh, "로 분류했어요. 아래 담은 자료 목록에서 확인 후 업로드하세요.")}`
+        : zh(replyIsZh, "맞는 프로젝트/업무를 확실히 찾지 못했어요. 아래 담은 자료 목록에서 직접 골라주세요.");
       const fileIntakeSummary = { projectName: project?.projectName, taskName: task?.taskName, confidence: data.confidence };
       setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: fileIntakeText, intent: "file_intake", fileIntakeSummary, createdAt: Date.now() }]);
       await addMessage(conversationId, {

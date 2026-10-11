@@ -25,6 +25,7 @@ function fromDoc(d: any): ClientProductInternal {
     partnerName: data.partnerName || undefined,
     productName: data.productName || undefined,
     productUnit: data.productUnit || undefined,
+    productImageUrl: data.productImageUrl || undefined,
     updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
   };
 }
@@ -87,6 +88,7 @@ export async function setClientProductInternal(
     partnerName?: string;
     productName?: string;
     productUnit?: string;
+    productImageUrl?: string;
   }
 ) {
   const payload: Record<string, unknown> = { clientId, updatedAt: serverTimestamp() };
@@ -106,6 +108,7 @@ export async function setClientProductInternal(
   if ("partnerName" in input) payload.partnerName = input.partnerName ?? null;
   if ("productName" in input) payload.productName = input.productName ?? null;
   if ("productUnit" in input) payload.productUnit = input.productUnit ?? null;
+  if ("productImageUrl" in input) payload.productImageUrl = input.productImageUrl ?? null;
   return setDoc(doc(db, "clientProductInternal", productId), payload, { merge: true });
 }
 

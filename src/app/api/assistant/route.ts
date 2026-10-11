@@ -93,16 +93,17 @@ export async function POST(req: NextRequest) {
   }
 
   ctx +=
-    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라.\n\n` +
-    `intent가 "file_intake"면:\n{"intent": "file_intake", "projectId": "..." | null, "taskId": "..." | null, "confidence": "high" | "medium" | "low", "comment": "..."}\n` +
+    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라. 모든 형식에 "replyLang" 필드를 공통으로 포함해라.\n\n` +
+    `intent가 "file_intake"면:\n{"intent": "file_intake", "projectId": "..." | null, "taskId": "..." | null, "confidence": "high" | "medium" | "low", "comment": "...", "replyLang": "ko" | "zh"}\n` +
     `- comment는 담당자 본인 말투로, 업무 기록에 남길 법한 구체적인 코멘트를 대신 써주는 것이다. 확실히 관련된 업무를 못 찾으면 projectId/taskId는 null로 해라.\n\n` +
-    `intent가 "quote" 또는 "invoice"면:\n{"intent": "quote" | "invoice", "items": [{"name": "...", "spec": "...", "quantity": 0, "unit": "EA", "unitPrice": 0}], "currency": "USD" | "CNY" | "KRW" | null, "memo": "..."}\n` +
+    `intent가 "quote" 또는 "invoice"면:\n{"intent": "quote" | "invoice", "items": [{"name": "...", "spec": "...", "quantity": 0, "unit": "EA", "unitPrice": 0}], "currency": "USD" | "CNY" | "KRW" | null, "memo": "...", "replyLang": "ko" | "zh"}\n` +
     `- 품목이 여러 개면 전부 나눠라. "만원"은 ×10000, "천원"은 ×1000. "$"/달러=USD, "¥"/위안/元=CNY, "원"/₩=KRW.\n` +
     `- 단가를 직접 언급 안 했는데 과거 단가 이력에 같은/비슷한 품목이 있으면 그 단가를 참고해 채워도 좋다(그 경우 memo에 "이전 단가 기준"이라고 밝혀라).\n\n` +
-    `intent가 "question"이면:\n{"intent": "question", "answer": "..."}\n` +
+    `intent가 "question"이면:\n{"intent": "question", "answer": "...", "replyLang": "ko" | "zh"}\n` +
     `- answer는 위 단가 이력을 근거로 실제 담당자가 답하듯 구체적으로(언제, 얼마였는지) 작성해라. 이력에서 못 찾으면 모른다고 솔직히 답해라. 지어내지 마라.\n\n` +
-    `공통: 숫자(JSON number)는 따옴표 없이, 모르는 선택 필드는 생략하거나 빈 문자열로 둬라.` +
-    (isZh ? `\n\n텍스트로 들어가는 모든 필드(comment/memo/answer/name/spec)는 입력이 중국어면 중국어 간체(简体中文)로 답해라.` : "");
+    `공통: 숫자(JSON number)는 따옴표 없이, 모르는 선택 필드는 생략하거나 빈 문자열로 둬라.\n\n` +
+    `언어 — 클로드처럼 그때그때 사용자가 입력한 문장의 언어를 그대로 따라가라: 이번 [입력 텍스트]가 한국어면 "replyLang"을 "ko"로 하고 comment/memo/answer 등 텍스트 필드도 전부 한국어로 써라. 중국어로 입력했으면 "replyLang"을 "zh"로 하고 그 필드들을 중국어 간체(简体中文)로 써라. ` +
+    `이 협력사 계정은 평소 ${isZh ? "중국어" : "한국어"}를 쓰지만, 그건 텍스트가 아예 없고 사진/파일만 왔을 때만 참고하는 기본값일 뿐이다 — 입력 텍스트가 있으면 계정 기본 언어보다 그 텍스트의 실제 언어를 반드시 우선해라(계정은 중국어가 기본이어도 이번에 한국어로 물었으면 한국어로 답한다).`;
 
   contentParts.push({ type: "text", text: ctx });
 

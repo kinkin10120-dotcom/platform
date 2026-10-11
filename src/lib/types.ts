@@ -488,6 +488,7 @@ export interface ClientProductInternal {
   partnerName?: string;
   productName?: string;
   productUnit?: string;
+  productImageUrl?: string;
   updatedAt: number;
 }
 

@@ -905,10 +905,11 @@ function PurchaseInfoEditor({
           orderKind,
           partnerId: partnerId || undefined,
           partnerName: linkedPartner?.name,
-          // clientProducts(판매 단가 포함)는 협력사에게 못 열어주므로, 품명·단위를 여기에
-          // 복사해둔다 — "내 제품 단가" 화면은 이 문서만 읽는다.
+          // clientProducts(판매 단가 포함)는 협력사에게 못 열어주므로, 품명·단위·사진을
+          // 여기에 복사해둔다 — "내 제품 단가" 화면은 이 문서만 읽는다.
           productName: name.trim() || entry!.name,
           productUnit: unit.trim() || undefined,
+          productImageUrl: imageUrl,
         });
       } else {
         await updateSupplierProduct(entry!.id, {

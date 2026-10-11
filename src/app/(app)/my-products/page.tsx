@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { listenClientProductInternalsByPartner } from "@/lib/firestore/productInternal";
 import { listenSupplierProductsByPartner } from "@/lib/firestore/supplierProducts";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
-import { ClientProductInternal, SupplierProduct, SupplierOrderKind, SupplierCurrency, SUPPLIER_ORDER_KIND_LABEL } from "@/lib/types";
+import { ClientProductInternal, SupplierProduct, SupplierOrderKind, SupplierCurrency, SupplierPartItem, SUPPLIER_ORDER_KIND_LABEL } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
 
 const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
@@ -17,10 +17,12 @@ interface Row {
   nameEn?: string;
   spec?: string;
   unit?: string;
+  imageUrl?: string;
   purchasePrice?: number;
   purchaseCurrency: SupplierCurrency;
   orderKind?: SupplierOrderKind;
   clientName?: string;
+  parts?: SupplierPartItem[];
 }
 
 // 협력사(파트너) 계정 전용 — 관리자가 구매 카탈로그(SupplierOrdersTab)에서 내 계정으로
@@ -66,9 +68,11 @@ export default function MyProductsPage() {
         name: i.productName || zh(isZh, "(품명 미입력)"),
         nameEn: i.nameEn,
         unit: i.productUnit,
+        imageUrl: i.productImageUrl,
         purchasePrice: i.purchasePrice,
         purchaseCurrency: i.purchaseCurrency ?? "USD",
         orderKind: i.orderKind,
+        parts: i.parts,
       })),
     ...supplierProducts.map((sp) => ({
       id: sp.id,
@@ -76,10 +80,12 @@ export default function MyProductsPage() {
       nameEn: sp.nameEn,
       spec: sp.spec,
       unit: sp.unit,
+      imageUrl: sp.imageUrl,
       purchasePrice: sp.purchasePrice,
       purchaseCurrency: sp.purchaseCurrency ?? "USD",
       orderKind: sp.orderKind,
       clientName: sp.clientName,
+      parts: sp.parts,
     })),
   ];
 
@@ -120,22 +126,46 @@ export default function MyProductsPage() {
                 {kind === "unset" ? zh(isZh, "미지정") : zh(isZh, SUPPLIER_ORDER_KIND_LABEL[kind])}
               </p>
               <div className="overflow-hidden rounded-3xl bg-white">
-                {list.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between gap-3 border-b border-[#f5f5f7] px-5 py-3.5 last:border-b-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-[#1d1d1f]">{r.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-[#86868b]">
-                        {[r.nameEn, r.spec, r.clientName].filter(Boolean).join(" · ") || "-"}
-                      </p>
+                {list.map((r) => {
+                  const namedParts = (r.parts ?? []).filter((p) => p.name.trim());
+                  return (
+                    <div key={r.id} className="border-b border-[#f5f5f7] px-5 py-3.5 last:border-b-0">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {r.imageUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={r.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-[#e5e5e5] object-cover" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-[#1d1d1f]">{r.name}</p>
+                            <p className="mt-0.5 truncate text-xs text-[#86868b]">
+                              {[r.nameEn, r.spec, r.clientName].filter(Boolean).join(" · ") || "-"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-[#1d1d1f]">
+                            {r.purchasePrice != null ? formatSupplierMoney(r.purchasePrice, r.purchaseCurrency) : "-"}
+                          </p>
+                          {r.unit && <p className="mt-0.5 text-xs text-[#d1d1d6]">/ {r.unit}</p>}
+                        </div>
+                      </div>
+                      {namedParts.length > 0 && (
+                        <div className="mt-2.5 space-y-1 rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
+                          <p className="text-[11px] font-semibold text-[#86868b]">{zh(isZh, "부품별 단가")}</p>
+                          {namedParts.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between gap-2 text-xs text-[#1d1d1f]">
+                              <span className="min-w-0 truncate">{p.name}{p.nameEn ? ` · ${p.nameEn}` : ""}</span>
+                              <span className="shrink-0 text-[#86868b]">
+                                {formatSupplierMoney(p.unitPrice, r.purchaseCurrency)} × {p.quantity}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-semibold text-[#1d1d1f]">
-                        {r.purchasePrice != null ? formatSupplierMoney(r.purchasePrice, r.purchaseCurrency) : "-"}
-                      </p>
-                      {r.unit && <p className="mt-0.5 text-xs text-[#d1d1d6]">/ {r.unit}</p>}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

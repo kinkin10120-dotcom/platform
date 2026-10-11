@@ -140,6 +140,57 @@ async function fetchPriceHistory(partnerId: string): Promise<PriceHistoryEntry[]
   return out.slice(0, 200);
 }
 
+interface OrderStatusEntry {
+  soNumber: string;
+  items: string;
+  totalAmount: number;
+  currency: string;
+  issuedAt: string;
+  invoiceStatus: "미청구" | "청구됨(지급 대기)" | "지급완료";
+}
+
+// AI 비서가 "내 발주 중 뭐가 아직 입금 안 됐지?" 같은 질문에 답할 때 쓴다. 발행된 발주서
+// (status가 draft인 건 아직 협력사에게 공개 전이라 제외 — 다른 화면과 동일한 기준) 각각이
+// 어느 청구서에 담겨 제출/지급됐는지 교차 확인해서 상태를 매긴다.
+async function fetchOrderStatus(partnerId: string): Promise<OrderStatusEntry[]> {
+  const toDateStr = (v: unknown): string => {
+    const ts = v as { toDate?: () => Date } | undefined;
+    return ts?.toDate ? ts.toDate().toISOString().slice(0, 10) : "";
+  };
+  const [orderSnap, invoiceSnap] = await Promise.all([
+    getDocs(query(collection(db, "supplierOrders"), where("partnerId", "==", partnerId))),
+    getDocs(query(collection(db, "supplierInvoices"), where("partnerId", "==", partnerId))),
+  ]);
+  // 발주서 id -> "지급완료" | "청구됨(지급 대기)" — 청구서 품목 중 source:"order"인 것만 본다.
+  const invoiceStatusByOrderId = new Map<string, "지급완료" | "청구됨(지급 대기)">();
+  invoiceSnap.docs.forEach((d) => {
+    const data = d.data();
+    const paid = data.status === "paid";
+    (data.items ?? []).forEach((it: { source?: string; supplierOrderId?: string }) => {
+      if (it.source !== "order" || !it.supplierOrderId) return;
+      if (paid || !invoiceStatusByOrderId.has(it.supplierOrderId)) {
+        invoiceStatusByOrderId.set(it.supplierOrderId, paid ? "지급완료" : "청구됨(지급 대기)");
+      }
+    });
+  });
+  const out: OrderStatusEntry[] = [];
+  orderSnap.docs.forEach((d) => {
+    const data = d.data();
+    if (data.status !== "issued") return;
+    const items = (data.items ?? []).map((it: { name: string }) => it.name).join(", ");
+    out.push({
+      soNumber: data.soNumber ?? "",
+      items,
+      totalAmount: data.totalAmount ?? 0,
+      currency: data.currency ?? "USD",
+      issuedAt: toDateStr(data.issuedAt),
+      invoiceStatus: invoiceStatusByOrderId.get(d.id) ?? "미청구",
+    });
+  });
+  out.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+  return out.slice(0, 100);
+}
+
 interface IntakeItem {
   id: string;
   file: File | null;
@@ -526,7 +577,7 @@ export default function OrganizePage() {
       setMessages((prev) => [...prev, userMsg]);
       await addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) });
 
-      const priceHistory = await fetchPriceHistory(appUser.uid);
+      const [priceHistory, orderStatus] = await Promise.all([fetchPriceHistory(appUser.uid), fetchOrderStatus(appUser.uid)]);
 
       // 첨부파일 묶음을 /api/classify와 같은 방식으로 payload화한다.
       let filePayload: Record<string, unknown> = {};
@@ -552,10 +603,17 @@ export default function OrganizePage() {
         };
       }
 
+      // 직전 몇 턴을 같이 보내 후속 질문("그거 수량 500개로 바꿔줘" 같은)을 알아듣게 한다 —
+      // 텍스트만 추려서(첨부파일 정보는 빼고) 최근 6개까지만, 토큰이 계속 불어나지 않게.
+      // Claude API는 메시지가 반드시 user로 시작해야 한다 — 최근 6개를 자르면 짝이 안 맞아
+      // assistant로 시작할 수 있으니, 그런 경우 맨 앞 한 개를 더 버려서 user로 맞춘다.
+      let recentMessages = messages.slice(-6);
+      if (recentMessages[0]?.role === "assistant") recentMessages = recentMessages.slice(1);
+      const history = recentMessages.map((m) => ({ role: m.role, text: m.text }));
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text || undefined, candidates, priceHistory, lang: appUser.partnerLang ?? "ko", ...filePayload }),
+        body: JSON.stringify({ text: text || undefined, candidates, priceHistory, orderStatus, history, lang: appUser.partnerLang ?? "ko", ...filePayload }),
       });
       const raw = await res.text();
       let data: {
@@ -566,6 +624,7 @@ export default function OrganizePage() {
         confidence?: "high" | "medium" | "low";
         comment?: string;
         items?: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+        orderNumbers?: string[];
         currency?: "USD" | "CNY" | "KRW" | null;
         memo?: string;
         answer?: string;
@@ -587,13 +646,20 @@ export default function OrganizePage() {
         // 세션스토리지 한 칸짜리 "보낸 시점에 심어두기" 방식은, 뒤이어 견적/청구 요청을 하나
         // 더 보내거나 같은 버튼을 두 번 누르면 앞서 만든 내용이 사라져 보이는 문제가 있었다
         // — 이제 draft를 메시지 자체에 들고 있다가, 버튼을 누르는 "그 순간"에 심어준다.
-        const draft = { items: data.items ?? [], currency: data.currency, memo: data.memo };
+        // 청구서(invoice)는 지어낸 품목이 아니라, 이미 발행돼 아직 청구 안 된 실제 발주서를
+        // 그대로 골라 담아야 금액이 맞는다 — AI가 [발주 현황]에서 해당하는 soNumber를
+        // 골라주면(orderNumbers), 작성 화면에서 그 발주들의 체크박스를 자동으로 선택해준다
+        // (잔금·선금 비율 계산은 그 화면의 기존 로직을 그대로 쓴다, 여기서 다시 안 만든다).
+        const orderNumbers = draftIntent === "invoice" ? data.orderNumbers ?? [] : undefined;
+        const draft = { items: data.items ?? [], orderNumbers, currency: data.currency, memo: data.memo };
         const itemsSummary = (data.items ?? []).map((it) => `${it.name} ${it.quantity}${it.unit ?? "EA"}`).join(", ");
+        const orderSummary = orderNumbers && orderNumbers.length > 0 ? orderNumbers.join(", ") : "";
+        const summaryText = [orderSummary, itemsSummary].filter(Boolean).join(" / ");
         // 단가·수량을 못 찾아 0으로 남은 품목이 있으면 작성 화면에서 제출 버튼이 "합계 0"
         // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
         const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
         const warning = missingPrice ? zh(replyIsZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
-        const draftReplyText = `${draftIntent === "quote" ? zh(replyIsZh, "견적서") : zh(replyIsZh, "청구서")} ${zh(replyIsZh, "초안을 만들었어요")}: ${itemsSummary || zh(replyIsZh, "(품목 없음)")}${warning}`;
+        const draftReplyText = `${draftIntent === "quote" ? zh(replyIsZh, "견적서") : zh(replyIsZh, "청구서")} ${zh(replyIsZh, "초안을 만들었어요")}: ${summaryText || zh(replyIsZh, "(품목 없음)")}${warning}`;
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: draftIntent, draft, createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: draftIntent, draft });
         return;
@@ -937,7 +1003,7 @@ export default function OrganizePage() {
                       message={m}
                       isZh={isZh}
                       onOpenDraft={(kind, draft) => {
-                        if (draft) setAiAssistantDraft({ kind, items: draft.items, currency: draft.currency, memo: draft.memo });
+                        if (draft) setAiAssistantDraft({ kind, items: draft.items, orderNumbers: draft.orderNumbers, currency: draft.currency, memo: draft.memo });
                         router.push(kind === "quote" ? "/my-quotes" : "/my-invoices");
                       }}
                     />

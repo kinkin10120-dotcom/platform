@@ -954,6 +954,9 @@ export interface AssistantMessage {
   // 사라져 보이는 문제가 있었다 — 메시지마다 내용을 들고 있게 해서 그 문제를 없앤다.
   draft?: {
     items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    // invoice일 때만 — 이미 발행된 발주서를 그대로 청구서에 담을 때, 그 발주서들의 soNumber
+    // 목록. 작성 화면에서 이 번호와 일치하는 발주 체크박스를 자동으로 선택해준다.
+    orderNumbers?: string[];
     currency?: "USD" | "CNY" | "KRW" | null;
     memo?: string;
   };

@@ -82,6 +82,7 @@ export interface AddMessageInput {
   fileIntakeSummary?: { projectName?: string; taskName?: string; confidence?: "high" | "medium" | "low" };
   draft?: {
     items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    orderNumbers?: string[];
     currency?: "USD" | "CNY" | "KRW" | null;
     memo?: string;
   };
@@ -108,6 +109,7 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
           ...(it.spec ? { spec: it.spec } : {}),
           ...(it.unit ? { unit: it.unit } : {}),
         })),
+        ...(input.draft.orderNumbers && input.draft.orderNumbers.length > 0 ? { orderNumbers: input.draft.orderNumbers } : {}),
         ...(input.draft.currency ? { currency: input.draft.currency } : {}),
         ...(input.draft.memo ? { memo: input.draft.memo } : {}),
       }

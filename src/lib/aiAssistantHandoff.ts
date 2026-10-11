@@ -11,6 +11,8 @@ export interface AiAssistantDraftItem {
 export interface AiAssistantDraft {
   kind: "quote" | "invoice";
   items: AiAssistantDraftItem[];
+  // invoice일 때만 — 이미 발행된 발주서를 그대로 담을 soNumber 목록.
+  orderNumbers?: string[];
   currency?: SupplierCurrency | null;
   memo?: string;
 }

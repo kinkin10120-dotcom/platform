@@ -83,9 +83,12 @@ export default function MyInvoicesPage() {
     return listenSupplierOrdersByPartner(appUser.uid, setOrders);
   }, [appUser, isPartner]);
 
-  // /organize의 AI 비서가 "청구서 작성"으로 판단한 결과를 여기로 넘겨받는다. 청구서는
-  // 발주서 선택 + "직접 추가" 항목(설명·금액) 조합이라, AI가 뽑은 품목은 직접 추가
-  // 항목으로 채워 넣는다 — 실제 제출은 사람이 확인하고 직접 눌러야 한다.
+  // /organize의 AI 비서가 "청구서 작성"으로 판단한 결과를 여기로 넘겨받는다. 자유 품목은
+  // 직접 추가 항목(설명·금액)으로 채우고, orderNumbers(이미 발행된 발주서를 그대로 담으라는
+  // 지시)가 있으면 그 발주들의 체크박스를 자동으로 선택한다 — 잔금/선금 비율 계산은 이
+  // 화면의 기존 로직(getBilling/billedAmountForOrder)을 그대로 쓴다. 실제 제출은 사람이
+  // 확인하고 직접 눌러야 한다.
+  const [pendingOrderNumbers, setPendingOrderNumbers] = useState<string[] | null>(null);
   useEffect(() => {
     if (!isPartner) return;
     const draft = takeAiAssistantDraft("invoice");
@@ -105,7 +108,17 @@ export default function MyInvoicesPage() {
     setMemo(draft.memo ?? "");
     setSubmitError("");
     setShowForm(true);
+    if (draft.orderNumbers && draft.orderNumbers.length > 0) setPendingOrderNumbers(draft.orderNumbers);
   }, [isPartner, isZh]);
+
+  // orders 목록은 별도 실시간 리스너로 들어와서, 위 효과가 실행되는 시점엔 아직 비어있을
+  // 수 있다 — orders가 채워진 뒤에 soNumber로 매칭해 체크박스를 선택한다.
+  useEffect(() => {
+    if (!pendingOrderNumbers || orders.length === 0) return;
+    const matchedIds = orders.filter((o) => pendingOrderNumbers.includes(o.soNumber)).map((o) => o.id);
+    if (matchedIds.length > 0) setSelectedOrderIds((prev) => Array.from(new Set([...prev, ...matchedIds])));
+    setPendingOrderNumbers(null);
+  }, [orders, pendingOrderNumbers]);
 
   useEffect(() => {
     if (!appUser || !isPartner) return;

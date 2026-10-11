@@ -907,8 +907,16 @@ export default function OrganizePage() {
                   ))
                 )}
                 {assistantLoading && (
-                  <div className="flex items-center gap-1.5 text-xs text-[#86868b]">
-                    <Sparkles size={13} className="animate-pulse" /> {zh(isZh, "AI 비서가 처리하는 중...")}
+                  <div className="flex items-end gap-2">
+                    <Sparkles size={14} className="mb-2.5 shrink-0 text-[#4a7fd6]" />
+                    <div className="flex items-center gap-2 rounded-2xl bg-[#f0f7ff] px-4 py-3">
+                      <span className="text-sm text-[#4a7fd6]">{zh(isZh, "생각하는 중")}</span>
+                      <span className="flex gap-1">
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#4a7fd6] [animation-delay:-0.3s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#4a7fd6] [animation-delay:-0.15s]" />
+                        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[#4a7fd6]" />
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

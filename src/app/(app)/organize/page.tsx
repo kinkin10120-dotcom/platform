@@ -925,7 +925,7 @@ export default function OrganizePage() {
               onDrop={(e) => { e.preventDefault(); setDragActive(false); addChatAttachments(e.dataTransfer.files); }}
               className={`flex flex-col overflow-hidden rounded-3xl bg-white transition ${dragActive ? "ring-2 ring-[#1d1d1f]" : ""}`}
             >
-              <div className="h-[50dvh] min-h-[16rem] space-y-3 overflow-y-auto p-4 lg:h-[36rem]">
+              <div className="h-[50dvh] min-h-[16rem] space-y-3 overflow-y-auto p-4 lg:h-[46vh]">
                 {messages.length === 0 ? (
                   <p className="flex h-24 items-center justify-center text-center text-sm text-[#86868b]">
                     {zh(isZh, "무엇이든 적어보세요 — 자료 정리, 견적서·청구서 작성, 가격 질문까지 알아서 처리해드립니다.")}

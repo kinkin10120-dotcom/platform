@@ -6,6 +6,7 @@ import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
 import { enablePushNotifications } from "@/lib/messaging";
 import { useAuth } from "@/lib/auth-context";
 import IosAddToHomeScreenGuide from "@/components/IosAddToHomeScreenGuide";
+import { zh, usePartnerZh } from "@/lib/i18n";
 
 const INSTALL_DISMISS_KEY = "addToHomeScreenBannerDismissedAt";
 const ENABLE_DISMISS_KEY = "enablePushBannerDismissedAt";
@@ -20,6 +21,7 @@ function recentlyDismissed(key: string): boolean {
 
 export default function AddToHomeScreenBanner() {
   const { appUser } = useAuth();
+  const isZh = usePartnerZh();
   // 아이폰·아이패드는 홈 화면에 추가부터 유도하고, 그 외(안드로이드·데스크탑)는
   // 별도 설치 없이 바로 알림 권한만 켜면 되므로 곧바로 "알림 켜기" 배너를 보여준다.
   const [mode, setMode] = useState<"install" | "enable" | null>(null);
@@ -54,7 +56,7 @@ export default function AddToHomeScreenBanner() {
       if (result.ok) {
         setMode(null);
       } else {
-        setEnableError(result.error ?? "설정에 실패했습니다.");
+        setEnableError(result.error ?? zh(isZh, "설정에 실패했습니다."));
       }
     } finally {
       setEnabling(false);
@@ -72,16 +74,16 @@ export default function AddToHomeScreenBanner() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold">
-              {mode === "install" ? "홈 화면에 추가하면 알림을 놓치지 않아요" : "알림을 켜면 놓치는 일이 없어요"}
+              {mode === "install" ? zh(isZh, "홈 화면에 추가하면 알림을 놓치지 않아요") : zh(isZh, "알림을 켜면 놓치는 일이 없어요")}
             </p>
-            <p className="mt-0.5 text-xs text-white/60">마감일 임박, 승인 요청 같은 알림을 바로 받아볼 수 있어요.</p>
+            <p className="mt-0.5 text-xs text-white/60">{zh(isZh, "마감일 임박, 승인 요청 같은 알림을 바로 받아볼 수 있어요.")}</p>
           </div>
           {mode === "install" ? (
             <button
               onClick={() => setGuideOpen(true)}
               className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-white/90"
             >
-              추가하기
+              {zh(isZh, "추가하기")}
             </button>
           ) : (
             <button
@@ -89,7 +91,7 @@ export default function AddToHomeScreenBanner() {
               disabled={enabling}
               className="shrink-0 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-white/90 disabled:opacity-60"
             >
-              {enabling ? "켜는 중..." : "알림 켜기"}
+              {enabling ? zh(isZh, "켜는 중...") : zh(isZh, "알림 켜기")}
             </button>
           )}
           <button onClick={handleDismiss} className="shrink-0 rounded-full p-1 text-white/50 transition hover:bg-white/10 hover:text-white">

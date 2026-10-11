@@ -560,7 +560,7 @@ export default function OrganizePage() {
       const raw = await res.text();
       let data: {
         error?: string;
-        intent?: "file_intake" | "quote" | "invoice" | "question";
+        intent?: "file_intake" | "quote" | "invoice" | "question" | "unclear";
         projectId?: string | null;
         taskId?: string | null;
         confidence?: "high" | "medium" | "low";
@@ -569,6 +569,7 @@ export default function OrganizePage() {
         currency?: "USD" | "CNY" | "KRW" | null;
         memo?: string;
         answer?: string;
+        reply?: string;
         replyLang?: "ko" | "zh";
       };
       try {
@@ -582,6 +583,7 @@ export default function OrganizePage() {
       const replyIsZh = data.replyLang ? data.replyLang === "zh" : isZh;
 
       if (data.intent === "quote" || data.intent === "invoice") {
+        const draftIntent = data.intent;
         // 세션스토리지 한 칸짜리 "보낸 시점에 심어두기" 방식은, 뒤이어 견적/청구 요청을 하나
         // 더 보내거나 같은 버튼을 두 번 누르면 앞서 만든 내용이 사라져 보이는 문제가 있었다
         // — 이제 draft를 메시지 자체에 들고 있다가, 버튼을 누르는 "그 순간"에 심어준다.
@@ -591,15 +593,23 @@ export default function OrganizePage() {
         // 때문에 눌리지 않는다 — 조용히 막히는 대신 왜 안 되는지 미리 알려준다.
         const missingPrice = (data.items ?? []).some((it) => !it.unitPrice || !it.quantity);
         const warning = missingPrice ? zh(replyIsZh, " (단가·수량을 못 찾은 품목이 있어요 — 작성 화면에서 직접 채워주셔야 제출됩니다.)") : "";
-        const draftReplyText = `${data.intent === "quote" ? zh(replyIsZh, "견적서") : zh(replyIsZh, "청구서")} ${zh(replyIsZh, "초안을 만들었어요")}: ${itemsSummary || zh(replyIsZh, "(품목 없음)")}${warning}`;
-        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: data.intent, draft, createdAt: Date.now() }]);
-        await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: data.intent, draft });
+        const draftReplyText = `${draftIntent === "quote" ? zh(replyIsZh, "견적서") : zh(replyIsZh, "청구서")} ${zh(replyIsZh, "초안을 만들었어요")}: ${itemsSummary || zh(replyIsZh, "(품목 없음)")}${warning}`;
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: draftReplyText, intent: draftIntent, draft, createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: draftReplyText, intent: draftIntent, draft });
         return;
       }
       if (data.intent === "question") {
         const answerText = data.answer ?? "";
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: answerText, intent: "question", createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: answerText, intent: "question" });
+        return;
+      }
+      if (data.intent === "unclear") {
+        // 네 가지 어디에도 안 맞는 애매한 말은 무작정 "담은 자료" 큐에 넣는 대신 되묻기만
+        // 한다 — 자료 정리의 기본값이 아니다.
+        const replyText = data.reply ?? zh(replyIsZh, "무슨 말씀이신지 잘 모르겠어요. 자료 정리, 견적서·청구서 작성, 가격 질문 중 어떤 걸 원하시는지 알려주세요.");
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: replyText, intent: "question", createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: replyText, intent: "question" });
         return;
       }
       // file_intake (또는 판단 실패 시 기본값)
@@ -1230,7 +1240,7 @@ function OrganizeItemCard({
             <select
               value={first.selectedProjectId}
               onChange={(e) => onChangeTarget(e.target.value, "")}
-              className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+              className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
             >
               <option value="">{zh(isZh, "프로젝트 선택...")}</option>
               {sortProjectsByUsage(candidates.map((p) => ({ id: p.projectId }))).map((p) => {
@@ -1242,7 +1252,7 @@ function OrganizeItemCard({
               value={first.selectedTaskId}
               onChange={(e) => onChangeTarget(first.selectedProjectId, e.target.value)}
               disabled={!first.selectedProjectId}
-              className="flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b] disabled:opacity-50"
+              className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b] disabled:opacity-50"
             >
               <option value="">{zh(isZh, "업무 선택 안 함(프로젝트 전체)")}</option>
               {tasks.map((t) => (
@@ -1341,7 +1351,7 @@ function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectC
       {open && (
         <div className="space-y-3 border-t border-[#f0f0f2] px-5 py-3">
           <div className="flex gap-2">
-            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} className="flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]">
+            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]">
               <option value="">{zh(isZh, "프로젝트 선택...")}</option>
               {candidates.map((p) => <option key={p.projectId} value={p.projectId}>{trProjectName(p)}</option>)}
             </select>

@@ -3,11 +3,11 @@ import Anthropic from "@anthropic-ai/sdk";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 // 협력사용 "정리 도구"(/organize)의 입력창 — 텍스트(+선택적으로 파일/사진)를 하나 던지면
-// 이 라우트가 먼저 "이게 자료 정리 요청인지, 견적서/청구서 작성 요청인지, 아니면 단순
-// 질문(가격 조회 등)인지"를 스스로 판단해서 그에 맞는 결과만 돌려준다. 실제 저장(Firestore
-// 쓰기)은 전혀 하지 않는다 — file_intake는 /organize의 기존 업로드 큐에, quote/invoice는
-// 기존 작성 폼에 "채워넣기"만 하고, 사람이 확인한 뒤 각자의 제출 버튼을 눌러야 실제로
-// 생성된다.
+// 이 라우트가 먼저 "이게 자료 정리 요청인지, 견적서/청구서 작성 요청인지, 단순 질문(가격
+// 조회 등)인지, 아니면 넷 다 아닌 애매한 말인지"를 스스로 판단해서 그에 맞는 결과만
+// 돌려준다. 실제 저장(Firestore 쓰기)은 전혀 하지 않는다 — file_intake는 /organize의 기존
+// 업로드 큐에, quote/invoice는 기존 작성 폼에 "채워넣기"만 하고, 사람이 확인한 뒤 각자의
+// 제출 버튼을 눌러야 실제로 생성된다. unclear는 아무것도 안 만들고 되물어보기만 한다.
 interface ChecklistItemCandidate { id: string; text: string }
 interface TaskCandidate { taskId: string; taskName: string; status: string; description?: string; checklist?: ChecklistItemCandidate[] }
 interface ProjectCandidate { projectId: string; projectName: string; clientName: string; tasks: TaskCandidate[] }
@@ -50,11 +50,13 @@ export async function POST(req: NextRequest) {
   const contentParts: Anthropic.MessageParam["content"] = [];
   let ctx = "";
 
-  ctx += `너는 제조업 협력사(공급사) 담당자가 쓰는 업무 플랫폼의 AI 비서다. 아래 입력을 보고 네 가지 중 정확히 하나의 의도(intent)를 판단해라:\n\n`;
-  ctx += `1. "file_intake" — 사진/파일/메모를 특정 프로젝트의 특정 업무에 자료로 남기려는 것 (가장 흔한 기본 경우 — 파일이 첨부돼 있거나, 현장/진행상황을 설명하는 문장이면 보통 이거다)\n`;
+  ctx += `너는 제조업 협력사(공급사) 담당자가 쓰는 업무 플랫폼의 AI 비서다. 아래 입력을 보고 다섯 가지 중 정확히 하나의 의도(intent)를 판단해라:\n\n`;
+  ctx += `1. "file_intake" — 사진/파일이 첨부되어 있거나, 현장·진행상황을 설명하는 구체적인 문장으로 특정 프로젝트의 특정 업무에 자료를 남기려는 것\n`;
   ctx += `2. "quote" — 아직 발주 전인 품목의 가격을 먼저 제안하는 견적서를 작성해 달라는 것 ("견적서", "견적", "이 가격에 할 수 있다" 류)\n`;
   ctx += `3. "invoice" — 이미 진행했거나 완료한 작업/납품에 대해 대금을 청구하는 청구서를 작성해 달라는 것 ("청구서", "인보이스", "대금 청구" 류)\n`;
-  ctx += `4. "question" — 단순히 정보를 물어보는 것 (예: "이 제품 단가 얼마였지?", "저번에 얼마에 했지?") — 아무것도 만들거나 첨부하지 않고 답만 하면 되는 경우\n\n`;
+  ctx += `4. "question" — 단가·과거 내역처럼 플랫폼에 쌓인 정보를 물어보는 것 (예: "이 제품 단가 얼마였지?", "저번에 얼마에 했지?")\n`;
+  ctx += `5. "unclear" — 위 네 가지 어디에도 뚜렷하게 안 맞고, 무엇을 원하는지 확신이 안 설 때. 파일/사진도 없고 업무 관련 구체적 내용도 아닌, 애매하거나 되묻는 대화체 문장(예: "어떻게 생겼지?", "그게 뭐야", "아니 그거 말고")이면 억지로 file_intake로 끼워맞추지 말고 이걸 써라.\n\n`;
+  ctx += `file_intake는 "애매하면 일단 담아두는" 기본값이 아니다 — 첨부물이 있거나 업무 내용이 분명할 때만 쓰고, 그렇지 않으면 반드시 unclear로 판단해라.\n\n`;
 
   if (hasFiles) {
     ctx += `※ 파일/사진이 함께 첨부되어 있다. 첨부물이 있는데 문장에서 명시적으로 "견적서"/"청구서"를 요청하지 않는 이상, 기본적으로 file_intake로 판단해라.\n\n`;
@@ -101,6 +103,8 @@ export async function POST(req: NextRequest) {
     `- 단가를 직접 언급 안 했는데 과거 단가 이력에 같은/비슷한 품목이 있으면 그 단가를 참고해 채워도 좋다(그 경우 memo에 "이전 단가 기준"이라고 밝혀라).\n\n` +
     `intent가 "question"이면:\n{"intent": "question", "answer": "...", "replyLang": "ko" | "zh"}\n` +
     `- answer는 위 단가 이력을 근거로 실제 담당자가 답하듯 구체적으로(언제, 얼마였는지) 작성해라. 이력에서 못 찾으면 모른다고 솔직히 답해라. 지어내지 마라.\n\n` +
+    `intent가 "unclear"면:\n{"intent": "unclear", "reply": "...", "replyLang": "ko" | "zh"}\n` +
+    `- reply는 무슨 뜻인지 못 알아들었다는 걸 짧고 자연스럽게 되묻는 한두 문장이다. 이 비서가 할 수 있는 일(자료 정리, 견적서·청구서 작성, 가격 질문)을 가볍게 같이 안내해도 좋다.\n\n` +
     `공통: 숫자(JSON number)는 따옴표 없이, 모르는 선택 필드는 생략하거나 빈 문자열로 둬라.\n\n` +
     `언어 — 클로드처럼 그때그때 사용자가 입력한 문장의 언어를 그대로 따라가라: 이번 [입력 텍스트]가 한국어면 "replyLang"을 "ko"로 하고 comment/memo/answer 등 텍스트 필드도 전부 한국어로 써라. 중국어로 입력했으면 "replyLang"을 "zh"로 하고 그 필드들을 중국어 간체(简体中文)로 써라. ` +
     `이 협력사 계정은 평소 ${isZh ? "중국어" : "한국어"}를 쓰지만, 그건 텍스트가 아예 없고 사진/파일만 왔을 때만 참고하는 기본값일 뿐이다 — 입력 텍스트가 있으면 계정 기본 언어보다 그 텍스트의 실제 언어를 반드시 우선해라(계정은 중국어가 기본이어도 이번에 한국어로 물었으면 한국어로 답한다).`;

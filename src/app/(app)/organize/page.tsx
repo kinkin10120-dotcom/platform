@@ -39,7 +39,7 @@ import {
 } from "@/lib/firestore/partnerArchive";
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
-import { listenConversations, listenMessages, createConversation, addMessage, deleteConversation } from "@/lib/firestore/assistantChat";
+import { listenConversations, listenMessages, createConversation, renameConversation, addMessage, deleteConversation } from "@/lib/firestore/assistantChat";
 import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
@@ -580,8 +580,11 @@ export default function OrganizePage() {
     setChatAttachments([]);
     try {
       let conversationId = activeConversationId;
+      const isNewConversation = !conversationId;
       if (!conversationId) {
-        conversationId = await createConversation(appUser.uid, text.slice(0, 40) || (attachments[0]?.name ?? zh(isZh, "새 대화")));
+        // 제목은 AI 응답이 돌아온 뒤 대화 내용을 대표하는 짧은 제목으로 다시 붙인다 —
+        // 여기서는 그때까지 목록에 보일 임시 제목만 둔다.
+        conversationId = await createConversation(appUser.uid, text.slice(0, 20) || (attachments[0]?.name ?? zh(isZh, "새 대화")));
         setActiveConversationId(conversationId);
       }
       // Firestore 실시간 리스너가 반영되기를 기다리면(특히 막 만든 대화는 리스너가 막
@@ -645,6 +648,7 @@ export default function OrganizePage() {
         answer?: string;
         reply?: string;
         replyLang?: "ko" | "zh";
+        title?: string;
       };
       try {
         data = JSON.parse(raw);
@@ -652,6 +656,11 @@ export default function OrganizePage() {
         throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
       }
       if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
+      // 대화 목록 제목 — 첫 메시지 원문을 그대로 자르는 대신, AI가 이번 대화 전체를
+      // 대표하도록 새로 지어준 짧은 제목으로 바꿔 붙인다(클로드·제미나이 대화 목록과 동일한 방식).
+      if (isNewConversation && data.title) {
+        renameConversation(conversationId, data.title).catch(() => {});
+      }
       // 답변 언어는 계정 기본 설정이 아니라 클로드처럼 이번에 입력한 문장의 언어를 따라간다
       // (중국어 계정이라도 이번에 한국어로 물었으면 한국어로 답한다) — AI가 판단해 돌려준다.
       const replyIsZh = data.replyLang ? data.replyLang === "zh" : isZh;

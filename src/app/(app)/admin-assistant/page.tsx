@@ -9,6 +9,7 @@ import {
   listenConversations,
   listenMessages,
   createConversation,
+  renameConversation,
   addMessage,
   deleteConversation,
   markMessageActionDone,
@@ -106,8 +107,11 @@ export default function AdminAssistantPage() {
     setDraftText("");
     try {
       let conversationId = activeConversationId;
+      const isNewConversation = !conversationId;
       if (!conversationId) {
-        conversationId = await createConversation(appUser.uid, text.slice(0, 40));
+        // 제목은 AI 응답이 돌아온 뒤(아래) 대화 내용을 대표하는 짧은 제목으로 다시 붙인다 —
+        // 여기서는 그때까지 목록에 보일 임시 제목만 둔다.
+        conversationId = await createConversation(appUser.uid, text.slice(0, 20));
         setActiveConversationId(conversationId);
       }
       const userMsg: AssistantMessage = { id: newId(), role: "user", text, createdAt: Date.now() };
@@ -205,6 +209,7 @@ export default function AdminAssistantPage() {
         refs?: string[];
         answer?: string;
         reply?: string;
+        title?: string;
       };
       try {
         data = JSON.parse(raw);
@@ -212,6 +217,11 @@ export default function AdminAssistantPage() {
         throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
       }
       if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
+      // 대화 목록 제목 — 첫 메시지 원문을 그대로 자르는 대신, AI가 이번 대화 전체를
+      // 대표하도록 새로 지어준 짧은 제목으로 바꿔 붙인다(클로드·제미나이 대화 목록과 동일한 방식).
+      if (isNewConversation && data.title) {
+        renameConversation(conversationId, data.title).catch(() => {});
+      }
 
       if (data.intent === "product_register") {
         const name = data.clientName ?? "";

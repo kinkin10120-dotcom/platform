@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   ctx +=
-    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라. 모든 형식에 "replyLang" 필드를 공통으로 포함해라.\n\n` +
+    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라. 모든 형식에 "replyLang"과 "title" 필드를 공통으로 포함해라. title은 [입력 텍스트]를 그대로 자르지 말고, 클로드·제미나이 대화 목록처럼 이번 요청 전체를 대표하는 6~14자 내외의 짧은 제목으로 새로 지어라(언어는 replyLang과 동일하게, 따옴표·마침표 없이).\n\n` +
     `intent가 "file_intake"면:\n{"intent": "file_intake", "projectId": "..." | null, "taskId": "..." | null, "confidence": "high" | "medium" | "low", "comment": "...", "replyLang": "ko" | "zh"}\n` +
     `- comment는 담당자 본인 말투로, 업무 기록에 남길 법한 구체적인 코멘트를 대신 써주는 것이다. 확실히 관련된 업무를 못 찾으면 projectId/taskId는 null로 해라.\n\n` +
     `intent가 "quote"면:\n{"intent": "quote", "items": [{"name": "...", "spec": "...", "quantity": 0, "unit": "EA", "unitPrice": 0}], "currency": "USD" | "CNY" | "KRW" | null, "memo": "...", "replyLang": "ko" | "zh"}\n\n` +

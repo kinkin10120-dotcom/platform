@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   ctx += `[입력 텍스트]\n${text}\n\n`;
 
   ctx +=
-    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라.\n\n` +
+    `판단한 intent에 따라 아래 JSON 형식 중 그 intent에 해당하는 형식으로만, 다른 말 없이 답해라. 다른 intent의 필드는 아예 넣지 마라. 모든 형식에 "title" 필드를 공통으로 포함해라 — [입력 텍스트]를 그대로 자르지 말고, 클로드·제미나이 대화 목록처럼 이번 요청 전체를 대표하는 6~14자 내외의 짧은 제목으로 새로 지어라(예: "비즈클라우드 계약 조회", "RANHUI 발주서 작성", "OO사 단가 등록"). 따옴표·마침표는 넣지 마라.\n\n` +
     `intent가 "product_register"면:\n{"intent": "product_register", "clientName": "...", "productName": "...", "unitPrice": 0, "currency": "KRW" | "USD", "unit": "..."}\n` +
     `- clientName은 [고객 목록]에 있는 이름과 최대한 똑같이 써라(완전히 일치하는 게 없으면 입력한 원문 그대로). "만원"은 ×10000, "$"는 USD, "원"/"₩"은 KRW, 통화를 안 밝히면 KRW로 가정해라.\n\n` +
     `intent가 "purchase_order"면:\n{"intent": "purchase_order", "supplierName": "...", "items": [{"name": "...", "spec": "...", "quantity": 0, "unit": "EA", "unitPrice": 0}], "currency": "USD" | "CNY" | "KRW", "memo": "..."}\n` +

@@ -9,10 +9,11 @@ import pdfParse from "pdf-parse/lib/pdf-parse.js";
 // 업로드 큐에, quote/invoice는 기존 작성 폼에 "채워넣기"만 하고, 사람이 확인한 뒤 각자의
 // 제출 버튼을 눌러야 실제로 생성된다. unclear는 아무것도 안 만들고 되물어보기만 한다.
 interface ChecklistItemCandidate { id: string; text: string }
-interface TaskCandidate { taskId: string; taskName: string; status: string; description?: string; checklist?: ChecklistItemCandidate[] }
+interface TaskCandidate { taskId: string; taskName: string; status: string; dueDate?: string; description?: string; checklist?: ChecklistItemCandidate[] }
 interface ProjectCandidate { projectId: string; projectName: string; clientName: string; tasks: TaskCandidate[] }
 interface PriceHistoryEntry { name: string; spec?: string; unit?: string; unitPrice: number; currency: string; quantity?: number; source: "견적서" | "발주서" | "카탈로그"; date: string }
 interface OrderStatusEntry { soNumber: string; items: string; totalAmount: number; currency: string; issuedAt: string; invoiceStatus: "미청구" | "청구됨(지급 대기)" | "지급완료" }
+interface ArchiveFileEntry { id: string; name: string; projectName?: string; taskName?: string; uploadedAt: string }
 interface HistoryTurn { role: "user" | "assistant"; text: string }
 
 export async function POST(req: NextRequest) {
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     candidates,
     priceHistory,
     orderStatus,
+    archiveFiles,
     history,
     lang,
   }: {
@@ -41,6 +43,7 @@ export async function POST(req: NextRequest) {
     candidates: ProjectCandidate[];
     priceHistory?: PriceHistoryEntry[];
     orderStatus?: OrderStatusEntry[];
+    archiveFiles?: ArchiveFileEntry[];
     history?: HistoryTurn[];
     lang?: "ko" | "zh";
   } = body;
@@ -56,12 +59,13 @@ export async function POST(req: NextRequest) {
   const contentParts: Anthropic.MessageParam["content"] = [];
   let ctx = "";
 
-  ctx += `너는 제조업 협력사(공급사) 담당자가 쓰는 업무 플랫폼의 AI 비서다. 아래 입력을 보고 다섯 가지 중 정확히 하나의 의도(intent)를 판단해라:\n\n`;
+  ctx += `너는 제조업 협력사(공급사) 담당자가 쓰는 업무 플랫폼의 AI 비서다. 아래 입력을 보고 여섯 가지 중 정확히 하나의 의도(intent)를 판단해라:\n\n`;
   ctx += `1. "file_intake" — 사진/파일이 첨부되어 있거나, 현장·진행상황을 설명하는 구체적인 문장으로 특정 프로젝트의 특정 업무에 자료를 남기려는 것\n`;
   ctx += `2. "quote" — 아직 발주 전인 품목의 가격을 먼저 제안하는 견적서를 작성해 달라는 것 ("견적서", "견적", "이 가격에 할 수 있다" 류)\n`;
   ctx += `3. "invoice" — 이미 진행했거나 완료한 작업/납품에 대해 대금을 청구하는 청구서를 작성해 달라는 것 ("청구서", "인보이스", "대금 청구", "잔금 청구" 류)\n`;
-  ctx += `4. "question" — 단가·발주 현황처럼 플랫폼에 쌓인 정보를 물어보는 것 (예: "이 제품 단가 얼마였지?", "저번에 얼마에 했지?", "내 발주 중 아직 입금 안 된 거 뭐 있지?"), 또는 지금 같이 첨부한 사진·파일의 내용 자체를 물어보는 것 (예: 발주서 PDF를 첨부하고 "이거 납기 언제까지야?", 도면 사진을 첨부하고 "여기 치수가 몇이야?")\n`;
-  ctx += `5. "unclear" — 위 네 가지 어디에도 뚜렷하게 안 맞고, 무엇을 원하는지 확신이 안 설 때. 파일/사진도 없고 업무 관련 구체적 내용도 아닌, 애매하거나 되묻는 대화체 문장(예: "어떻게 생겼지?", "그게 뭐야", "아니 그거 말고")이면 억지로 file_intake로 끼워맞추지 말고 이걸 써라.\n\n`;
+  ctx += `4. "question" — 단가·발주·업무 마감일처럼 플랫폼에 쌓인 정보를 물어보는 것 (예: "이 제품 단가 얼마였지?", "저번에 얼마에 했지?", "내 발주 중 아직 입금 안 된 거 뭐 있지?", "이번 주 마감인 업무 뭐 있어?", "오늘 뭐 해야 하지?"), 지금 같이 첨부한 사진·파일의 내용 자체를 물어보는 것 (예: 발주서 PDF를 첨부하고 "이거 납기 언제까지야?"), 또는 그 외에 데이터 조회와 무관하게 자유롭게 상담·자문을 구하는 것(지금 클로드와 대화하는 것처럼 — 데이터 조회가 아니어도 괜찮다)\n`;
+  ctx += `5. "archive_search" — 협력사 자료함에 예전에 올려둔 파일을 다시 찾아달라는 것 (예: "지난번에 올린 도면 찾아줘", "그 사진 다시 보여줘", "OO 업무 자료 뭐 올렸었지?")\n`;
+  ctx += `6. "unclear" — 위 다섯 가지 어디에도 뚜렷하게 안 맞고, 무엇을 원하는지 확신이 안 설 때. 파일/사진도 없고 업무 관련 구체적 내용도 아닌, 애매하거나 되묻는 대화체 문장(예: "어떻게 생겼지?", "그게 뭐야", "아니 그거 말고")이면 억지로 file_intake로 끼워맞추지 말고 이걸 써라.\n\n`;
   ctx += `file_intake는 "애매하면 일단 담아두는" 기본값이 아니다 — 첨부물이 있거나 업무 내용이 분명할 때만 쓰고, 그렇지 않으면 반드시 unclear로 판단해라.\n\n`;
 
   if (hasFiles) {
@@ -73,10 +77,13 @@ export async function POST(req: NextRequest) {
     .map(
       (p) =>
         `- 프로젝트 "${p.projectName}" (클라이언트: ${p.clientName}, projectId: ${p.projectId})\n` +
-        p.tasks.map((t) => `  - 업무 "${t.taskName}" (taskId: ${t.taskId}, 상태: ${t.status}${t.description ? `, 설명: ${t.description}` : ""})`).join("\n")
+        p.tasks.map((t) => `  - 업무 "${t.taskName}" (taskId: ${t.taskId}, 상태: ${t.status}${t.dueDate ? `, 마감일: ${t.dueDate}` : ""}${t.description ? `, 설명: ${t.description}` : ""})`).join("\n")
     )
     .join("\n");
-  ctx += `[현재 진행 중인 프로젝트·업무 목록 — file_intake일 때만 사용]\n${projectListText}\n\n`;
+  ctx += `[현재 진행 중인 프로젝트·업무 목록 — file_intake, 또는 question의 일정 질문(마감일 등)에 사용]\n${projectListText}\n\n`;
+
+  const today = new Date().toISOString().slice(0, 10);
+  ctx += `[오늘 날짜]\n${today}\n\n`;
 
   if (priceHistory && priceHistory.length > 0) {
     const priceListText = priceHistory
@@ -93,6 +100,16 @@ export async function POST(req: NextRequest) {
     ctx +=
       `[이 협력사 앞으로 발행된 발주서 현황 — question(발주·입금 현황 질문)이거나, invoice 작성 시 "이미 발행된 발주서를 그대로 청구서에 담아달라"는 요청에 사용]\n${orderStatusText}\n` +
       `- invoiceStatus가 "미청구"인 건이 아직 청구서에 안 담긴, 청구 가능한 발주다. "지급완료"/"청구됨"은 이미 어떤 청구서에 담겨 있으니 중복으로 또 담으면 안 된다.\n\n`;
+  }
+
+  if (archiveFiles && archiveFiles.length > 0) {
+    const archiveListText = archiveFiles
+      .slice(0, 300)
+      .map((f) => `- id="${f.id}" "${f.name}"${f.projectName ? ` (프로젝트: ${f.projectName}` : ""}${f.taskName ? `, 업무: ${f.taskName}` : ""}${f.projectName ? ")" : ""}, 업로드일 ${f.uploadedAt}`)
+      .join("\n");
+    ctx +=
+      `[협력사 자료함에 올라와 있는 파일 목록 — archive_search일 때 이 중에서만 골라라]\n${archiveListText}\n` +
+      `- archive_search로 판단했으면 이 목록에 있는 id를 "그대로" 복사해서 골라라. 지어내거나 변형하지 마라. 파일명이 정확히 안 맞아도 의미상 비슷하면(같은 업무·비슷한 시기 등) 후보로 포함해도 된다. 해당하는 게 하나도 없으면 fileIds를 빈 배열로 둬라.\n\n`;
   }
 
   if (text) ctx += `[입력 텍스트]\n${text}\n\n`;
@@ -119,9 +136,11 @@ export async function POST(req: NextRequest) {
     `- "잔금 청구서 만들어줘", "이번 달 미청구 건 전부 청구서로" 처럼 이미 발행된 발주서를 가리키는 요청이면, [발주서 현황]에서 invoiceStatus가 "미청구"인 것들의 soNumber를 orderNumbers에 담아라(금액은 적지 마라 — 작성 화면이 발주서 자체 금액으로 자동 계산한다). 사용자가 직접 새 금액을 부른 것만 items에 넣어라. 두 종류가 섞인 요청이면 orderNumbers와 items를 같이 써도 된다.\n\n` +
     `공통(quote/invoice) — 품목이 여러 개면 전부 나눠라. "만원"은 ×10000, "천원"은 ×1000. "$"/달러=USD, "¥"/위안/元=CNY, "원"/₩=KRW. 단가를 직접 언급 안 했는데 과거 단가 이력에 같은/비슷한 품목이 있으면 그 단가를 참고해 채워도 좋다(그 경우 memo에 "이전 단가 기준"이라고 밝혀라).\n\n` +
     `intent가 "question"이면:\n{"intent": "question", "answer": "...", "replyLang": "ko" | "zh"}\n` +
-    `- answer는 위 단가 이력·발주서 현황, 또는 지금 같이 첨부된 사진/파일(PDF 추출 내용 포함)을 근거로 실제 담당자가 답하듯 구체적으로 작성해라. 첨부물 내용에 대한 질문이면 그 안에서 실제로 보이는/쓰여 있는 내용만 답하고, 안 보이는 내용은 지어내지 마라. 자료에서 못 찾으면 모른다고 솔직히 답해라.\n\n` +
+    `- 단가 이력·발주서 현황·업무 마감일, 또는 지금 같이 첨부된 사진/파일(PDF 추출 내용 포함)에 대한 질문이면 그 데이터를 근거로 실제 담당자가 답하듯 구체적으로 작성해라(첨부물 질문은 실제로 보이는/쓰여 있는 내용만 답하고 안 보이는 내용은 지어내지 마라, 데이터에서 못 찾으면 모른다고 솔직히 답해라). 그 외 데이터 조회와 무관한 자유로운 상담·자문 질문이면, 데이터에 매이지 말고 평소 너(클로드)의 지식으로 자연스럽게 답해라.\n\n` +
+    `intent가 "archive_search"면:\n{"intent": "archive_search", "fileIds": ["..."], "answer": "...", "replyLang": "ko" | "zh"}\n` +
+    `- fileIds는 [협력사 자료함에 올라와 있는 파일 목록]의 id를 그대로 골라 담은 배열이다(위 설명 참고). answer는 몇 건을 찾았는지, 무엇인지 짧게 설명하는 한두 문장이다.\n\n` +
     `intent가 "unclear"면:\n{"intent": "unclear", "reply": "...", "replyLang": "ko" | "zh"}\n` +
-    `- reply는 무슨 뜻인지 못 알아들었다는 걸 짧고 자연스럽게 되묻는 한두 문장이다. 이 비서가 할 수 있는 일(자료 정리, 견적서·청구서 작성, 가격 질문)을 가볍게 같이 안내해도 좋다.\n\n` +
+    `- reply는 무슨 뜻인지 못 알아들었다는 걸 짧고 자연스럽게 되묻는 한두 문장이다. 이 비서가 할 수 있는 일(자료 정리, 견적서·청구서 작성, 가격·일정 질문, 자료함 검색, 자유 상담)을 가볍게 같이 안내해도 좋다.\n\n` +
     `공통: 숫자(JSON number)는 따옴표 없이, 모르는 선택 필드는 생략하거나 빈 문자열로 둬라.\n\n` +
     `언어 — 클로드처럼 그때그때 사용자가 입력한 문장의 언어를 그대로 따라가라: 이번 [입력 텍스트]가 한국어면 "replyLang"을 "ko"로 하고 comment/memo/answer 등 텍스트 필드도 전부 한국어로 써라. 중국어로 입력했으면 "replyLang"을 "zh"로 하고 그 필드들을 중국어 간체(简体中文)로 써라. ` +
     `이 협력사 계정은 평소 ${isZh ? "중국어" : "한국어"}를 쓰지만, 그건 텍스트가 아예 없고 사진/파일만 왔을 때만 참고하는 기본값일 뿐이다 — 입력 텍스트가 있으면 계정 기본 언어보다 그 텍스트의 실제 언어를 반드시 우선해라(계정은 중국어가 기본이어도 이번에 한국어로 물었으면 한국어로 답한다).` +

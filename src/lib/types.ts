@@ -937,7 +937,8 @@ export type AssistantIntent =
   | "unclear"
   | "product_register"
   | "purchase_order"
-  | "client_invoice";
+  | "client_invoice"
+  | "archive_search";
 
 export interface AssistantConversation {
   id: string;
@@ -1006,5 +1007,15 @@ export interface AssistantMessage {
   }[];
   // 위 세 가지 중 하나라도 실행(등록/수정/발행 등)까지 마치면 true — 버튼 중복 실행을 막는다.
   actionDone?: boolean;
+  // archive_search일 때만(협력사 비서) — 협력사 자료함에서 찾아낸 파일 목록. 실행 버튼 없이
+  // 바로 클릭해서 열어보는 링크 목록이라 draft와 달리 "실행" 개념이 없다.
+  archiveResults?: {
+    id: string;
+    name: string;
+    url: string;
+    projectName?: string;
+    taskName?: string;
+    uploadedAt: number;
+  }[];
   createdAt: number;
 }

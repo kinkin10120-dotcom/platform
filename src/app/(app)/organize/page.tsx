@@ -59,6 +59,7 @@ interface TaskCandidate {
   taskName: string;
   taskNameZh?: string;
   status: string;
+  dueDate?: string;
   description?: string;
 }
 interface ProjectCandidate {
@@ -189,6 +190,42 @@ async function fetchOrderStatus(partnerId: string): Promise<OrderStatusEntry[]> 
   });
   out.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
   return out.slice(0, 100);
+}
+
+interface ArchiveFileEntry {
+  id: string;
+  name: string;
+  url: string;
+  projectName?: string;
+  taskName?: string;
+  uploadedAt: number;
+}
+
+// AI 비서가 "지난번에 올린 도면 찾아줘" 같은 자료함 검색 질문에 답할 때 쓴다. 프로젝트별로
+// 나뉜 partnerArchiveFiles를, 이 협력사가 배정된 모든 프로젝트에 걸쳐 한 번에 모아온다.
+async function fetchArchiveFiles(candidates: ProjectCandidate[]): Promise<ArchiveFileEntry[]> {
+  const projectIds = candidates.map((p) => p.projectId);
+  if (projectIds.length === 0) return [];
+  const projectNameById = new Map(candidates.map((p) => [p.projectId, p.projectName]));
+  const taskNameById = new Map(candidates.flatMap((p) => p.tasks.map((t) => [t.taskId, t.taskName] as const)));
+  const out: ArchiveFileEntry[] = [];
+  for (const part of chunk(projectIds, 10)) {
+    // eslint-disable-next-line no-await-in-loop
+    const snap = await getDocs(query(collection(db, "partnerArchiveFiles"), where("projectId", "in", part)));
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      out.push({
+        id: d.id,
+        name: data.name,
+        url: data.url,
+        projectName: projectNameById.get(data.projectId),
+        taskName: data.taskId ? taskNameById.get(data.taskId) : undefined,
+        uploadedAt: data.uploadedAt?.toMillis ? data.uploadedAt.toMillis() : Date.now(),
+      });
+    });
+  }
+  out.sort((a, b) => b.uploadedAt - a.uploadedAt);
+  return out.slice(0, 200);
 }
 
 interface IntakeItem {
@@ -469,6 +506,7 @@ export default function OrganizePage() {
                 taskName: t.data().name,
                 taskNameZh: t.data().nameZh || undefined,
                 status: t.data().status,
+                dueDate: t.data().dueDate || undefined,
                 description: t.data().description || undefined,
               })),
           });
@@ -594,7 +632,13 @@ export default function OrganizePage() {
       setMessages((prev) => [...prev, userMsg]);
       await addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) });
 
-      const [priceHistory, orderStatus] = await Promise.all([fetchPriceHistory(appUser.uid), fetchOrderStatus(appUser.uid)]);
+      const [priceHistory, orderStatus, archiveFilesFull] = await Promise.all([
+        fetchPriceHistory(appUser.uid),
+        fetchOrderStatus(appUser.uid),
+        fetchArchiveFiles(candidates),
+      ]);
+      const toDateStr = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+      const archiveFiles = archiveFilesFull.map((f) => ({ id: f.id, name: f.name, projectName: f.projectName, taskName: f.taskName, uploadedAt: toDateStr(f.uploadedAt) }));
 
       // 첨부파일 묶음을 /api/classify와 같은 방식으로 payload화한다.
       let filePayload: Record<string, unknown> = {};
@@ -630,12 +674,12 @@ export default function OrganizePage() {
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: text || undefined, candidates, priceHistory, orderStatus, history, lang: appUser.partnerLang ?? "ko", ...filePayload }),
+        body: JSON.stringify({ text: text || undefined, candidates, priceHistory, orderStatus, archiveFiles, history, lang: appUser.partnerLang ?? "ko", ...filePayload }),
       });
       const raw = await res.text();
       let data: {
         error?: string;
-        intent?: "file_intake" | "quote" | "invoice" | "question" | "unclear";
+        intent?: "file_intake" | "quote" | "invoice" | "question" | "archive_search" | "unclear";
         projectId?: string | null;
         taskId?: string | null;
         confidence?: "high" | "medium" | "low";
@@ -646,6 +690,7 @@ export default function OrganizePage() {
         memo?: string;
         answer?: string;
         reply?: string;
+        fileIds?: string[];
         replyLang?: "ko" | "zh";
         title?: string;
       };
@@ -693,10 +738,24 @@ export default function OrganizePage() {
         await addMessage(conversationId, { role: "assistant", text: answerText, intent: "question" });
         return;
       }
+      if (data.intent === "archive_search") {
+        // AI가 고른 fileIds를, 실제로 방금 조회해둔 자료함 목록(archiveFilesFull)과 대조해서만
+        // 쓴다 — id를 지어냈거나 더 이상 존재하지 않는 파일을 그대로 믿지 않기 위함.
+        const fileIds = data.fileIds ?? [];
+        const matched = archiveFilesFull.filter((f) => fileIds.includes(f.id));
+        // zh()는 고정 문구 사전 조회라 건수가 매번 바뀌는 문장에는 못 쓴다(끼워 넣은 숫자가
+        // 다르면 매번 다른 문자열이라 사전에 못 걸림) — 이 두 문장만 직접 분기한다.
+        const answerText = data.answer || (matched.length > 0
+          ? (replyIsZh ? `在资料库中找到了 ${matched.length} 件。` : `자료함에서 ${matched.length}건을 찾았어요.`)
+          : zh(replyIsZh, "자료함에서 해당하는 파일을 못 찾았어요."));
+        setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: answerText, intent: "archive_search", archiveResults: matched.length > 0 ? matched : undefined, createdAt: Date.now() }]);
+        await addMessage(conversationId, { role: "assistant", text: answerText, intent: "archive_search", archiveResults: matched });
+        return;
+      }
       if (data.intent === "unclear") {
         // 네 가지 어디에도 안 맞는 애매한 말은 무작정 "담은 자료" 큐에 넣는 대신 되묻기만
         // 한다 — 자료 정리의 기본값이 아니다.
-        const replyText = data.reply ?? zh(replyIsZh, "무슨 말씀이신지 잘 모르겠어요. 자료 정리, 견적서·청구서 작성, 가격 질문 중 어떤 걸 원하시는지 알려주세요.");
+        const replyText = data.reply ?? zh(replyIsZh, "무슨 말씀이신지 잘 모르겠어요. 자료 정리, 견적서·청구서 작성, 가격·일정 질문, 자료함 검색 중 어떤 걸 원하시는지 알려주세요.");
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: replyText, intent: "question", createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: replyText, intent: "question" });
         return;
@@ -1270,6 +1329,29 @@ function ChatBubble({
             >
               {message.intent === "quote" ? zh(isZh, "견적서 작성 화면 열기") : zh(isZh, "청구서 작성 화면 열기")}
             </button>
+          )}
+          {!isUser && message.intent === "archive_search" && message.archiveResults && message.archiveResults.length > 0 && (
+            <div className="mt-1.5 space-y-1.5">
+              {message.archiveResults.map((f) => (
+                <a
+                  key={f.id}
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-xs transition hover:border-[#86868b]"
+                >
+                  <Paperclip size={12} className="shrink-0 text-[#86868b]" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-[#1d1d1f]">{f.name}</p>
+                    <p className="truncate text-[#86868b]">
+                      {[f.projectName, f.taskName].filter(Boolean).join(" / ")}
+                      {(f.projectName || f.taskName) && " · "}
+                      {new Date(f.uploadedAt).toLocaleDateString(isZh ? "zh-CN" : "ko-KR")}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </div>
           )}
         </div>
       </div>

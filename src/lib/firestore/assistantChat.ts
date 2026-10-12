@@ -42,6 +42,7 @@ function fromMsgDoc(d: any): AssistantMessage {
     purchaseOrderDraft: data.purchaseOrderDraft ?? undefined,
     clientInvoiceDraft: data.clientInvoiceDraft ?? undefined,
     actionDone: data.actionDone ?? undefined,
+    archiveResults: data.archiveResults ?? undefined,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
   };
 }
@@ -118,6 +119,14 @@ export interface AddMessageInput {
     amount: number;
     currency: "KRW" | "USD";
   }[];
+  archiveResults?: {
+    id: string;
+    name: string;
+    url: string;
+    projectName?: string;
+    taskName?: string;
+    uploadedAt: number;
+  }[];
 }
 
 export async function addMessage(conversationId: string, input: AddMessageInput) {
@@ -187,6 +196,18 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
     ...(productRegisterDraft ? { productRegisterDraft } : {}),
     ...(purchaseOrderDraft ? { purchaseOrderDraft } : {}),
     ...(input.clientInvoiceDraft && input.clientInvoiceDraft.length > 0 ? { clientInvoiceDraft: input.clientInvoiceDraft } : {}),
+    ...(input.archiveResults && input.archiveResults.length > 0
+      ? {
+          archiveResults: input.archiveResults.map((r) => ({
+            id: r.id,
+            name: r.name,
+            url: r.url,
+            uploadedAt: r.uploadedAt,
+            ...(r.projectName ? { projectName: r.projectName } : {}),
+            ...(r.taskName ? { taskName: r.taskName } : {}),
+          })),
+        }
+      : {}),
     createdAt: serverTimestamp(),
   });
   await setDoc(doc(db, "assistantConversations", conversationId), { updatedAt: serverTimestamp() }, { merge: true });

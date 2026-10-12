@@ -113,12 +113,14 @@ export default function AdminAssistantPage() {
       setMessages((prev) => [...prev, userMsg]);
       await addMessage(conversationId, { role: "user", text });
 
-      const [clientsSnap, partnersSnap, clientProductsSnap, supplierOrdersSnap, contractsSnap] = await Promise.all([
+      const [clientsSnap, partnersSnap, clientProductsSnap, supplierOrdersSnap, contractsSnap, clientProductInternalSnap, supplierProductsSnap] = await Promise.all([
         getDocs(collection(db, "clients")),
         getDocs(query(collection(db, "users"), where("role", "==", "partner"))),
         getDocs(collection(db, "clientProducts")),
         getDocs(collection(db, "supplierOrders")),
         getDocs(collection(db, "contracts")),
+        getDocs(collection(db, "clientProductInternal")),
+        getDocs(collection(db, "supplierProducts")),
       ]);
       const clients: NameRef[] = clientsSnap.docs.map((d) => ({ id: d.id, name: d.data().name ?? "" }));
       const partners: NameRef[] = partnersSnap.docs.map((d) => ({ id: d.id, name: d.data().name ?? "" }));
@@ -156,6 +158,35 @@ export default function AdminAssistantPage() {
           signedAt: signedAt ? new Date(signedAt).toISOString().slice(0, 10) : undefined,
         };
       });
+      // 발주서 단가를 안 불러줘도 이미 등록된 매입 단가가 있으면 그걸 쓸 수 있도록, 두
+      // 카탈로그(조립품 BOM이 있는 clientProductInternal과 단순 품목인 supplierProducts)를
+      // 합쳐서 넘긴다.
+      const purchaseCatalog = [
+        ...clientProductInternalSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            productName: (data.productName as string) || "",
+            nameEn: data.nameEn as string | undefined,
+            supplierName: data.supplierName as string | undefined,
+            partnerName: data.partnerName as string | undefined,
+            purchasePrice: data.purchasePrice as number | undefined,
+            purchaseCurrency: data.purchaseCurrency as string | undefined,
+            unit: data.productUnit as string | undefined,
+          };
+        }),
+        ...supplierProductsSnap.docs.map((d) => {
+          const data = d.data();
+          return {
+            productName: (data.name as string) || "",
+            nameEn: data.nameEn as string | undefined,
+            supplierName: data.supplierName as string | undefined,
+            partnerName: data.partnerName as string | undefined,
+            purchasePrice: data.purchasePrice as number | undefined,
+            purchaseCurrency: data.purchaseCurrency as string | undefined,
+            unit: data.unit as string | undefined,
+          };
+        }),
+      ].filter((p) => p.productName);
 
       // 아직 청구서 발행 안 된 회차 — ref를 "orderId:installmentIndex"로 만들어, AI가 고른
       // 걸 다시 실제 PurchaseOrder·회차에 정확히 대응시킨다(금액·대상을 AI가 지어내지 못하게).
@@ -187,7 +218,7 @@ export default function AdminAssistantPage() {
       const res = await fetch("/api/admin-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, clients, partners, clientProducts, unbilledInstallments, ordersOverview, supplierOrdersOverview, contractsOverview, history }),
+        body: JSON.stringify({ text, clients, partners, clientProducts, unbilledInstallments, ordersOverview, supplierOrdersOverview, contractsOverview, purchaseCatalog, history }),
       });
       const raw = await res.text();
       let data: {

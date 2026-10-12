@@ -20,6 +20,7 @@ interface UnbilledInstallment {
 interface OrderOverview { poNumber: string; clientName: string; status: string; totalAmount: number; currency: string }
 interface SupplierOrderOverview { soNumber: string; supplierName: string; status: string; totalAmount: number; currency: string }
 interface ContractOverview { companyName: string; title: string; status: string; amount: number; currency: string; signedAt?: string }
+interface PurchaseCatalogEntry { productName: string; nameEn?: string; supplierName?: string; partnerName?: string; purchasePrice?: number; purchaseCurrency?: string; unit?: string }
 interface HistoryTurn { role: "user" | "assistant"; text: string }
 
 export async function POST(req: NextRequest) {
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
     ordersOverview,
     supplierOrdersOverview,
     contractsOverview,
+    purchaseCatalog,
     history,
   }: {
     text?: string;
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
     ordersOverview?: OrderOverview[];
     supplierOrdersOverview?: SupplierOrderOverview[];
     contractsOverview?: ContractOverview[];
+    purchaseCatalog?: PurchaseCatalogEntry[];
     history?: HistoryTurn[];
   } = body;
 
@@ -105,6 +108,16 @@ export async function POST(req: NextRequest) {
       .map((c) => `- [${c.companyName}] ${c.title}: ${c.status}, ${c.amount.toLocaleString()} ${c.currency}${c.signedAt ? `, 서명일 ${c.signedAt}` : ""}`)
       .join("\n");
     ctx += `[계약 현황 전체(서명완료/발송됨/작성중 등) — question일 때 참고, "체결된 계약" = status가 "서명완료"나 "계정연결됨"인 것]\n${text6}\n\n`;
+  }
+
+  if (purchaseCatalog && purchaseCatalog.length > 0) {
+    const text7 = purchaseCatalog
+      .slice(0, 300)
+      .map((p) => `- ${p.productName}${p.nameEn ? ` (${p.nameEn})` : ""} — 공급사: ${p.supplierName || "미지정"}${p.partnerName ? `(연동 협력사: ${p.partnerName})` : ""}, 매입단가: ${p.purchasePrice ? `${p.purchasePrice.toLocaleString()} ${p.purchaseCurrency}${p.unit ? `/${p.unit}` : ""}` : "미등록"}`)
+      .join("\n");
+    ctx +=
+      `[기존에 등록된 협력사 매입 단가 카탈로그 — purchase_order 작성 시 참고]\n${text7}\n` +
+      `- purchase_order로 판단했는데 사용자가 단가를 직접 말하지 않았으면, 0으로 비워두지 말고 이 카탈로그에서 같은/비슷한 제품명(공급사도 일치하면 더 우선)을 찾아 그 매입단가를 그대로 써라. 그런 경우 memo에 "카탈로그 단가 기준"이라고 밝혀라. 그래도 못 찾으면 unitPrice를 0으로 두고 memo에 "단가 확인 필요"라고 밝혀라.\n\n`;
   }
 
   ctx += `[입력 텍스트]\n${text}\n\n`;

@@ -928,12 +928,23 @@ export interface SupplierQuote {
   createdBy: string;
 }
 
-// ---- AI 비서 대화 기록 (/organize) ----
-export type AssistantIntent = "file_intake" | "quote" | "invoice" | "question";
+// ---- AI 비서 대화 기록 (/organize, /admin-assistant) ----
+export type AssistantIntent =
+  | "file_intake"
+  | "quote"
+  | "invoice"
+  | "question"
+  | "unclear"
+  | "product_register"
+  | "purchase_order"
+  | "client_invoice";
 
 export interface AssistantConversation {
   id: string;
+  // 협력사 비서에서는 그 협력사 uid, 관리자 비서에서는 그 관리자 uid — 필드명은 그대로 두되
+  // "대화를 만든 계정"으로 읽는다(규칙상 관리자는 어차피 전체 읽기/쓰기 권한이 있어 재사용 가능).
   partnerId: string;
+  scope?: "admin";
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -960,5 +971,40 @@ export interface AssistantMessage {
     currency?: "USD" | "CNY" | "KRW" | null;
     memo?: string;
   };
+  // product_register일 때만(관리자 비서) — 고객 제품 단가 등록/수정 초안. matchedClientId가
+  // 없으면 입력한 이름으로 고객을 못 찾은 것이라 관리자가 직접 골라야 한다.
+  productRegisterDraft?: {
+    clientName: string;
+    matchedClientId?: string;
+    matchedClientName?: string;
+    productName: string;
+    unitPrice: number;
+    currency: "KRW" | "USD";
+    unit?: string;
+    existingProductId?: string; // 같은 고객에 이미 같은 이름의 제품이 있으면 "등록"이 아니라 "수정"
+  };
+  // purchase_order일 때만(관리자 비서) — 협력사(공급사) 앞 매입 발주서(SupplierOrder) 작성 초안.
+  purchaseOrderDraft?: {
+    supplierName: string;
+    matchedPartnerId?: string;
+    matchedPartnerName?: string;
+    items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    currency: "USD" | "CNY" | "KRW";
+    memo?: string;
+  };
+  // client_invoice일 때만(관리자 비서) — 완료·확정된 고객 발주건 중 아직 발행 안 된 회차를
+  // 청구서로 발행하는 초안. 여러 건을 한번에("미청구 전부") 묶을 수 있어 배열이다.
+  clientInvoiceDraft?: {
+    clientId: string;
+    clientName: string;
+    orderId: string;
+    poNumber: string;
+    installmentIndex: number;
+    installmentLabel: string;
+    amount: number;
+    currency: Currency;
+  }[];
+  // 위 세 가지 중 하나라도 실행(등록/수정/발행 등)까지 마치면 true — 버튼 중복 실행을 막는다.
+  actionDone?: boolean;
   createdAt: number;
 }

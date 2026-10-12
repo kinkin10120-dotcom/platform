@@ -38,6 +38,10 @@ function fromMsgDoc(d: any): AssistantMessage {
     intent: data.intent ?? undefined,
     fileIntakeSummary: data.fileIntakeSummary ?? undefined,
     draft: data.draft ?? undefined,
+    productRegisterDraft: data.productRegisterDraft ?? undefined,
+    purchaseOrderDraft: data.purchaseOrderDraft ?? undefined,
+    clientInvoiceDraft: data.clientInvoiceDraft ?? undefined,
+    actionDone: data.actionDone ?? undefined,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
   };
 }
@@ -86,6 +90,34 @@ export interface AddMessageInput {
     currency?: "USD" | "CNY" | "KRW" | null;
     memo?: string;
   };
+  productRegisterDraft?: {
+    clientName: string;
+    matchedClientId?: string;
+    matchedClientName?: string;
+    productName: string;
+    unitPrice: number;
+    currency: "KRW" | "USD";
+    unit?: string;
+    existingProductId?: string;
+  };
+  purchaseOrderDraft?: {
+    supplierName: string;
+    matchedPartnerId?: string;
+    matchedPartnerName?: string;
+    items: { name: string; spec?: string; quantity: number; unit?: string; unitPrice: number }[];
+    currency: "USD" | "CNY" | "KRW";
+    memo?: string;
+  };
+  clientInvoiceDraft?: {
+    clientId: string;
+    clientName: string;
+    orderId: string;
+    poNumber: string;
+    installmentIndex: number;
+    installmentLabel: string;
+    amount: number;
+    currency: "KRW" | "USD";
+  }[];
 }
 
 export async function addMessage(conversationId: string, input: AddMessageInput) {
@@ -114,6 +146,37 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
         ...(input.draft.memo ? { memo: input.draft.memo } : {}),
       }
     : undefined;
+  // productRegisterDraft/purchaseOrderDraft도 draft와 같은 이유로 필드 단위로 정리한다
+  // (매칭 실패 시 matchedClientId/matchedPartnerId 등이 개별적으로 undefined일 수 있다).
+  const productRegisterDraft = input.productRegisterDraft
+    ? {
+        clientName: input.productRegisterDraft.clientName,
+        productName: input.productRegisterDraft.productName,
+        unitPrice: input.productRegisterDraft.unitPrice,
+        currency: input.productRegisterDraft.currency,
+        ...(input.productRegisterDraft.matchedClientId ? { matchedClientId: input.productRegisterDraft.matchedClientId } : {}),
+        ...(input.productRegisterDraft.matchedClientName ? { matchedClientName: input.productRegisterDraft.matchedClientName } : {}),
+        ...(input.productRegisterDraft.unit ? { unit: input.productRegisterDraft.unit } : {}),
+        ...(input.productRegisterDraft.existingProductId ? { existingProductId: input.productRegisterDraft.existingProductId } : {}),
+      }
+    : undefined;
+  const purchaseOrderDraft = input.purchaseOrderDraft
+    ? {
+        supplierName: input.purchaseOrderDraft.supplierName,
+        currency: input.purchaseOrderDraft.currency,
+        items: input.purchaseOrderDraft.items.map((it) => ({
+          name: it.name,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          ...(it.spec ? { spec: it.spec } : {}),
+          ...(it.unit ? { unit: it.unit } : {}),
+        })),
+        ...(input.purchaseOrderDraft.matchedPartnerId ? { matchedPartnerId: input.purchaseOrderDraft.matchedPartnerId } : {}),
+        ...(input.purchaseOrderDraft.matchedPartnerName ? { matchedPartnerName: input.purchaseOrderDraft.matchedPartnerName } : {}),
+        ...(input.purchaseOrderDraft.memo ? { memo: input.purchaseOrderDraft.memo } : {}),
+      }
+    : undefined;
+
   await addDoc(collection(db, "assistantConversations", conversationId, "messages"), {
     role: input.role,
     text: input.text,
@@ -121,9 +184,18 @@ export async function addMessage(conversationId: string, input: AddMessageInput)
     ...(input.intent ? { intent: input.intent } : {}),
     ...(fileIntakeSummary && Object.keys(fileIntakeSummary).length > 0 ? { fileIntakeSummary } : {}),
     ...(draft ? { draft } : {}),
+    ...(productRegisterDraft ? { productRegisterDraft } : {}),
+    ...(purchaseOrderDraft ? { purchaseOrderDraft } : {}),
+    ...(input.clientInvoiceDraft && input.clientInvoiceDraft.length > 0 ? { clientInvoiceDraft: input.clientInvoiceDraft } : {}),
     createdAt: serverTimestamp(),
   });
   await setDoc(doc(db, "assistantConversations", conversationId), { updatedAt: serverTimestamp() }, { merge: true });
+}
+
+// 제품등록/발주서작성/청구서발행 카드의 버튼을 눌러 실제 처리를 마친 뒤 호출 — 다시 들어와도
+// 버튼이 "완료됨"으로 보여 중복 실행(제품 중복 등록, 청구서 중복 발행 등)을 막는다.
+export async function markMessageActionDone(conversationId: string, messageId: string) {
+  await updateDoc(doc(db, "assistantConversations", conversationId, "messages", messageId), { actionDone: true });
 }
 
 // Firestore는 상위 문서를 지워도 서브컬렉션(messages)이 자동으로 안 지워지므로, 대화를

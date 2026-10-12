@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck, Tag } from "lucide-react";
+import { LayoutGrid, Building2, ListChecks, LogOut, Pencil, Check, X, Megaphone, MessageCircleQuestion, FileText, Bell, TrendingUp, ShoppingCart, FileSignature, Factory, Lock, Receipt, Calculator, ShieldCheck, Tag, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { disablePushNotifications } from "@/lib/messaging";
@@ -40,6 +40,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
     { href: "/quotes", label: "견적 관리", icon: FileText, show: isAdmin },
     { href: "/inquiries", label: "문의 관리", icon: MessageCircleQuestion, show: isAdmin },
     { href: "/orders", label: "발주 관리", icon: ShoppingCart, show: isAdmin },
+    { href: "/admin-assistant", label: "AI 비서", icon: Sparkles, show: isAdmin },
     { href: "/contracts", label: "계약 관리", icon: FileSignature, show: isAdmin },
     { href: "/schedule-report", label: "일정 변경 리포트", icon: TrendingUp, show: isAdmin },
     { href: "/templates", label: "업무 템플릿", icon: ListChecks, show: isAdmin },

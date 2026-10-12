@@ -102,7 +102,7 @@ export default function HomePage() {
   }, []);
 
   // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
-  const zhProjectNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
+  const zhProjectNames = useZhAutoTranslate(isZh, [...projects.map((p) => p.name), ...projects.map((p) => p.clientDisplayName ?? "")]);
   // 공지 배너 제목도 마찬가지 — 관리자가 쓴 자유 텍스트다.
   const zhNoticeTitle = useZhAutoTranslate(isZh, latestNotice ? [latestNotice.title] : []);
 
@@ -680,7 +680,22 @@ export default function HomePage() {
                 고객 미지정
               </span>
             )}
-            <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin ? "pt-0.5" : "pt-6"}`}>
+            {/* 협력사 계정은 clients 컬렉션을 읽을 권한이 없어, 프로젝트 문서에 복사해둔
+                clientDisplayName/clientLogoUrl(Project 타입 참고)로 같은 배지를 보여준다. */}
+            {!isAdmin && isPartner && p.clientDisplayName && (
+              <div className="ml-[18px] mr-6 mt-3 flex w-fit items-center rounded-lg px-1.5 py-0.5">
+                {p.clientLogoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={p.clientLogoUrl}
+                    alt=""
+                    className="mr-2.5 h-7 w-auto max-w-[120px] shrink-0 object-contain md:h-11 md:max-w-[180px]"
+                  />
+                )}
+                <span className="truncate text-xs font-medium text-[#86868b]">{zhProjectNames[p.clientDisplayName] || p.clientDisplayName}</span>
+              </div>
+            )}
+            <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin || (isPartner && p.clientDisplayName) ? "pt-0.5" : "pt-6"}`}>
               <div className="min-w-0 flex-1">
                   <p className="font-semibold text-[#1d1d1f]">{(isZh && p.nameZh) || zhProjectNames[p.name] || p.name}</p>
                   {p.projectType && p.projectType.length > 0 && (

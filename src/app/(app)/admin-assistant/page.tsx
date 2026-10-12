@@ -52,15 +52,10 @@ export default function AdminAssistantPage() {
 
   useEffect(() => {
     if (!appUser || appUser.role !== "admin") return;
-    return listenConversations(
-      appUser.uid,
-      (list) => {
-        setConversations(list);
-        // 처음 들어왔을 때는 가장 최근 대화를 자동으로 열어준다(없으면 "새 대화" 상태로 둔다).
-        setActiveConversationId((prev) => (prev === null && list.length > 0 ? list[0].id : prev));
-      },
-      (e) => setAssistantError(e.message)
-    );
+    // 클로드·제미나이처럼 들어올 때마다 새 대화로 시작한다 — 지난 대화를 자동으로 이어서
+    // 열면 완전히 다른 용건으로 왔는데 직전 맥락이 남아있어 오히려 헷갈린다는 피드백으로
+    // 바꿨다. 지난 대화는 왼쪽 "대화 기록"에서 사람이 직접 골라 들어간다.
+    return listenConversations(appUser.uid, setConversations, (e) => setAssistantError(e.message));
   }, [appUser]);
 
   useEffect(() => {

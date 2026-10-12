@@ -9,6 +9,7 @@ import NotificationBell from "@/components/NotificationBell";
 import GlobalSearch from "@/components/GlobalSearch";
 import AddToHomeScreenBanner from "@/components/AddToHomeScreenBanner";
 import SystemAlertBanner from "@/components/SystemAlertBanner";
+import AiAssistantFab from "@/components/AiAssistantFab";
 import { usePartnerZh } from "@/lib/i18n";
 
 function TodayDate() {
@@ -110,6 +111,7 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+      <AiAssistantFab />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Plus, Trash2, Megaphone, ChevronDown } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenNotices, createNotice, deleteNotice } from "@/lib/firestore/notices";
 import { Notice } from "@/lib/types";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 function formatDate(ts: number, isZh: boolean) {
   return new Date(ts).toLocaleDateString(isZh ? "zh-CN" : "ko-KR", { year: "numeric", month: "long", day: "numeric" });
@@ -33,6 +33,11 @@ export default function NoticesPage() {
   }
 
   useEffect(() => listenNotices(setNotices), []);
+
+  // 공지 제목·내용은 관리자가 직접 쓴 자유 텍스트라 고정 사전(ZH_DICT)으로 못 돌리고,
+  // 프로젝트명·업무명 등과 같은 방식(기계 번역 + 캐시)으로 처리한다.
+  const zhTexts = useZhAutoTranslate(isZh, notices.flatMap((n) => [n.title, n.content]));
+  const trText = (s: string) => zhTexts[s] ?? s;
 
   async function handleCreate() {
     if (!title.trim() || !content.trim() || !appUser) return;
@@ -120,12 +125,12 @@ export default function NoticesPage() {
               <div className="flex items-start justify-between gap-4">
                 <button onClick={() => toggleExpanded(n.id)} className="flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-1.5">
-                    <p className="font-semibold text-[#1d1d1f]">{n.title}</p>
+                    <p className="font-semibold text-[#1d1d1f]">{trText(n.title)}</p>
                     <ChevronDown size={14} className={`shrink-0 text-[#86868b] transition-transform ${expanded ? "rotate-180" : ""}`} />
                   </div>
                   <p className="mt-0.5 text-xs text-[#86868b]">{formatDate(n.createdAt, isZh)} · {n.createdByName}</p>
                   {expanded && (
-                    <p className="mt-3 whitespace-pre-wrap text-sm text-[#1d1d1f] leading-relaxed">{n.content}</p>
+                    <p className="mt-3 whitespace-pre-wrap text-sm text-[#1d1d1f] leading-relaxed">{trText(n.content)}</p>
                   )}
                 </button>
                 {isAdmin && (

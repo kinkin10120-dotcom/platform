@@ -103,6 +103,8 @@ export default function HomePage() {
 
   // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
   const zhProjectNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
+  // 공지 배너 제목도 마찬가지 — 관리자가 쓴 자유 텍스트다.
+  const zhNoticeTitle = useZhAutoTranslate(isZh, latestNotice ? [latestNotice.title] : []);
 
   const showNoticeBanner = !!latestNotice && !!appUser && !latestNotice.readBy?.includes(appUser.uid);
 
@@ -300,7 +302,7 @@ export default function HomePage() {
         <div className="flex items-center gap-3 rounded-2xl bg-[#1d1d1f] px-4 py-3">
           <Megaphone size={16} className="shrink-0 text-white" />
           <Link href="/notices" onClick={dismissNoticeBanner} className="min-w-0 flex-1 truncate text-sm text-white">
-            <span className="font-semibold">공지</span> · {latestNotice.title}
+            <span className="font-semibold">{zh(isZh, "공지")}</span> · {zhNoticeTitle[latestNotice.title] ?? latestNotice.title}
           </Link>
           <button onClick={dismissNoticeBanner} className="shrink-0 text-white/50 hover:text-white">
             <X size={16} />

@@ -16,7 +16,7 @@ import {
 import { createClientProduct, updateClientProduct } from "@/lib/firestore/products";
 import { createSupplierOrder } from "@/lib/firestore/supplierOrders";
 import { listenAllPurchaseOrders, issueInstallmentInvoice } from "@/lib/firestore/purchaseOrders";
-import { AssistantConversation, AssistantMessage, PurchaseOrder, PURCHASE_ORDER_STATUS_LABEL, SUPPLIER_ORDER_STATUS_LABEL } from "@/lib/types";
+import { AssistantConversation, AssistantMessage, PurchaseOrder, PURCHASE_ORDER_STATUS_LABEL, SUPPLIER_ORDER_STATUS_LABEL, CONTRACT_STATUS_LABEL } from "@/lib/types";
 
 // 관리자 전용 "AI 비서" — 협력사용 /organize와 같은 구조(assistantConversations 재사용,
 // partnerId 필드에 관리자 자신의 uid를 써서 내 대화만 걸러본다)를 쓰되, 의도는 전혀 다르다:
@@ -114,11 +114,12 @@ export default function AdminAssistantPage() {
       setMessages((prev) => [...prev, userMsg]);
       await addMessage(conversationId, { role: "user", text });
 
-      const [clientsSnap, partnersSnap, clientProductsSnap, supplierOrdersSnap] = await Promise.all([
+      const [clientsSnap, partnersSnap, clientProductsSnap, supplierOrdersSnap, contractsSnap] = await Promise.all([
         getDocs(collection(db, "clients")),
         getDocs(query(collection(db, "users"), where("role", "==", "partner"))),
         getDocs(collection(db, "clientProducts")),
         getDocs(collection(db, "supplierOrders")),
+        getDocs(collection(db, "contracts")),
       ]);
       const clients: NameRef[] = clientsSnap.docs.map((d) => ({ id: d.id, name: d.data().name ?? "" }));
       const partners: NameRef[] = partnersSnap.docs.map((d) => ({ id: d.id, name: d.data().name ?? "" }));
@@ -142,6 +143,18 @@ export default function AdminAssistantPage() {
           status: SUPPLIER_ORDER_STATUS_LABEL[data.status as keyof typeof SUPPLIER_ORDER_STATUS_LABEL] ?? data.status,
           totalAmount: (data.totalAmount ?? 0) as number,
           currency: (data.currency ?? "USD") as string,
+        };
+      });
+      const contractsOverview = contractsSnap.docs.map((d) => {
+        const data = d.data();
+        const signedAt = data.signedAt?.toMillis ? data.signedAt.toMillis() : data.signedAt;
+        return {
+          companyName: data.companyName as string,
+          title: data.title as string,
+          status: CONTRACT_STATUS_LABEL[data.status as keyof typeof CONTRACT_STATUS_LABEL] ?? data.status,
+          amount: (data.amount ?? 0) as number,
+          currency: (data.currency ?? "KRW") as string,
+          signedAt: signedAt ? new Date(signedAt).toISOString().slice(0, 10) : undefined,
         };
       });
 
@@ -175,7 +188,7 @@ export default function AdminAssistantPage() {
       const res = await fetch("/api/admin-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, clients, partners, clientProducts, unbilledInstallments, ordersOverview, supplierOrdersOverview, history }),
+        body: JSON.stringify({ text, clients, partners, clientProducts, unbilledInstallments, ordersOverview, supplierOrdersOverview, contractsOverview, history }),
       });
       const raw = await res.text();
       let data: {

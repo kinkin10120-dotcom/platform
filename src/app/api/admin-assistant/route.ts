@@ -19,6 +19,7 @@ interface UnbilledInstallment {
 }
 interface OrderOverview { poNumber: string; clientName: string; status: string; totalAmount: number; currency: string }
 interface SupplierOrderOverview { soNumber: string; supplierName: string; status: string; totalAmount: number; currency: string }
+interface ContractOverview { companyName: string; title: string; status: string; amount: number; currency: string; signedAt?: string }
 interface HistoryTurn { role: "user" | "assistant"; text: string }
 
 export async function POST(req: NextRequest) {
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
     unbilledInstallments,
     ordersOverview,
     supplierOrdersOverview,
+    contractsOverview,
     history,
   }: {
     text?: string;
@@ -40,6 +42,7 @@ export async function POST(req: NextRequest) {
     unbilledInstallments?: UnbilledInstallment[];
     ordersOverview?: OrderOverview[];
     supplierOrdersOverview?: SupplierOrderOverview[];
+    contractsOverview?: ContractOverview[];
     history?: HistoryTurn[];
   } = body;
 
@@ -94,6 +97,14 @@ export async function POST(req: NextRequest) {
       .map((o) => `- ${o.soNumber} [${o.supplierName}] ${o.status}: ${o.totalAmount.toLocaleString()} ${o.currency}`)
       .join("\n");
     ctx += `[협력사 매입 발주 현황 전체 — question일 때 참고]\n${text5}\n\n`;
+  }
+
+  if (contractsOverview && contractsOverview.length > 0) {
+    const text6 = contractsOverview
+      .slice(0, 150)
+      .map((c) => `- [${c.companyName}] ${c.title}: ${c.status}, ${c.amount.toLocaleString()} ${c.currency}${c.signedAt ? `, 서명일 ${c.signedAt}` : ""}`)
+      .join("\n");
+    ctx += `[계약 현황 전체(서명완료/발송됨/작성중 등) — question일 때 참고, "체결된 계약" = status가 "서명완료"나 "계정연결됨"인 것]\n${text6}\n\n`;
   }
 
   ctx += `[입력 텍스트]\n${text}\n\n`;

@@ -233,7 +233,7 @@ export default function AdminAssistantPage() {
           existingProductId: existing?.id,
         };
         const replyText = matched
-          ? `${existing ? "기존 제품 단가 수정" : "제품 등록"} 초안을 만들었어요: [${matched.name}] ${draft.productName} — ${draft.unitPrice.toLocaleString()} ${draft.currency}`
+          ? `${existing ? "기존 제품 단가 수정" : "제품 등록"} 초안을 만들었어요: [${matched.name}] ${draft.productName} — ${draft.unitPrice.toLocaleString()} ${draft.currency}${!draft.unitPrice ? " (단가를 못 받아서 0으로 들어갔어요 — 등록 후 직접 고쳐주세요.)" : ""}`
           : `"${name}" 고객을 목록에서 못 찾았어요. 등록된 고객명과 똑같이 다시 말씀해주세요.`;
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: replyText, intent: "product_register", productRegisterDraft: draft, createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: replyText, intent: "product_register", productRegisterDraft: draft });
@@ -252,7 +252,11 @@ export default function AdminAssistantPage() {
           memo: data.memo,
         };
         const itemsSummary = draft.items.map((it) => `${it.name} ${it.quantity}${it.unit ?? "EA"}`).join(", ");
-        const replyText = `매입 발주서 초안을 만들었어요: [${matched?.name ?? name}]${matched ? "" : " (연동된 협력사 계정 없음 — 거래처명만 기록됩니다)"} ${itemsSummary || "(품목 없음)"}`;
+        // 단가를 안 불러줬으면 AI가 임의로 0을 채운다 — 그대로 생성하면 총액 0짜리 발주서가
+        // 조용히 만들어져서, 마치 아무 일도 안 일어난 것처럼 보일 수 있다. 눈에 띄게 경고한다.
+        const missingPrice = draft.items.some((it) => !it.unitPrice);
+        const warning = missingPrice ? " (단가를 못 받아서 0으로 들어갔어요 — 발주 관리에서 직접 채운 뒤 발행해주세요.)" : "";
+        const replyText = `매입 발주서 초안을 만들었어요: [${matched?.name ?? name}]${matched ? "" : " (연동된 협력사 계정 없음 — 거래처명만 기록됩니다)"} ${itemsSummary || "(품목 없음)"}${warning}`;
         setMessages((prev) => [...prev, { id: newId(), role: "assistant", text: replyText, intent: "purchase_order", purchaseOrderDraft: draft, createdAt: Date.now() }]);
         await addMessage(conversationId, { role: "assistant", text: replyText, intent: "purchase_order", purchaseOrderDraft: draft });
         return;

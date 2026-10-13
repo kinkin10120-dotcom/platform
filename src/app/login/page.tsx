@@ -3,10 +3,9 @@
 import { FormEvent, useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "firebase/auth";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { X } from "lucide-react";
 import Image from "next/image";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 
 export default function LoginPage() {
   return (
@@ -41,6 +40,7 @@ function LoginPageInner() {
   const [reqMessage, setReqMessage] = useState("");
   const [reqSubmitting, setReqSubmitting] = useState(false);
   const [reqDone, setReqDone] = useState(false);
+  const [reqError, setReqError] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,18 +63,17 @@ function LoginPageInner() {
   async function handleRequestSubmit(e: FormEvent) {
     e.preventDefault();
     setReqSubmitting(true);
+    setReqError(false);
     try {
-      await addDoc(collection(db, "accountRequests"), {
-        name: reqName,
-        email: reqEmail,
-        company: reqCompany,
-        message: reqMessage,
-        createdAt: serverTimestamp(),
-        status: "pending",
+      const res = await fetch("/api/account-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: reqName, email: reqEmail, company: reqCompany, message: reqMessage }),
       });
+      if (!res.ok) throw new Error("요청 실패");
       setReqDone(true);
     } catch {
-      // silent fail
+      setReqError(true);
     } finally {
       setReqSubmitting(false);
     }
@@ -83,6 +82,7 @@ function LoginPageInner() {
   function closeModal() {
     setModalOpen(false);
     setReqDone(false);
+    setReqError(false);
     setReqName("");
     setReqEmail("");
     setReqCompany("");
@@ -251,6 +251,9 @@ function LoginPageInner() {
                       placeholder="계정 생성 관련 문의사항을 입력해주세요."
                     />
                   </div>
+                  {reqError && (
+                    <p className="text-xs text-red-500">전송에 실패했습니다. 잠시 후 다시 시도해주세요.</p>
+                  )}
                   <button
                     type="submit"
                     disabled={reqSubmitting}

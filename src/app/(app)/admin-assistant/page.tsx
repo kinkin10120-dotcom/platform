@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { MessageSquarePlus, Send, Sparkles, Trash2, Check } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -34,6 +35,7 @@ function newId(): string {
 export default function AdminAssistantPage() {
   const { appUser } = useAuth();
   const isAdmin = appUser?.role === "admin";
+  const router = useRouter();
 
   const [conversations, setConversations] = useState<AssistantConversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -345,6 +347,7 @@ export default function AdminAssistantPage() {
       }
       await markMessageActionDone(activeConversationId, message.id);
       setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, actionDone: true } : m)));
+      router.push("/orders?tab=catalog");
     } catch (e) {
       setAssistantError(e instanceof Error ? e.message : "제품 등록/수정에 실패했습니다.");
     } finally {
@@ -368,6 +371,7 @@ export default function AdminAssistantPage() {
       });
       await markMessageActionDone(activeConversationId, message.id);
       setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, actionDone: true } : m)));
+      router.push("/partners?tab=supplier");
     } catch (e) {
       setAssistantError(e instanceof Error ? e.message : "발주서 생성에 실패했습니다.");
     } finally {
@@ -388,6 +392,7 @@ export default function AdminAssistantPage() {
       }
       await markMessageActionDone(activeConversationId, message.id);
       setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, actionDone: true } : m)));
+      router.push("/orders");
     } catch (e) {
       setAssistantError(e instanceof Error ? e.message : "청구서 발행에 실패했습니다.");
     } finally {

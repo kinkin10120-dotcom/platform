@@ -23,7 +23,7 @@ export default function PartnersPage() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<"accounts" | "supplier" | "supplierInvoices" | "supplierQuotes">(() => {
     const t = searchParams.get("tab");
-    return t === "supplierInvoices" || t === "supplierQuotes" ? t : "accounts";
+    return t === "supplier" || t === "supplierInvoices" || t === "supplierQuotes" ? t : "accounts";
   });
   // 구매발주서 미리보기 중에는 위 헤더·탭을 감춰서 A4 문서만 꽉 차게 보이게 한다.
   const [supplierPreviewing, setSupplierPreviewing] = useState(false);

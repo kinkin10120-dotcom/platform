@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenClients } from "@/lib/firestore/clients";
@@ -69,7 +70,11 @@ const STATUS_STYLE: Record<PurchaseOrderStatus, string> = {
 
 export default function OrdersPage() {
   const { appUser } = useAuth();
-  const [tab, setTab] = useState<"orders" | "catalog" | "unpaid">("orders");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<"orders" | "catalog" | "unpaid">(() => {
+    const t = searchParams.get("tab");
+    return t === "catalog" || t === "unpaid" ? t : "orders";
+  });
 
   if (appUser?.role !== "admin") {
     return <p className="text-sm text-[#86868b]">접근 권한이 없습니다.</p>;

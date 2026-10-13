@@ -25,13 +25,29 @@ function LoginPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [saveEmail, setSaveEmail] = useState(false);
   const [autoLogin, setAutoLogin] = useState(false);
+  // 중국 등 일부 해외 네트워크에서 Firebase 서버 접속 자체가 막혀 로그인이 멈췄을 때만
+  // 노출되는 "우회 접속" 선택지 — 평소엔 아무도 안 보이고, 관리자·고객 로그인에는 전혀
+  // 영향이 없다(src/lib/firebase.ts의 opt-in 플래그 참고).
+  const [networkBlocked, setNetworkBlocked] = useState(false);
+  const [cnProxyOn, setCnProxyOn] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("savedEmail");
     if (saved) { setEmail(saved); setSaveEmail(true); }
     const auto = localStorage.getItem("autoLogin");
     if (auto === "true") setAutoLogin(true);
+    setCnProxyOn(localStorage.getItem("fbProxyCN") === "1");
   }, []);
+
+  function enableCnProxyAndRetry() {
+    localStorage.setItem("fbProxyCN", "1");
+    window.location.reload();
+  }
+
+  function disableCnProxy() {
+    localStorage.removeItem("fbProxyCN");
+    window.location.reload();
+  }
 
   const [modalOpen, setModalOpen] = useState(false);
   const [reqName, setReqName] = useState("");
@@ -62,7 +78,12 @@ function LoginPageInner() {
       router.replace(safeRedirect);
     } catch (err: any) {
       if (err?.code === "network-timeout" || err?.code === "auth/network-request-failed") {
-        setError("로그인 서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요 — 중국 등 일부 해외 네트워크에서는 VPN이 필요할 수 있습니다.");
+        setError(
+          cnProxyOn
+            ? "로그인 서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요."
+            : "로그인 서버에 연결할 수 없습니다. 네트워크 상태를 확인하거나, 아래 우회 접속을 시도해주세요."
+        );
+        if (!cnProxyOn) setNetworkBlocked(true);
       } else {
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
       }
@@ -133,7 +154,13 @@ function LoginPageInner() {
         {/* 카드 */}
         <div className="rounded-3xl border border-black/5 bg-white p-7 shadow-[0_2px_16px_rgba(0,0,0,0.04),0_24px_48px_rgba(0,0,0,0.06)] sm:p-8">
           <h1 className="mb-1 text-lg font-bold text-[#1d1d1f]">로그인</h1>
-          <p className="mb-6 text-xs text-[#86868b]">프로젝트 일정·업무·자료를 한 곳에서 관리하세요.</p>
+          <p className="mb-2 text-xs text-[#86868b]">프로젝트 일정·업무·자료를 한 곳에서 관리하세요.</p>
+          {cnProxyOn && (
+            <div className="mb-4 flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <span>우회 접속 모드 켜짐</span>
+              <button type="button" onClick={disableCnProxy} className="font-medium underline">끄기</button>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -171,6 +198,15 @@ function LoginPageInner() {
             </div>
 
             {error && <p className="text-xs text-red-500">{error}</p>}
+            {networkBlocked && !cnProxyOn && (
+              <button
+                type="button"
+                onClick={enableCnProxyAndRetry}
+                className="w-full rounded-full border border-[#d1d1d6] py-2.5 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]"
+              >
+                우회 접속 시도 (중국 등 네트워크 차단 지역용)
+              </button>
+            )}
 
             <button
               type="submit"

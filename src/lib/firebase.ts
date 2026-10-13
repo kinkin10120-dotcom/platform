@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getStorage, ref, getBlob } from "firebase/storage";
 
 const firebaseConfig = {
@@ -15,8 +15,30 @@ const firebaseConfig = {
 // Next.js의 핫 리로드 환경에서 앱이 중복 초기화되는 것을 방지
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// 중국 등 일부 해외 네트워크에서는 브라우저가 *.googleapis.com에 직접 접속을 못 해서
+// 로그인·데이터 로딩이 전부 멈춘다. 로그인 화면에서 "우회 접속"을 직접 선택한 세션에만
+// 이 플래그가 켜지고(src/app/login/page.tsx 참고), 그 세션에서만 우리 도메인을 경유하는
+// 프록시(src/app/identitytoolkit.googleapis.com, securetoken.googleapis.com,
+// api/fbproxy/firestore)를 거친다 — 인증 로직·보안 규칙은 그대로이고 네트워크 경로만
+// 바뀐다. 이 플래그를 켜지 않는 한(관리자·고객 포함 거의 모든 세션) 아래 분기는 전혀
+// 실행되지 않고 지금까지와 똑같이 Firebase에 직접 접속한다.
+const useCnProxy = typeof window !== "undefined" && localStorage.getItem("fbProxyCN") === "1";
+
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+if (useCnProxy) {
+  connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
+}
+
+// initializeFirestore는 같은 app에 대해 getFirestore보다 먼저, 딱 한 번만 호출해야 한다 —
+// 이 파일이 db를 export하는 유일한 지점이라 조건은 여기서만 갈린다.
+export const db = useCnProxy
+  ? initializeFirestore(app, {
+      host: `${window.location.host}/api/fbproxy/firestore`,
+      ssl: true,
+      experimentalForceLongPolling: true,
+    })
+  : getFirestore(app);
+
 export const storage = getStorage(app);
 
 // 로그인(관리자 등)이 있어야 열리는 스토리지 파일용 — <a href={url}> 방식은 브라우저가

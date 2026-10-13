@@ -48,13 +48,24 @@ function LoginPageInner() {
     setSubmitting(true);
     try {
       await setPersistence(auth, autoLogin ? browserLocalPersistence : browserSessionPersistence);
-      await signInWithEmailAndPassword(auth, email, password);
+      // 중국 등 일부 해외 네트워크에서는 Firebase Auth 서버 자체가 차단돼 있어, 에러가
+      // 바로 안 나고 연결이 그냥 끊기지 않은 채로 무한정 멈춘다("로그인 중..."에서 영원히
+      // 안 넘어감) — 브라우저 기본 타임아웃(수십~수백 초)까지 기다리게 두지 않고, 직접
+      // 타임아웃을 걸어서 몇 초 안에 원인을 알 수 있는 메시지로 끊어준다.
+      await Promise.race([
+        signInWithEmailAndPassword(auth, email, password),
+        new Promise((_, reject) => setTimeout(() => reject({ code: "network-timeout" }), 12000)),
+      ]);
       if (saveEmail) { localStorage.setItem("savedEmail", email); } else { localStorage.removeItem("savedEmail"); }
       localStorage.setItem("autoLogin", String(autoLogin));
       const safeRedirect = redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/home";
       router.replace(safeRedirect);
     } catch (err: any) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      if (err?.code === "network-timeout" || err?.code === "auth/network-request-failed") {
+        setError("로그인 서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요 — 중국 등 일부 해외 네트워크에서는 VPN이 필요할 수 있습니다.");
+      } else {
+        setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      }
     } finally {
       setSubmitting(false);
     }

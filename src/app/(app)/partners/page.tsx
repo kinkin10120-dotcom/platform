@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { listenPartners } from "@/lib/firestore/users";
 import { listenAllProjects } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
-import { createPartnerAccount, updatePartnerProjects, deleteClientAccount, sendPasswordResetEmail } from "@/lib/functions";
+import { createPartnerAccount, updatePartnerProjects, deleteClientAccount, sendPasswordResetEmail, setUserPasswordDirectly } from "@/lib/functions";
 import { AppUser, Project, Client } from "@/lib/types";
 import SupplierOrdersTab from "@/components/SupplierOrdersTab";
 import SupplierInvoicesTab from "@/components/SupplierInvoicesTab";
@@ -41,6 +41,11 @@ export default function PartnersPage() {
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AppUser | null>(null);
   const [deleteInput, setDeleteInput] = useState("");
+  const [passwordTarget, setPasswordTarget] = useState<AppUser | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [settingPassword, setSettingPassword] = useState(false);
+  const [sendingResetEmail, setSendingResetEmail] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState("");
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -103,6 +108,45 @@ export default function PartnersPage() {
     await deleteClientAccount(deleteTarget.uid);
     setDeleteTarget(null);
     setDeleteInput("");
+  }
+
+  function openPasswordModal(p: AppUser) {
+    setPasswordTarget(p);
+    setNewPassword("");
+    setPasswordMsg("");
+  }
+
+  async function handleSendResetEmail() {
+    if (!passwordTarget) return;
+    setSendingResetEmail(true);
+    setPasswordMsg("");
+    try {
+      await sendPasswordResetEmail(passwordTarget.email, passwordTarget.name);
+      setPasswordMsg("재설정 메일을 보냈습니다.");
+    } catch {
+      setPasswordMsg("메일 발송에 실패했습니다.");
+    } finally {
+      setSendingResetEmail(false);
+    }
+  }
+
+  // 이메일 재설정 링크는 Firebase가 호스팅하는 페이지라, 중국 등 일부 해외 네트워크에서는
+  // 협력사가 그 링크 자체에 접속을 못 하는 경우가 있다 — 그럴 때 관리자가 여기서 새
+  // 비밀번호를 직접 입력해 즉시 바꿔주면, 상대는 이메일을 열 필요 없이 그 비밀번호로
+  // 바로 로그인하면 된다.
+  async function handleSetPasswordDirectly() {
+    if (!passwordTarget || newPassword.length < 6) return;
+    setSettingPassword(true);
+    setPasswordMsg("");
+    try {
+      await setUserPasswordDirectly(passwordTarget.uid, newPassword);
+      setPasswordMsg("비밀번호가 변경됐습니다. 이 비밀번호를 협력사에게 직접 전달해주세요.");
+      setNewPassword("");
+    } catch {
+      setPasswordMsg("비밀번호 변경에 실패했습니다.");
+    } finally {
+      setSettingPassword(false);
+    }
   }
 
   if (appUser && !isAdmin) {
@@ -263,8 +307,8 @@ export default function PartnersPage() {
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button
-                  onClick={() => sendPasswordResetEmail(p.email, p.name)}
-                  title="비밀번호 재설정 메일 발송"
+                  onClick={() => openPasswordModal(p)}
+                  title="비밀번호 관리"
                   className="rounded-full p-2 text-[#86868b] hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
                 >
                   <KeyRound size={15} />
@@ -307,6 +351,54 @@ export default function PartnersPage() {
           </div>
         )}
       </div>
+
+      {passwordTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setPasswordTarget(null)}>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <p className="font-semibold text-[#1d1d1f]">{passwordTarget.name} 비밀번호 관리</p>
+
+            <div className="space-y-2 rounded-2xl bg-[#f5f5f7] p-4">
+              <p className="text-sm text-[#1d1d1f]">이메일로 재설정 링크 보내기</p>
+              <p className="text-xs text-[#86868b]">기본 방식 — 협력사가 메일의 링크를 열어 직접 비밀번호를 설정합니다.</p>
+              <button
+                onClick={handleSendResetEmail}
+                disabled={sendingResetEmail}
+                className="w-full rounded-full border border-[#d1d1d6] bg-white py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
+              >
+                {sendingResetEmail ? "발송 중..." : "재설정 메일 보내기"}
+              </button>
+            </div>
+
+            <div className="space-y-2 rounded-2xl bg-[#f5f5f7] p-4">
+              <p className="text-sm text-[#1d1d1f]">비밀번호 직접 설정</p>
+              <p className="text-xs text-[#86868b]">
+                중국 등 일부 해외 네트워크에서는 재설정 메일의 링크(Firebase 호스팅)에 접속이 안 될 수 있습니다 —
+                그런 경우 여기서 새 비밀번호를 직접 정해서 협력사에게 알려주세요.
+              </p>
+              <input
+                type="text"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="새 비밀번호 (6자 이상)"
+                className="w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-sm focus:border-[#86868b] focus:outline-none"
+              />
+              <button
+                onClick={handleSetPasswordDirectly}
+                disabled={settingPassword || newPassword.length < 6}
+                className="w-full rounded-full bg-[#1d1d1f] py-2 text-sm font-medium text-white transition hover:bg-black disabled:opacity-40"
+              >
+                {settingPassword ? "변경 중..." : "이 비밀번호로 바로 설정"}
+              </button>
+            </div>
+
+            {passwordMsg && <p className="text-xs text-[#1d1d1f]">{passwordMsg}</p>}
+
+            <div className="flex justify-end">
+              <button onClick={() => setPasswordTarget(null)} className="rounded-full border border-[#d1d1d6] px-4 py-2 text-sm text-[#1d1d1f]">닫기</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setDeleteTarget(null)}>

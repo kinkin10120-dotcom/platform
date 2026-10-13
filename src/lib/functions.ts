@@ -32,6 +32,15 @@ export async function sendPasswordResetEmail(email: string, name?: string, compa
   return res.data;
 }
 
+// 이메일 재설정 링크는 Firebase가 호스팅하는 페이지라 중국 등 일부 해외 네트워크에서
+// 접속이 안 될 수 있다 — 그런 계정은 관리자가 화면에서 새 비밀번호를 직접 입력해 즉시
+// 바꿔줄 수 있게 한다.
+export async function setUserPasswordDirectly(uid: string, password: string) {
+  const fn = httpsCallable<{ uid: string; password: string }, { ok: boolean }>(functions, "adminSetUserPassword");
+  const res = await fn({ uid, password });
+  return res.data;
+}
+
 export interface CreatePartnerAccountInput {
   email: string;
   name: string;

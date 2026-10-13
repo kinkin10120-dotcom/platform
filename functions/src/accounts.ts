@@ -215,6 +215,38 @@ export const sendPasswordResetLink = onCall({ invoker: "public", secrets: [inter
 });
 
 /* ------------------------------------------------------------------ */
+/* 1-1-1) 비밀번호 직접 설정 (관리자 전용 callable)                        */
+/*    - 위 이메일 재설정 링크는 Firebase가 호스팅하는 페이지라 중국 등 일부   */
+/*      해외 협력사 네트워크에서는 그 링크 자체에 접속이 안 될 수 있다 —     */
+/*      그런 경우를 위해 관리자가 화면에서 새 비밀번호를 직접 입력해서       */
+/*      즉시 바꿔줄 수 있게 한다(상대는 이메일을 열 필요가 없다).           */
+/* ------------------------------------------------------------------ */
+export const adminSetUserPassword = onCall({ invoker: "public" }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "로그인이 필요합니다.");
+  }
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "관리자만 사용할 수 있습니다.");
+  }
+
+  const { uid, password } = request.data as { uid?: string; password?: string };
+  if (!uid || !password) {
+    throw new HttpsError("invalid-argument", "uid, password는 필수입니다.");
+  }
+  if (password.length < 6) {
+    throw new HttpsError("invalid-argument", "비밀번호는 6자 이상이어야 합니다.");
+  }
+
+  try {
+    await auth.updateUser(uid, { password });
+  } catch (err: any) {
+    throw new HttpsError("internal", `비밀번호 변경 중 오류가 발생했습니다: ${err?.message ?? err}`);
+  }
+  return { ok: true };
+});
+
+/* ------------------------------------------------------------------ */
 /* 1-2) 클라이언트 계정 삭제 (관리자 전용 callable)                        */
 /*    - Firebase Auth 계정과 users/{uid} Firestore 문서를 함께 삭제한다.    */
 /* ------------------------------------------------------------------ */

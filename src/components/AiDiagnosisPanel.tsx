@@ -61,7 +61,10 @@ export default function AiDiagnosisPanel({ project, tasks }: { project: Project;
       const delayContext = (
         await Promise.all(
           atRiskTasks.map(async (t) => {
-            const comments = await getComments(t.id);
+            // tasks/{id}/comments는 관리자-고객 전용 스레드라 협력사 계정은 읽을 권한이
+            // 없다(firestore.rules, 의도된 설계) — 그 경우 permission-denied가 나는데,
+            // 이건 그냥 "보조 참고자료가 없다"는 뜻이지 진단 전체가 실패할 이유는 아니다.
+            const comments = await getComments(t.id).catch(() => []);
             if (comments.length === 0) return null;
             return {
               taskName: t.name,

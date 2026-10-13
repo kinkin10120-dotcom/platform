@@ -86,13 +86,27 @@ export async function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
   const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const invoiceNumber = `INV-${dateStr}-${docRef.id.slice(0, 4).toUpperCase()}`;
   const totalAmount = input.items.reduce((sum, it) => sum + (it.amount || 0), 0);
+  // 프로젝트 미지정 발주건처럼 linkedProjectId/linkedProjectName(그 외 선택 필드들)이
+  // undefined인 품목이 섞이면 Firestore가 setDoc 전체를 거부한다(중첩 객체 안의 undefined도
+  // 허용 안 함) — 필드 단위로 있는 값만 골라 넣는다.
+  const items = input.items.map((it) => ({
+    id: it.id,
+    source: it.source,
+    description: it.description,
+    amount: it.amount,
+    ...(it.supplierOrderId ? { supplierOrderId: it.supplierOrderId } : {}),
+    ...(it.soNumber ? { soNumber: it.soNumber } : {}),
+    ...(it.linkedProjectId ? { linkedProjectId: it.linkedProjectId } : {}),
+    ...(it.linkedProjectName ? { linkedProjectName: it.linkedProjectName } : {}),
+    ...(it.descriptionKo ? { descriptionKo: it.descriptionKo } : {}),
+  }));
 
   await setDoc(docRef, {
     invoiceNumber,
     partnerId: input.partnerId,
     partnerName: input.partnerName,
     currency: input.currency,
-    items: input.items,
+    items,
     totalAmount,
     title: input.title ?? "",
     titleKo: input.titleKo ?? "",

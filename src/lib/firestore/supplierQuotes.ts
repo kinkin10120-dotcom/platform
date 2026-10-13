@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -168,6 +169,14 @@ export async function updateSupplierQuote(id: string, input: UpdateSupplierQuote
   });
 }
 
+// 알림 메시지는 고정 UI 문구(ZH_DICT)가 아니라 매번 내용이 달라지는 문장(견적서 번호 등을
+// 끼워 넣음)이라 그 자리에서 언어를 갈라 직접 지어야 한다 — 받는 협력사가 중국 계정이면
+// 중국어로, 아니면 한국어로.
+async function getPartnerLang(partnerId: string): Promise<"ko" | "zh"> {
+  const snap = await getDoc(doc(db, "users", partnerId));
+  return snap.data()?.partnerLang === "zh" ? "zh" : "ko";
+}
+
 // 관리자 전용 — 승인하면 같은 내용으로 매입 발주서(작성중 상태)를 자동 생성해, 다시
 // 입력할 필요 없이 거기서 바로 검토·발행만 하면 되게 한다.
 export async function approveSupplierQuote(quote: SupplierQuote, decidedBy: string) {
@@ -201,11 +210,15 @@ export async function approveSupplierQuote(quote: SupplierQuote, decidedBy: stri
   });
 
   try {
+    const lang = await getPartnerLang(quote.partnerId);
     await createNotification({
       userId: quote.partnerId,
       type: "supplier_quote_approved",
       supplierQuoteId: quote.id,
-      message: `제출하신 견적서(${quote.quoteNumber})가 승인되어 발주서로 전환되었습니다.`,
+      message:
+        lang === "zh"
+          ? `您提交的报价单(${quote.quoteNumber})已被批准，已转换为采购订单。`
+          : `제출하신 견적서(${quote.quoteNumber})가 승인되어 발주서로 전환되었습니다.`,
     });
   } catch (e) {
     console.error("견적서 승인 알림 발송 실패:", e);
@@ -229,11 +242,15 @@ export async function requestSupplierQuoteRevision(quote: SupplierQuote, decided
   });
 
   try {
+    const lang = await getPartnerLang(quote.partnerId);
     await createNotification({
       userId: quote.partnerId,
       type: "supplier_quote_revision_requested",
       supplierQuoteId: quote.id,
-      message: `제출하신 견적서(${quote.quoteNumber})에 수정 요청이 왔습니다: ${note}`,
+      message:
+        lang === "zh"
+          ? `您提交的报价单(${quote.quoteNumber})收到了修改请求：${noteZh ?? note}`
+          : `제출하신 견적서(${quote.quoteNumber})에 수정 요청이 왔습니다: ${note}`,
     });
   } catch (e) {
     console.error("견적서 수정 요청 알림 발송 실패:", e);
@@ -249,13 +266,23 @@ export async function rejectSupplierQuote(quote: SupplierQuote, decidedBy: strin
   });
 
   try {
+    const [lang, reasonZh] = await Promise.all([
+      getPartnerLang(quote.partnerId),
+      reason ? translateForCache([reason]).then((r) => r[0]) : Promise.resolve(null),
+    ]);
+    const message =
+      lang === "zh"
+        ? reason
+          ? `您提交的报价单(${quote.quoteNumber})已被驳回：${reasonZh ?? reason}`
+          : `您提交的报价单(${quote.quoteNumber})已被驳回。`
+        : reason
+          ? `제출하신 견적서(${quote.quoteNumber})가 반려되었습니다: ${reason}`
+          : `제출하신 견적서(${quote.quoteNumber})가 반려되었습니다.`;
     await createNotification({
       userId: quote.partnerId,
       type: "supplier_quote_rejected",
       supplierQuoteId: quote.id,
-      message: reason
-        ? `제출하신 견적서(${quote.quoteNumber})가 반려되었습니다: ${reason}`
-        : `제출하신 견적서(${quote.quoteNumber})가 반려되었습니다.`,
+      message,
     });
   } catch (e) {
     console.error("견적서 반려 알림 발송 실패:", e);

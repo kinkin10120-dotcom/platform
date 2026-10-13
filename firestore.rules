@@ -268,6 +268,14 @@ service cloud.firestore {
       }
     }
 
+    // 로그인 페이지의 "계정 생성 문의" — 아직 계정이 없는(로그인 안 된) 방문자가 보내는
+    // 공개 폼이라 quoteRequests와 같은 방식으로 create만 누구에게나 열어준다. 이 규칙 자체가
+    // 없어서 전부 조용히 permission-denied로 실패하던 걸 뒤늦게 발견해 추가했다.
+    match /accountRequests/{requestId} {
+      allow list, get, update, delete: if isAdmin();
+      allow create: if true;
+    }
+
     // ---- client products (고객별 발주 제품 카탈로그) ----
     match /clientProducts/{productId} {
       allow get: if isAdmin() || belongsToClient(resource.data.clientId);

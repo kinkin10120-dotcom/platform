@@ -385,6 +385,9 @@ export default function OrganizePage() {
   // 있었다 — 직전 값을 캐시에서 먼저 보여주고(전송 가능 상태로 바로 시작) 백그라운드에서
   // 최신값으로 갱신한다.
   const candidatesCacheKey = `organize:candidates:${appUser?.uid}`;
+  const priceHistoryCacheKey = `organize:priceHistory:${appUser?.uid}`;
+  const orderStatusCacheKey = `organize:orderStatus:${appUser?.uid}`;
+  const archiveFilesCacheKey = `organize:archiveFiles:${appUser?.uid}`;
   const [candidates, setCandidates] = useState<ProjectCandidate[]>(() => getCached(candidatesCacheKey) ?? []);
   const [loadingCandidates, setLoadingCandidates] = useState(() => getCached(candidatesCacheKey) === undefined);
   const [draftText, setDraftText] = useState("");
@@ -529,6 +532,25 @@ export default function OrganizePage() {
     })();
   }, [appUser, candidatesCacheKey]);
 
+  // 실제 핵심 지연 원인 — 메시지를 보낼 때마다("안녕" 같은 한마디에도) 가격이력·발주현황·
+  // 자료함을 매번 처음부터 다시 통째로 조회하고 있었다. 프록시 경유 세션에서는 이 조회
+  // 자체가 느린데 그게 전송할 때마다 반복돼 체감 지연이 컸다 — 화면에 들어올 때 한 번만
+  // 미리 받아두고, 전송 시에는 그 캐시를 그대로 쓴다(값이 실시간으로 바뀌는 데이터가
+  // 아니라 한 세션 안에서는 약간 오래돼도 괜찮다).
+  useEffect(() => {
+    if (!appUser || loadingCandidates) return;
+    (async () => {
+      const [priceHistory, orderStatus, archiveFilesFull] = await Promise.all([
+        fetchPriceHistory(appUser.uid),
+        fetchOrderStatus(appUser.uid),
+        fetchArchiveFiles(candidates),
+      ]);
+      setCached(priceHistoryCacheKey, priceHistory);
+      setCached(orderStatusCacheKey, orderStatus);
+      setCached(archiveFilesCacheKey, archiveFilesFull);
+    })();
+  }, [appUser, loadingCandidates, candidates, priceHistoryCacheKey, orderStatusCacheKey, archiveFilesCacheKey]);
+
   function updateItem(id: string, patch: Partial<IntakeItem>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   }
@@ -642,12 +664,15 @@ export default function OrganizePage() {
       // 자연스럽게 덮어써서 맞춰진다).
       const userMsg: AssistantMessage = { id: newId(), role: "user", text, attachmentNames: attachments.map((f) => f.name), createdAt: Date.now() };
       setMessages((prev) => [...prev, userMsg]);
-      await addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) });
-
-      const [priceHistory, orderStatus, archiveFilesFull] = await Promise.all([
-        fetchPriceHistory(appUser.uid),
-        fetchOrderStatus(appUser.uid),
-        fetchArchiveFiles(candidates),
+      // 메시지 저장과 가격이력/발주현황/자료함 조회는 서로 무관해 병렬로 처리한다. 조회
+      // 쪽은 화면 진입 시 미리 받아둔 캐시(위 useEffect)가 있으면 그걸 그대로 쓰고, 아직
+      // 못 받았을 때만("안녕" 같은 첫 메시지를 캐시가 채워지기도 전에 보낸 경우) 새로
+      // 가져온다 — 매번 다시 통째로 조회하던 게 실제 지연의 큰 부분이었다.
+      const [, priceHistory, orderStatus, archiveFilesFull] = await Promise.all([
+        addMessage(conversationId, { role: "user", text, attachmentNames: attachments.map((f) => f.name) }),
+        getCached<PriceHistoryEntry[]>(priceHistoryCacheKey) ?? fetchPriceHistory(appUser.uid),
+        getCached<OrderStatusEntry[]>(orderStatusCacheKey) ?? fetchOrderStatus(appUser.uid),
+        getCached<ArchiveFileEntry[]>(archiveFilesCacheKey) ?? fetchArchiveFiles(candidates),
       ]);
       const toDateStr = (ms: number) => new Date(ms).toISOString().slice(0, 10);
       const archiveFiles = archiveFilesFull.map((f) => ({ id: f.id, name: f.name, projectName: f.projectName, taskName: f.taskName, uploadedAt: toDateStr(f.uploadedAt) }));
@@ -1153,7 +1178,7 @@ export default function OrganizePage() {
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && !composingRef.current) { e.preventDefault(); handleSendChat(); } }}
                     rows={1}
                     placeholder={zh(isZh, "무엇이든 물어보세요...")}
-                    className="max-h-32 min-h-9 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
+                    className="max-h-32 min-h-9 min-w-0 flex-1 resize-none rounded-2xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none focus:border-[#86868b]"
                   />
                   {!recording && (
                     <button

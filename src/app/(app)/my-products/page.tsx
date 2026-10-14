@@ -8,6 +8,7 @@ import { listenSupplierProductsByPartner } from "@/lib/firestore/supplierProduct
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import { ClientProductInternal, SupplierProduct, SupplierOrderKind, SupplierCurrency, SupplierPartItem, SUPPLIER_ORDER_KIND_LABEL } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
@@ -134,7 +135,7 @@ export default function MyProductsPage() {
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           {r.imageUrl && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={r.imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-[#e5e5e5] object-cover" />
+                            <img src={toProxiedUrl(r.imageUrl)} alt="" className="h-11 w-11 shrink-0 rounded-xl border border-[#e5e5e5] object-cover" />
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-medium text-[#1d1d1f]">{r.name}</p>

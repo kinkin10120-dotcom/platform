@@ -40,6 +40,7 @@ import {
 import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { listenConversations, listenMessages, createConversation, renameConversation, addMessage, deleteConversation } from "@/lib/firestore/assistantChat";
+import { toProxiedUrl } from "@/lib/storageProxy";
 import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
@@ -1335,7 +1336,7 @@ function ChatBubble({
               {message.archiveResults.map((f) => (
                 <a
                   key={f.id}
-                  href={f.url}
+                  href={toProxiedUrl(f.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 rounded-xl border border-[#d1d1d6] bg-white px-3 py-2 text-xs transition hover:border-[#86868b]"

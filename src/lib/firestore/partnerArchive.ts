@@ -14,6 +14,7 @@ import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebas
 import { db, storage } from "@/lib/firebase";
 import { CommentAuthorRole, PartnerArchiveComment, PartnerArchiveFile } from "@/lib/types";
 import { translateForCache, translateToKoreanForCache } from "@/lib/i18n";
+import { isCnProxyOn, uploadFileViaProxy, deleteFileViaProxy } from "@/lib/storageProxy";
 
 // 관리자 ↔ 협력사 전용 프로젝트 단위 자료함 — 업무(task)와 무관하다. 클라이언트(고객)는
 // firestore.rules에 이 컬렉션을 아예 허용하지 않아 접근 경로 자체가 없다.
@@ -108,16 +109,20 @@ export async function uploadPartnerArchiveFile(
     throw new Error(`파일이 너무 큽니다 (${Math.round(file.size / 1024 / 1024)}MB). 100MB 이하만 올릴 수 있습니다.`);
   }
   const storagePath = `partnerArchive/${projectId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, storagePath);
-  const url = await new Promise<string>((resolve, reject) => {
-    const uploadTask = uploadBytesResumable(storageRef, file);
-    uploadTask.on(
-      "state_changed",
-      (snap) => onProgress?.(snap.bytesTransferred / snap.totalBytes),
-      reject,
-      () => getDownloadURL(uploadTask.snapshot.ref).then(resolve, reject)
-    );
-  });
+  // 중국 우회 세션은 Storage SDK가 아니라 프록시 경유 REST 업로드를 쓴다
+  // (storageProxy.ts 상단 설명 참고) — 그 외 모든 세션은 기존 방식 그대로.
+  const url = isCnProxyOn()
+    ? await uploadFileViaProxy(storagePath, file, file.type || "application/octet-stream", onProgress)
+    : await new Promise<string>((resolve, reject) => {
+        const storageRef = ref(storage, storagePath);
+        const uploadTask = uploadBytesResumable(storageRef, file);
+        uploadTask.on(
+          "state_changed",
+          (snap) => onProgress?.(snap.bytesTransferred / snap.totalBytes),
+          reject,
+          () => getDownloadURL(uploadTask.snapshot.ref).then(resolve, reject)
+        );
+      });
 
   const existingSnap = await getDocs(
     query(filesColRef, where("projectId", "==", projectId), where("name", "==", file.name))
@@ -142,7 +147,8 @@ export async function uploadPartnerArchiveFile(
 export async function deletePartnerArchiveFile(fileId: string, storagePath: string) {
   await deleteDoc(doc(db, "partnerArchiveFiles", fileId));
   try {
-    await deleteObject(ref(storage, storagePath));
+    if (isCnProxyOn()) await deleteFileViaProxy(storagePath);
+    else await deleteObject(ref(storage, storagePath));
   } catch (e) {
     console.warn("협력사 자료함 파일 스토리지 삭제 실패(이미 삭제되었을 수 있음)", e);
   }

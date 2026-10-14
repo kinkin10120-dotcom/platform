@@ -28,6 +28,7 @@ import NumberInput from "@/components/NumberInput";
 import PrintablePreview from "@/components/PrintablePreview";
 import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
 import { takeAiAssistantDraft } from "@/lib/aiAssistantHandoff";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -667,7 +668,7 @@ export default function MyInvoicesPage() {
               </div>
             </div>
             {inv.status === "paid" && inv.receiptUrl && (
-              <a href={inv.receiptUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-green-600 underline underline-offset-2">
+              <a href={toProxiedUrl(inv.receiptUrl)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-green-600 underline underline-offset-2">
                 <Receipt size={12} /> {zh(isZh, "영수증 보기")}
               </a>
             )}

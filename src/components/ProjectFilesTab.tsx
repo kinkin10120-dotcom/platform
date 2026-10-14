@@ -8,6 +8,7 @@ import { Task, TaskFile } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import StatusBadge from "@/components/StatusBadge";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 const StepViewer = dynamic(() => import("@/components/StepViewer"), { ssr: false });
 
@@ -121,15 +122,15 @@ function FileRow({
   return (
     <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white">
       {open && isImage && (
-        <a href={f.url} target="_blank" rel="noreferrer">
+        <a href={toProxiedUrl(f.url)} target="_blank" rel="noreferrer">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={f.url} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
+          <img src={toProxiedUrl(f.url)} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
         </a>
       )}
       {open && isPdf && (
-        <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />
+        <iframe src={toProxiedUrl(f.url)} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />
       )}
-      {open && isStp && <StepViewer url={f.url} taskId={f.taskId} fileId={f.id} />}
+      {open && isStp && <StepViewer url={toProxiedUrl(f.url)} taskId={f.taskId} fileId={f.id} />}
 
       <div className="flex items-center justify-between px-3 py-2 text-sm">
         <div className="flex min-w-0 items-center gap-2">
@@ -162,7 +163,7 @@ function FileRow({
               {open ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           )}
-          <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
+          <a href={toProxiedUrl(f.url)} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
             <Download size={14} />
           </a>
           {canDelete && (

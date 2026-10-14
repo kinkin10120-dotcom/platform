@@ -19,6 +19,7 @@ import { getAdmins, getPartnersByProject } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { PartnerArchiveFile, PartnerArchiveComment, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 // 관리자가 올리면 이 프로젝트에 배정된 협력사 계정에게, 협력사가 올리면 관리자 전원에게
 // 알린다 — 지금까지는 자료함에 새 파일·코멘트가 생겨도 상대쪽에 아무 알림이 안 가서,
@@ -80,9 +81,9 @@ function ExpandModal({ f, onClose }: { f: PartnerArchiveFile; onClose: () => voi
       <div className="flex-1 overflow-hidden p-4" onClick={(e) => e.stopPropagation()}>
         {isImage && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={f.url} alt={f.name} className="h-full w-full object-contain" />
+          <img src={toProxiedUrl(f.url)} alt={f.name} className="h-full w-full object-contain" />
         )}
-        {isPdf && <iframe src={f.url} className="h-full w-full rounded-xl bg-white" title={f.name} />}
+        {isPdf && <iframe src={toProxiedUrl(f.url)} className="h-full w-full rounded-xl bg-white" title={f.name} />}
       </div>
     </div>
   );
@@ -124,17 +125,17 @@ function FileRow({
       {expanded && <ExpandModal f={f} onClose={() => setExpanded(false)} />}
       <div className="overflow-hidden rounded-2xl border border-[#f0f0f0] bg-white">
         {preview && isImage && (
-          <a href={f.url} target="_blank" rel="noreferrer">
+          <a href={toProxiedUrl(f.url)} target="_blank" rel="noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={f.url} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
+            <img src={toProxiedUrl(f.url)} alt={f.name} className="max-h-64 w-full bg-[#f5f5f7] object-contain" />
           </a>
         )}
-        {preview && isPdf && <iframe src={f.url} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />}
+        {preview && isPdf && <iframe src={toProxiedUrl(f.url)} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />}
         <div className="flex items-center justify-between px-3 py-2 text-sm">
           <div className="flex min-w-0 items-center gap-2">
             {isImage ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={f.url} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+              <img src={toProxiedUrl(f.url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
             ) : (
               <Paperclip size={13} className="shrink-0 text-[#86868b]" />
             )}
@@ -157,7 +158,7 @@ function FileRow({
                 </button>
               </>
             )}
-            <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
+            <a href={toProxiedUrl(f.url)} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
               <Download size={14} />
             </a>
             {canDelete && (

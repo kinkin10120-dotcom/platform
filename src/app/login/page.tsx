@@ -137,6 +137,19 @@ function LoginPageInner() {
   const inputClass =
     "w-full rounded-xl border border-[#d1d1d6] bg-white px-3 py-2.5 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b] transition";
 
+  // 로그인 여부를 아직 확인 중이거나(authLoading) 이미 로그인된 게 확인돼 홈으로 넘어가는
+  // 중(firebaseUser)이면, 로그인 폼을 잠깐이라도 보여주지 않는다 — 특히 로그인 화면을
+  // 시작 주소로 "홈 화면에 추가"한 PWA에서 열 때마다 로그인 폼이 깜빡였다 사라지는 게
+  // 어색해 보였다.
+  if (authLoading || firebaseUser) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-[#f5f5f7]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="HANDYHAND" className="h-6 w-auto animate-pulse opacity-40" style={{ filter: "brightness(0)" }} />
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#f5f5f7] px-4 py-12">
       <div

@@ -128,6 +128,28 @@ export async function uploadFileViaProxy(
   return `https://firebasestorage.googleapis.com/v0/b/${BUCKET}/o/${encodedPath}?alt=media&token=${downloadToken}`;
 }
 
+// 실제 버그로 확인된 부분: 관리자(직접 접속)는 <a href target="_blank">로 PDF를 열면
+// 사파리가 미리보기/공유 시트를 띄우는데, 협력사(프록시 경유) 세션은 같은 링크로도 그게
+// 안 뜬다. 직접 접속·프록시 응답 헤더를 실측 비교해보니 Content-Length만 빠져 있었는데,
+// Vercel 플랫폼이 함수 응답에서 이 헤더를 항상 제거하는 것으로 보여(Edge/Node 런타임,
+// 스트림/버퍼 바디 다 시도해도 그대로 빠짐) 프록시 쪽에서는 고칠 방법이 없었다. 대신
+// src/lib/firebase.ts의 openAuthenticatedStorageFile과 같은 이미 검증된 방식(새 탭/
+// blob: URL 이동은 사파리에서 빈 화면만 뜨는 게 이미 확인된 적 있어 피하고, blob을 받아
+// <a download>를 코드로 클릭)을 그대로 따른다 — Content-Length 유무와 무관하게 동작한다.
+export async function openFileViaProxy(proxiedUrl: string, fileName: string): Promise<void> {
+  const res = await fetch(proxiedUrl);
+  if (!res.ok) throw new Error(`파일을 여는 데 실패했습니다. (${res.status})`);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = fileName || "download";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+}
+
 export async function deleteFileViaProxy(storagePath: string): Promise<void> {
   const token = await auth.currentUser?.getIdToken();
   if (!token || !BUCKET) return;

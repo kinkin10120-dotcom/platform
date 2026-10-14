@@ -19,7 +19,7 @@ import { getAdmins, getPartnersByProject } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { PartnerArchiveFile, PartnerArchiveComment, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
-import { toProxiedUrl } from "@/lib/storageProxy";
+import { toProxiedUrl, isCnProxyOn, openFileViaProxy } from "@/lib/storageProxy";
 import { getCached, setCached } from "@/lib/queryCache";
 
 // 관리자가 올리면 이 프로젝트에 배정된 협력사 계정에게, 협력사가 올리면 관리자 전원에게
@@ -159,9 +159,18 @@ function FileRow({
                 </button>
               </>
             )}
-            <a href={toProxiedUrl(f.url)} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
-              <Download size={14} />
-            </a>
+            {isCnProxyOn() ? (
+              <button
+                onClick={() => openFileViaProxy(toProxiedUrl(f.url), f.name).catch((e) => alert(e instanceof Error ? e.message : "파일을 여는 데 실패했습니다."))}
+                className="text-[#86868b] hover:text-[#1d1d1f]"
+              >
+                <Download size={14} />
+              </button>
+            ) : (
+              <a href={f.url} target="_blank" rel="noreferrer" className="text-[#86868b] hover:text-[#1d1d1f]">
+                <Download size={14} />
+              </a>
+            )}
             {canDelete && (
               <button onClick={onDelete} className="text-[#86868b] hover:text-red-500">
                 <Trash2 size={14} />

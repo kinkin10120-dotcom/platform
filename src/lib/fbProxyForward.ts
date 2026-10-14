@@ -7,7 +7,14 @@ import { NextRequest, NextResponse } from "next/server";
 // 관리자·고객 계정, 그리고 이 우회를 켜지 않은 모든 세션은 이 라우트 자체를 호출하지
 // 않는다(src/lib/firebase.ts의 opt-in 플래그 참고).
 const HOP_BY_HOP_REQUEST_HEADERS = new Set(["host", "connection", "content-length", "cookie"]);
-const HOP_BY_HOP_RESPONSE_HEADERS = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
+// Content-Length 관련: 협력사 세션에서 PDF 등을 새 탭으로 열면(target="_blank") 사파리가
+// 관리자(직접 접속)와 달리 미리보기·공유 시트를 못 띄우는 증상이 있어, 직접 접속·프록시
+// 응답 헤더를 실측 비교해보니 Content-Length만 빠져 있었다. Edge/Node 런타임, 스트림/버퍼
+// 바디 둘 다로 시도해봤지만 Vercel 플랫폼 자체가 함수 응답에서 이 헤더를 항상 제거하는
+// 것으로 보여(우리가 뭘 보내든 매번 빠짐) 여기서는 고칠 수 없었다 — 그래서 PartnerArchiveTab
+// 쪽에서 href 직접 연결 대신 blob을 받아 내려주는 방식으로 우회했다(src/lib/firebase.ts의
+// openAuthenticatedStorageFile과 동일한 패턴).
+const HOP_BY_HOP_RESPONSE_HEADERS = new Set(["content-encoding", "transfer-encoding", "connection"]);
 
 export async function forwardToHost(req: NextRequest, targetHost: string, localPrefix: string) {
   // 실제 버그로 확인된 부분 ①: 우리 라우트는 전부 [...path] 캐치올 세그먼트를 쓰는데,
@@ -48,7 +55,9 @@ export async function forwardToHost(req: NextRequest, targetHost: string, localP
 
   const outHeaders = new Headers();
   res.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP_RESPONSE_HEADERS.has(key.toLowerCase())) outHeaders.set(key, value);
+    const k = key.toLowerCase();
+    if (HOP_BY_HOP_RESPONSE_HEADERS.has(k) || k === "content-length") return;
+    outHeaders.set(key, value);
   });
 
   return new NextResponse(res.body, { status: res.status, headers: outHeaders });

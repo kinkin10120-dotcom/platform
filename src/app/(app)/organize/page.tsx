@@ -975,10 +975,10 @@ export default function OrganizePage() {
     const uploadable = items.filter((it) => it.status === "ready" && it.selectedProjectId);
     if (uploadable.length === 0) return;
     setUploadingAll(true);
-    for (const item of uploadable) {
-      // eslint-disable-next-line no-await-in-loop
-      await uploadOneItem(item);
-    }
+    // 파일을 하나씩 순서대로 올리면, 프록시를 거치는 세션에서는 파일마다 왕복 지연이
+    // 그대로 쌓인다(각 항목은 updateItem으로 자기 자리만 갱신하므로 동시에 돌려도 안전) —
+    // 한꺼번에 병렬로 올린다.
+    await Promise.all(uploadable.map((item) => uploadOneItem(item)));
     new Set(uploadable.map((it) => it.selectedProjectId)).forEach((id) => recordProjectUsage(id));
     setUploadingAll(false);
   }
@@ -1487,22 +1487,26 @@ function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectC
     setReport("");
     try {
       const sinceMs = Date.now() - days * 24 * 60 * 60 * 1000;
-      const taskActivities: { taskName: string; status: string; comments: string[]; fileNames: string[] }[] = [];
-      for (const t of project.tasks) {
-        // eslint-disable-next-line no-await-in-loop
-        const commentsSnap = await getDocs(collection(db, "tasks", t.taskId, "comments"));
-        const comments = commentsSnap.docs
-          .map((c) => ({ text: c.data().text as string, createdAt: (c.data().createdAt?.toMillis?.() as number) ?? 0 }))
-          .filter((c) => c.createdAt >= sinceMs)
-          .map((c) => c.text);
-        // eslint-disable-next-line no-await-in-loop
-        const filesSnap = await getDocs(collection(db, "tasks", t.taskId, "files"));
-        const fileNames = filesSnap.docs
-          .map((f) => ({ name: f.data().name as string, uploadedAt: (f.data().uploadedAt?.toMillis?.() as number) ?? 0 }))
-          .filter((f) => f.uploadedAt >= sinceMs)
-          .map((f) => f.name);
-        if (comments.length > 0 || fileNames.length > 0) taskActivities.push({ taskName: t.taskName, status: t.status, comments, fileNames });
-      }
+      // 업무마다 코멘트·자료 조회를 순서대로 기다리면 프록시 경유 시 업무 수만큼 지연이
+      // 쌓인다 — 전부 한꺼번에 병렬로 보낸다.
+      const perTask = await Promise.all(
+        project.tasks.map(async (t) => {
+          const [commentsSnap, filesSnap] = await Promise.all([
+            getDocs(collection(db, "tasks", t.taskId, "comments")),
+            getDocs(collection(db, "tasks", t.taskId, "files")),
+          ]);
+          const comments = commentsSnap.docs
+            .map((c) => ({ text: c.data().text as string, createdAt: (c.data().createdAt?.toMillis?.() as number) ?? 0 }))
+            .filter((c) => c.createdAt >= sinceMs)
+            .map((c) => c.text);
+          const fileNames = filesSnap.docs
+            .map((f) => ({ name: f.data().name as string, uploadedAt: (f.data().uploadedAt?.toMillis?.() as number) ?? 0 }))
+            .filter((f) => f.uploadedAt >= sinceMs)
+            .map((f) => f.name);
+          return { taskName: t.taskName, status: t.status, comments, fileNames };
+        })
+      );
+      const taskActivities = perTask.filter((a) => a.comments.length > 0 || a.fileNames.length > 0);
       if (taskActivities.length === 0) {
         setError(isZh ? `最近 ${days} 天内该项目没有上传·留言记录。` : `최근 ${days}일간 이 프로젝트의 업로드·코멘트 기록이 없습니다.`);
         return;

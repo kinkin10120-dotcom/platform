@@ -23,14 +23,16 @@ export function toProxiedUrl(url: string): string {
   return url.replace("https://firebasestorage.googleapis.com", window.location.origin);
 }
 
-// Vercel 플랫폼 자체가 우리 함수에 도달하기도 전에 요청 바디를 막는 한계가 약 4~4.3MB
-// 선에서 걸린다는 걸 실측으로 확인함(코드 버그가 아니라 인프라 제약 — 413은
-// deploymentId 로그의 "source":"static"으로 찍혀, 우리 Edge 라우트가 실행되기 전에
-// 거부당한다는 뜻). 사진 등 흔한 용량의 첨부파일이 쉽게 이 선을 넘기므로, 이 크기를
-// 넘는 파일은 Firebase Storage의 resumable 업로드 프로토콜로 청크 단위로 쪼개서 보낸다
-// (각 청크는 한계보다 훨씬 작게). 직접 호출 + 우리 프록시 경유 둘 다 실측으로 검증함.
-const DIRECT_UPLOAD_LIMIT = 3 * 1024 * 1024; // 3MB까지는 기존 단건 업로드 그대로 사용
-const CHUNK_SIZE = 3 * 1024 * 1024; // 256KB의 배수여야 함(Google 요구사항) — 3MB는 배수
+// Vercel 플랫폼 자체가 우리 함수에 도달하기도 전에 요청 바디를 막는 한계가 있다(코드
+// 버그가 아니라 인프라 제약 — 413은 deploymentId 로그의 "source":"static"으로 찍혀,
+// 우리 Edge 라우트가 실행되기 전에 거부당한다는 뜻). 정확한 경계를 이진 탐색으로 재보니
+// 4,480,000바이트까지는 통과하고 4,500,000바이트부터 막힌다(Vercel이 공개 문서에서
+// 말하는 "4.5MB" 그대로) — 청크를 이 한계에 최대한 가깝게 키울수록 큰 파일 업로드 시
+// 왕복 횟수가 줄어 중국 우회 경로에서 체감 속도가 빨라진다. 4MB(256KB의 배수, Google
+// 요구사항)로 두면 여유 있게 안전하면서도 예전 3MB보다 왕복이 1/4 정도 줄어든다.
+const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB — 256KB의 배수, 4.5MB 한계보다 충분히 작음
+const DIRECT_UPLOAD_LIMIT = CHUNK_SIZE; // 청크 하나에 다 들어가는 크기까지는 단건 업로드가
+// resumable 세션 시작 왕복 1회를 아낄 수 있어 더 빠르다
 
 // 실제 버그로 확인된 부분: Firebase Storage는 객체가 업로드되는 순간 downloadTokens를
 // 자동으로 생성해서 응답 JSON에 그대로 실어준다(실측으로 직접 확인함 — 업로드 직후 메타데이터

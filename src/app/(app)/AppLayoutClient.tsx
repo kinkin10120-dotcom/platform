@@ -20,7 +20,7 @@ function TodayDate() {
 }
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
-  const { firebaseUser, appUser, loading, authStuck } = useAuth();
+  const { firebaseUser, appUser, loading, authStuck, profileLoadError, retryProfile } = useAuth();
   const isZh = usePartnerZh();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -73,6 +73,17 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   if (!firebaseUser) return null;
 
   if (!appUser) {
+    // 계정 자체는 있는데 프로필 조회(users/{uid})가 네트워크 문제로 실패한 경우(특히 중국
+    // 우회 세션은 로그인 직후 첫 요청에서 이런 일시적 실패가 날 수 있다)와, 관리자가 계정
+    // 생성을 아직 안 끝낸 "진짜" 경우를 구분한다 — 전자는 재시도 버튼을 보여준다.
+    if (profileLoadError) {
+      return (
+        <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+          <p className="max-w-xs text-sm text-[#86868b]">계정 정보를 불러오지 못했습니다. 네트워크 상태를 확인해주세요.</p>
+          <button onClick={retryProfile} className="rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white">다시 시도</button>
+        </div>
+      );
+    }
     return (
       <div className="flex h-dvh items-center justify-center px-6 text-center text-sm text-[#86868b]">
         계정 권한 정보가 아직 설정되지 않았습니다. 관리자에게 문의해주세요.

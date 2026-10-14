@@ -18,6 +18,8 @@ interface AuthContextValue {
   appUser: AppUser | null;
   loading: boolean;
   authStuck: boolean;
+  profileLoadError: boolean;
+  retryProfile: () => void;
   signOut: () => Promise<void>;
   updateUserName: (name: string) => Promise<void>;
 }
@@ -27,9 +29,31 @@ const AuthContext = createContext<AuthContextValue>({
   appUser: null,
   loading: true,
   authStuck: false,
+  profileLoadError: false,
+  retryProfile: () => {},
   signOut: async () => {},
   updateUserName: async () => {},
 });
+
+// users/{uid} 조회(getDoc)는 로그인 직후 딱 한 번만 호출되는데, 특히 중국 우회 세션은
+// 막 로그인한 시점(프록시가 아직 "웜업" 안 됐을 수 있는 첫 요청)이라 일시적으로 실패하기
+// 쉽다 — 그 한 번이 실패하면 지금까지는 "계정 권한 정보가 아직 설정되지 않았습니다"라는,
+// 마치 관리자가 계정을 안 만들어준 것 같은 오해를 주는 영구 메시지로 고정돼버렸다(재시도
+// 방법 자체가 없었음). 문서가 "진짜 없는" 경우와 "조회 자체가 실패한" 경우를 구분해서,
+// 후자는 재시도하게 한다.
+async function fetchUserProfile(uid: string, attempt = 1): Promise<{ data: AppUser | null; failed: boolean }> {
+  try {
+    const snap = await getDoc(doc(db, "users", uid));
+    return { data: snap.exists() ? ({ uid, ...(snap.data() as Omit<AppUser, "uid">) }) : null, failed: false };
+  } catch (e) {
+    if (attempt < 3) {
+      await new Promise((r) => setTimeout(r, attempt * 1000));
+      return fetchUserProfile(uid, attempt + 1);
+    }
+    console.error("사용자 프로필 조회 실패", e);
+    return { data: null, failed: true };
+  }
+}
 
 // 로그인 페이지에서 "우회 접속"을 켠 적이 있어도, iOS에서 홈 화면에 추가해 연 앱은
 // Safari 탭과 저장공간(localStorage)이 분리된 별도 컨테이너라 그 설정이 안 넘어온다 —
@@ -45,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [authStuck, setAuthStuck] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState(false);
 
   useEffect(() => {
     let settled = false;
@@ -68,20 +93,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timeoutId);
       setFirebaseUser(user);
       if (user) {
-        try {
-          const snap = await getDoc(doc(db, "users", user.uid));
-          if (snap.exists()) {
-            setAppUser({ uid: user.uid, ...(snap.data() as Omit<AppUser, "uid">) });
-          } else {
-            // users/{uid} 문서가 아직 없는 상태 (관리자가 계정 생성을 마무리하지 않은 경우)
-            setAppUser(null);
-          }
-        } catch (e) {
-          console.error("사용자 프로필 조회 실패", e);
-          setAppUser(null);
-        }
+        const { data, failed } = await fetchUserProfile(user.uid);
+        setAppUser(data);
+        setProfileLoadError(failed);
       } else {
         setAppUser(null);
+        setProfileLoadError(false);
       }
       setLoading(false);
     });
@@ -97,6 +114,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       appUser,
       loading,
       authStuck,
+      profileLoadError,
+      retryProfile: () => {
+        if (!firebaseUser) return;
+        setProfileLoadError(false);
+        fetchUserProfile(firebaseUser.uid).then(({ data, failed }) => {
+          setAppUser(data);
+          setProfileLoadError(failed);
+        });
+      },
       signOut: async () => {
         await fbSignOut(auth);
       },
@@ -106,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAppUser((prev) => (prev ? { ...prev, name } : prev));
       },
     }),
-    [firebaseUser, appUser, loading, authStuck]
+    [firebaseUser, appUser, loading, authStuck, profileLoadError]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

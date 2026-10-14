@@ -491,27 +491,32 @@ export default function OrganizePage() {
       for (const part of chunk(ids, 10)) {
         // eslint-disable-next-line no-await-in-loop
         const projectsSnap = await getDocs(query(collection(db, "projects"), where(documentId(), "in", part)));
-        for (const p of projectsSnap.docs) {
-          const pd = p.data();
-          // eslint-disable-next-line no-await-in-loop
-          const tasksSnap = await getDocs(query(collection(db, "tasks"), where("projectId", "==", p.id)));
-          list.push({
-            projectId: p.id,
-            projectName: pd.name,
-            projectNameZh: pd.nameZh || undefined,
-            clientName: pd.clientDisplayName ?? "",
-            tasks: tasksSnap.docs
-              .filter((t) => !t.data().hiddenFromPartner)
-              .map((t) => ({
-                taskId: t.id,
-                taskName: t.data().name,
-                taskNameZh: t.data().nameZh || undefined,
-                status: t.data().status,
-                dueDate: t.data().dueDate || undefined,
-                description: t.data().description || undefined,
-              })),
-          });
-        }
+        // 프로젝트별 업무 조회를 순서대로 하나씩 기다리면, 프록시를 거치는 세션에서는 요청당
+        // 지연이 그대로 누적돼(프로젝트 5개면 5번의 왕복을 차례로 기다림) 이 화면 전체가
+        // 오래 멈춰 있는 것처럼 보였다 — 한꺼번에 병렬로 보낸다.
+        const chunkResults = await Promise.all(
+          projectsSnap.docs.map(async (p) => {
+            const pd = p.data();
+            const tasksSnap = await getDocs(query(collection(db, "tasks"), where("projectId", "==", p.id)));
+            return {
+              projectId: p.id,
+              projectName: pd.name,
+              projectNameZh: pd.nameZh || undefined,
+              clientName: pd.clientDisplayName ?? "",
+              tasks: tasksSnap.docs
+                .filter((t) => !t.data().hiddenFromPartner)
+                .map((t) => ({
+                  taskId: t.id,
+                  taskName: t.data().name,
+                  taskNameZh: t.data().nameZh || undefined,
+                  status: t.data().status,
+                  dueDate: t.data().dueDate || undefined,
+                  description: t.data().description || undefined,
+                })),
+            };
+          })
+        );
+        list.push(...chunkResults);
       }
       setCandidates(list);
       setLoadingCandidates(false);

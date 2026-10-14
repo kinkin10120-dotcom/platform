@@ -32,8 +32,20 @@ export function toProxiedUrl(url: string): string {
 const DIRECT_UPLOAD_LIMIT = 3 * 1024 * 1024; // 3MB까지는 기존 단건 업로드 그대로 사용
 const CHUNK_SIZE = 3 * 1024 * 1024; // 256KB의 배수여야 함(Google 요구사항) — 3MB는 배수
 
-async function uploadSmallFile(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
+// 실제 버그로 확인된 부분: Firebase Storage는 객체가 업로드되는 순간 downloadTokens를
+// 자동으로 생성해서 응답 JSON에 그대로 실어준다(실측으로 직접 확인함 — 업로드 직후 메타데이터
+// 조회 없이도 POST/PUT finalize 응답 자체에 이미 들어있다). 그런데도 이후 PATCH로 토큰을
+// "직접" 심는 불필요한 2차 요청을 보내고 있었는데, 그 PATCH 자체가 늘 "Not allowed to set
+// custom metadata for firebaseStorageDownloadTokens"로 거부당해 업로드가 매번 실패하고
+// 있었다 — 애초에 필요 없는 요청이었다. 업로드 응답에 이미 있는 토큰을 그대로 쓴다.
+function extractDownloadToken(body: unknown): string {
+  const token = (body as { downloadTokens?: string } | null)?.downloadTokens;
+  if (!token) throw new Error("다운로드 토큰을 받지 못했습니다.");
+  return token.split(",")[0];
+}
+
+async function uploadSmallFile(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<string> {
+  const body = await new Promise<unknown>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${origin}/v0/b/${BUCKET}/o?uploadType=media&name=${encodedPath}`);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -41,13 +53,17 @@ async function uploadSmallFile(origin: string, token: string, encodedPath: strin
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(e.loaded / e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`업로드 실패 (${xhr.status})`)));
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) { reject(new Error(`업로드 실패 (${xhr.status})`)); return; }
+      try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("업로드 응답을 읽지 못했습니다.")); }
+    };
     xhr.onerror = () => reject(new Error("네트워크 오류로 업로드에 실패했습니다."));
     xhr.send(file);
   });
+  return extractDownloadToken(body);
 }
 
-async function uploadLargeFileResumable(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<void> {
+async function uploadLargeFileResumable(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<string> {
   const startRes = await fetch(`${origin}/v0/b/${BUCKET}/o?uploadType=resumable&name=${encodedPath}`, {
     method: "POST",
     headers: {
@@ -78,14 +94,14 @@ async function uploadLargeFileResumable(origin: string, token: string, encodedPa
       body: file.slice(offset, end),
     });
     if (!chunkRes.ok) throw new Error(`업로드 실패 (${chunkRes.status})`);
+    if (isLast) return extractDownloadToken(await chunkRes.json());
     offset = end;
     onProgress?.(offset / file.size);
   }
+  throw new Error("업로드가 끝까지 완료되지 않았습니다.");
 }
 
-// uploadBytesResumable + getDownloadURL을 대신한다 — 업로드 후 다른 사람(프록시를 안 쓰는
-// 관리자 등)도 그대로 열 수 있도록, Firebase SDK가 getDownloadURL에서 자동으로 해주는
-// "다운로드 토큰 심기"를 PATCH로 직접 해준다.
+// uploadBytesResumable + getDownloadURL을 대신한다.
 export async function uploadFileViaProxy(
   storagePath: string,
   file: Blob,
@@ -99,22 +115,10 @@ export async function uploadFileViaProxy(
   const encodedPath = encodeURIComponent(storagePath);
   const origin = window.location.origin;
 
-  if (file.size > DIRECT_UPLOAD_LIMIT) {
-    await uploadLargeFileResumable(origin, token, encodedPath, file, contentType, onProgress);
-  } else {
-    await uploadSmallFile(origin, token, encodedPath, file, contentType, onProgress);
-  }
-
   const downloadToken =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const patchRes = await fetch(`${origin}/v0/b/${BUCKET}/o/${encodedPath}`, {
-    method: "PATCH",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ metadata: { firebaseStorageDownloadTokens: downloadToken } }),
-  });
-  if (!patchRes.ok) throw new Error("파일 등록에 실패했습니다.");
+    file.size > DIRECT_UPLOAD_LIMIT
+      ? await uploadLargeFileResumable(origin, token, encodedPath, file, contentType, onProgress)
+      : await uploadSmallFile(origin, token, encodedPath, file, contentType, onProgress);
 
   // 실제 주소는 항상 firebasestorage.googleapis.com 형태로 저장한다(toProxiedUrl이
   // 보는 사람에 따라 그때그때 바꿔주므로, 데이터에는 "진짜" 주소만 남겨 다른 세션에서도

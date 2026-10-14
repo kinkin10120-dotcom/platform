@@ -46,8 +46,9 @@ async function fetchUserProfile(uid: string, attempt = 1): Promise<{ data: AppUs
     const snap = await getDoc(doc(db, "users", uid));
     return { data: snap.exists() ? ({ uid, ...(snap.data() as Omit<AppUser, "uid">) }) : null, failed: false };
   } catch (e) {
-    if (attempt < 4) {
-      await new Promise((r) => setTimeout(r, attempt * 400));
+    // 느린 연결에서 재시도를 여러 번 쌓으면(대기 시간 누적) 오히려 더 오래 멈춰 보인다 —
+    // 딱 한 번만, 지연 없이 바로 재시도한다.
+    if (attempt < 2) {
       return fetchUserProfile(uid, attempt + 1);
     }
     console.error("사용자 프로필 조회 실패", e);
@@ -61,8 +62,12 @@ async function fetchUserProfile(uid: string, attempt = 1): Promise<{ data: AppUs
 // 화면에서 영원히 멈춘다(에러조차 안 뜸). 여기서도 로그인 페이지와 같은 보호장치를
 // 둔다: 일정 시간 응답이 없으면 우회를 자동으로 한 번 켜고 새로고침한다(두 번째도
 // 막히면 무한 새로고침 대신 화면에 안내를 띄운다 — 아래 authStuck).
+// 타임아웃을 너무 짧게 잡으면(예전 12초) 중국 우회 경로처럼 원래 느리지만 결국 성공하는
+// 연결을 중간에 끊고 처음부터 다시 시작시켜서, 오히려 "거의 다 됐는데 매번 리셋되는"
+// 체감 지연을 키웠다 — 실제로 서버 로그에서 로그인 자체는 성공하고 있는데 그 직후
+// 다시 로그인 화면으로 돌아가는 패턴이 확인됐다. 충분히 넉넉하게 기다려준다.
 const AUTO_RETRY_KEY = "fbProxyCNAutoRetried";
-const STUCK_TIMEOUT_MS = 12000;
+const STUCK_TIMEOUT_MS = 30000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);

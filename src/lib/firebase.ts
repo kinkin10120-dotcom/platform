@@ -41,22 +41,6 @@ export const db = useCnProxy
 
 export const storage = getStorage(app);
 
-// 프록시 경유 첫 요청(특히 Edge 함수 콜드스타트 + 중국→Vercel→Google 왕복)이 느려서,
-// 로그인 직후 바로 이어지는 users/{uid} 조회가 어쩌다 한 번 실패하는 사례가 있었다 —
-// 로그인을 시도하기도 전에, 페이지가 뜨자마자 미리 한 번 "가짜" 요청을 보내 프록시
-// 경로를 데워둔다(응답 내용은 안 쓴다, 실패해도 무시). 실제 로그인·데이터 요청이 도착할
-// 때는 이미 한 번 열린 경로라 더 빠르게 응답할 가능성이 높다.
-if (useCnProxy) {
-  fetch(`${window.location.origin}/api/fbproxy/firestore/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents`, {
-    method: "GET",
-  }).catch(() => {});
-  fetch(`${window.location.origin}/identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  }).catch(() => {});
-}
-
 // 로그인(관리자 등)이 있어야 열리는 스토리지 파일용 — <a href={url}> 방식은 브라우저가
 // 인증 헤더를 붙이지 않아 보안 규칙이 401/403으로 막으므로, SDK의 인증된 요청으로 받아온
 // blob을 사용한다. quoteRequests의 사업자등록증(bizRegCert)처럼 원래 공개 읽기였다가

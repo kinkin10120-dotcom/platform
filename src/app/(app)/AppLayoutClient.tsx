@@ -24,6 +24,14 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   const isZh = usePartnerZh();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // 로딩이 몇 초 넘게 걸리면(특히 중국 우회 경로) 로고만 떠 있어 멈춘 것처럼 보여서
+  // 사용자가 중간에 앱을 꺼버리고 다시 켜는 일이 반복됐다 — 아직 진행 중임을 알려준다.
+  const [showSlowHint, setShowSlowHint] = useState(false);
+  useEffect(() => {
+    if (!loading) { setShowSlowHint(false); return; }
+    const t = setTimeout(() => setShowSlowHint(true), 4000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     if (loading) return;
@@ -63,9 +71,10 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
       );
     }
     return (
-      <div className="flex h-dvh items-center justify-center bg-white">
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-white">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="HANDYHAND" className="h-6 w-auto animate-pulse opacity-40" style={{ filter: "brightness(0)" }} />
+        {showSlowHint && <p className="text-xs text-[#86868b]">연결하는 중입니다...</p>}
       </div>
     );
   }

@@ -20,7 +20,7 @@ function TodayDate() {
 }
 
 export default function AppLayoutClient({ children }: { children: React.ReactNode }) {
-  const { firebaseUser, appUser, loading } = useAuth();
+  const { firebaseUser, appUser, loading, authStuck } = useAuth();
   const isZh = usePartnerZh();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -52,6 +52,16 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
   }, []);
 
   if (loading) {
+    if (authStuck) {
+      return (
+        <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-white px-6 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="HANDYHAND" className="h-6 w-auto opacity-40" style={{ filter: "brightness(0)" }} />
+          <p className="max-w-xs text-sm text-[#86868b]">서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요 — 중국 등 일부 해외 네트워크에서는 VPN이 필요할 수 있습니다.</p>
+          <a href="/login" className="rounded-full bg-[#1d1d1f] px-4 py-2 text-sm font-medium text-white">로그인 화면으로</a>
+        </div>
+      );
+    }
     return (
       <div className="flex h-dvh items-center justify-center bg-white">
         {/* eslint-disable-next-line @next/next/no-img-element */}

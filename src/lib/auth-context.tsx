@@ -93,52 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, STUCK_TIMEOUT_MS);
 
-    // 임시 진단 — "자동 로그인이 풀린다" 문제의 원인을 알아내기 위해, 중국 우회 세션에서
-    // 세션 복원 시점에 localStorage/IndexedDB 상태를 서버 로그로 보낸다. 원인을 찾으면
-    // 이 블록과 /api/debug-auth-restore를 지운다.
-    if (typeof window !== "undefined" && localStorage.getItem("fbProxyCN") === "1") {
-      (async () => {
-        try {
-          const lsKeys = Object.keys(localStorage).filter((k) => k.startsWith("firebase:"));
-          const lsDump: Record<string, string | null> = {};
-          lsKeys.forEach((k) => { lsDump[k] = localStorage.getItem(k); });
-          const idbInfo: { exists: boolean } = { exists: false };
-          if (typeof indexedDB !== "undefined" && indexedDB.databases) {
-            const dbs = await indexedDB.databases();
-            idbInfo.exists = dbs.some((d) => d.name === "firebaseLocalStorageDb");
-          }
-          await fetch("/api/debug-auth-restore", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: "before-onAuthStateChanged-resolved",
-              localStorageFirebaseKeys: lsKeys,
-              localStorageFirebaseDump: lsDump,
-              indexedDb: idbInfo,
-              ua: navigator.userAgent,
-              standalone: (navigator as any).standalone,
-            }),
-          });
-        } catch (e) {
-          fetch("/api/debug-auth-restore", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ stage: "diagnostic-error", error: String(e) }),
-          }).catch(() => {});
-        }
-      })();
-    }
-
     const unsub = onAuthStateChanged(auth, async (user) => {
       settled = true;
       clearTimeout(timeoutId);
-      if (typeof window !== "undefined" && localStorage.getItem("fbProxyCN") === "1") {
-        fetch("/api/debug-auth-restore", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: "onAuthStateChanged-resolved", userFound: !!user, uid: user?.uid ?? null }),
-        }).catch(() => {});
-      }
       setFirebaseUser(user);
       if (user) {
         const { data, failed } = await fetchUserProfile(user.uid);

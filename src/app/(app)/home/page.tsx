@@ -18,6 +18,7 @@ import { Project, Client, ProjectStatus, Task, Notice, DateChangeEntry, PROJECT_
 import { groupDateHistory } from "@/lib/groupDateHistory";
 import { calcOrderTotals } from "@/lib/orderCalc";
 import MonthlyOrderChart, { buildMonthlyOrderData } from "@/components/dashboard/MonthlyOrderChart";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
   active: "진행 중",
@@ -687,7 +688,7 @@ export default function HomePage() {
                 {p.clientLogoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={p.clientLogoUrl}
+                    src={toProxiedUrl(p.clientLogoUrl)}
                     alt=""
                     className="mr-2.5 h-7 w-auto max-w-[120px] shrink-0 object-contain md:h-11 md:max-w-[180px]"
                   />

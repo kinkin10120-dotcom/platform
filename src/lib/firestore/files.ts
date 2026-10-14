@@ -2,6 +2,7 @@ import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { TaskFile } from "@/lib/types";
+import { isCnProxyOn, uploadFileViaProxy, deleteFileViaProxy } from "@/lib/storageProxy";
 
 const CAD_EXTS = ["stp", "step", "dxf", "dwg", "ipt", "iam", "sldprt", "sldasm"];
 
@@ -75,9 +76,14 @@ export async function uploadTaskFile(
   uploaderRole?: string
 ) {
   const storagePath = `projects/${projectId}/tasks/${taskId}/${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, storagePath);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
+  let url: string;
+  if (isCnProxyOn()) {
+    url = await uploadFileViaProxy(storagePath, file, file.type || "application/octet-stream");
+  } else {
+    const storageRef = ref(storage, storagePath);
+    await uploadBytes(storageRef, file);
+    url = await getDownloadURL(storageRef);
+  }
 
   const existingSnap = await getDocs(query(colRef(taskId), where("name", "==", file.name)));
   const version = existingSnap.size + 1;
@@ -118,7 +124,11 @@ export async function setFileVisibleToClient(taskId: string, fileId: string, vis
 export async function deleteTaskFile(taskId: string, fileId: string, storagePath: string) {
   await deleteDoc(doc(db, "tasks", taskId, "files", fileId));
   try {
-    await deleteObject(ref(storage, storagePath));
+    if (isCnProxyOn()) {
+      await deleteFileViaProxy(storagePath);
+    } else {
+      await deleteObject(ref(storage, storagePath));
+    }
   } catch (e) {
     console.warn("스토리지 파일 삭제 실패(이미 삭제되었을 수 있음)", e);
   }

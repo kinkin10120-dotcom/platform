@@ -13,6 +13,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { ClientProduct } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
+import { isCnProxyOn, uploadFileViaProxy } from "@/lib/storageProxy";
 
 const colRef = collection(db, "clientProducts");
 
@@ -78,9 +79,15 @@ export async function updateClientProduct(
 
 export async function uploadClientProductImage(productId: string, file: File): Promise<string> {
   const compressed = await compressImage(file);
-  const storageRef = ref(storage, `clientProducts/${productId}/image`);
-  await uploadBytes(storageRef, compressed);
-  const url = await getDownloadURL(storageRef);
+  const storagePath = `clientProducts/${productId}/image`;
+  let url: string;
+  if (isCnProxyOn()) {
+    url = await uploadFileViaProxy(storagePath, compressed, compressed.type || "image/jpeg");
+  } else {
+    const storageRef = ref(storage, storagePath);
+    await uploadBytes(storageRef, compressed);
+    url = await getDownloadURL(storageRef);
+  }
   await updateClientProduct(productId, { imageUrl: url });
   return url;
 }

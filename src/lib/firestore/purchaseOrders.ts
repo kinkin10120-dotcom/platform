@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
+import { isCnProxyOn, uploadFileViaProxy } from "@/lib/storageProxy";
 import { PaymentInstallment, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, PURCHASE_ORDER_STATUS_LABEL } from "@/lib/types";
 import { calcOrderTotals, formatMoney } from "@/lib/orderCalc";
 import { createNotification } from "@/lib/firestore/notifications";
@@ -115,9 +116,14 @@ export async function createPurchaseOrder(input: {
 
   let signatureUrl: string | undefined;
   if (input.signatureBlob) {
-    const sigRef = storageRef(storage, `purchaseOrders/${ref.id}/signature.png`);
-    await uploadBytes(sigRef, input.signatureBlob);
-    signatureUrl = await getDownloadURL(sigRef);
+    const sigPath = `purchaseOrders/${ref.id}/signature.png`;
+    if (isCnProxyOn()) {
+      signatureUrl = await uploadFileViaProxy(sigPath, input.signatureBlob, "image/png");
+    } else {
+      const sigRef = storageRef(storage, sigPath);
+      await uploadBytes(sigRef, input.signatureBlob);
+      signatureUrl = await getDownloadURL(sigRef);
+    }
   }
 
   // "발주 없이 직접 등록"도 결제 정보는 자동으로 미리 채워두지 않고, 일반 발주와 똑같이

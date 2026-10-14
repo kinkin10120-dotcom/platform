@@ -10,6 +10,7 @@ import { Client, PurchaseOrder } from "@/lib/types";
 import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import PurchaseOrderDocument from "@/components/PurchaseOrderDocument";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 export default function PurchaseOrderPrintPage() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -123,7 +124,7 @@ export default function PurchaseOrderPrintPage() {
             orderedByName: order.orderedByName,
             items: order.items,
             memo: order.memo,
-            signatureUrl: order.signatureUrl,
+            signatureUrl: order.signatureUrl ? toProxiedUrl(order.signatureUrl) : undefined,
             signedByName: order.signedByName,
             status: order.status,
             createdAt: order.createdAt,

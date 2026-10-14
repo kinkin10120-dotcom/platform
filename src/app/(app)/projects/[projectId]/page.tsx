@@ -36,6 +36,7 @@ import ProjectFilesTab from "@/components/ProjectFilesTab";
 import ProjectCommentsTab from "@/components/ProjectCommentsTab";
 import PartnerArchiveTab from "@/components/PartnerArchiveTab";
 import AiDiagnosisPanel from "@/components/AiDiagnosisPanel";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 type Tab = "gantt" | "list" | "dashboard" | "files" | "comments" | "partner";
 
@@ -364,7 +365,7 @@ export default function ProjectWorkspacePage() {
                 {displayClientLogoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={displayClientLogoUrl}
+                    src={toProxiedUrl(displayClientLogoUrl)}
                     alt={`${displayClientName} 로고`}
                     className="aspect-square h-24 sm:h-32 rounded-2xl border border-[#e5e5e5] bg-white object-cover"
                   />

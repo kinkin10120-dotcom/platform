@@ -23,6 +23,66 @@ export function toProxiedUrl(url: string): string {
   return url.replace("https://firebasestorage.googleapis.com", window.location.origin);
 }
 
+// Vercel 플랫폼 자체가 우리 함수에 도달하기도 전에 요청 바디를 막는 한계가 약 4~4.3MB
+// 선에서 걸린다는 걸 실측으로 확인함(코드 버그가 아니라 인프라 제약 — 413은
+// deploymentId 로그의 "source":"static"으로 찍혀, 우리 Edge 라우트가 실행되기 전에
+// 거부당한다는 뜻). 사진 등 흔한 용량의 첨부파일이 쉽게 이 선을 넘기므로, 이 크기를
+// 넘는 파일은 Firebase Storage의 resumable 업로드 프로토콜로 청크 단위로 쪼개서 보낸다
+// (각 청크는 한계보다 훨씬 작게). 직접 호출 + 우리 프록시 경유 둘 다 실측으로 검증함.
+const DIRECT_UPLOAD_LIMIT = 3 * 1024 * 1024; // 3MB까지는 기존 단건 업로드 그대로 사용
+const CHUNK_SIZE = 3 * 1024 * 1024; // 256KB의 배수여야 함(Google 요구사항) — 3MB는 배수
+
+async function uploadSmallFile(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${origin}/v0/b/${BUCKET}/o?uploadType=media&name=${encodedPath}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`업로드 실패 (${xhr.status})`)));
+    xhr.onerror = () => reject(new Error("네트워크 오류로 업로드에 실패했습니다."));
+    xhr.send(file);
+  });
+}
+
+async function uploadLargeFileResumable(origin: string, token: string, encodedPath: string, file: Blob, contentType: string, onProgress?: (ratio: number) => void): Promise<void> {
+  const startRes = await fetch(`${origin}/v0/b/${BUCKET}/o?uploadType=resumable&name=${encodedPath}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Goog-Upload-Protocol": "resumable",
+      "X-Goog-Upload-Command": "start",
+      "X-Goog-Upload-Header-Content-Type": contentType || "application/octet-stream",
+      "Content-Type": "application/json; charset=UTF-8",
+    },
+    body: "{}",
+  });
+  if (!startRes.ok) throw new Error(`업로드 세션 생성 실패 (${startRes.status})`);
+  const sessionUrl = startRes.headers.get("x-goog-upload-url");
+  if (!sessionUrl) throw new Error("업로드 세션 주소를 받지 못했습니다.");
+  const proxiedSessionUrl = sessionUrl.replace("https://firebasestorage.googleapis.com", origin);
+
+  let offset = 0;
+  while (offset < file.size) {
+    const end = Math.min(offset + CHUNK_SIZE, file.size);
+    const isLast = end >= file.size;
+    const chunkRes = await fetch(proxiedSessionUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-Goog-Upload-Command": isLast ? "upload, finalize" : "upload",
+        "X-Goog-Upload-Offset": String(offset),
+      },
+      body: file.slice(offset, end),
+    });
+    if (!chunkRes.ok) throw new Error(`업로드 실패 (${chunkRes.status})`);
+    offset = end;
+    onProgress?.(offset / file.size);
+  }
+}
+
 // uploadBytesResumable + getDownloadURL을 대신한다 — 업로드 후 다른 사람(프록시를 안 쓰는
 // 관리자 등)도 그대로 열 수 있도록, Firebase SDK가 getDownloadURL에서 자동으로 해주는
 // "다운로드 토큰 심기"를 PATCH로 직접 해준다.
@@ -39,18 +99,11 @@ export async function uploadFileViaProxy(
   const encodedPath = encodeURIComponent(storagePath);
   const origin = window.location.origin;
 
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${origin}/v0/b/${BUCKET}/o?uploadType=media&name=${encodedPath}`);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("Content-Type", contentType || "application/octet-stream");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress?.(e.loaded / e.total);
-    };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`업로드 실패 (${xhr.status})`)));
-    xhr.onerror = () => reject(new Error("네트워크 오류로 업로드에 실패했습니다."));
-    xhr.send(file);
-  });
+  if (file.size > DIRECT_UPLOAD_LIMIT) {
+    await uploadLargeFileResumable(origin, token, encodedPath, file, contentType, onProgress);
+  } else {
+    await uploadSmallFile(origin, token, encodedPath, file, contentType, onProgress);
+  }
 
   const downloadToken =
     typeof crypto !== "undefined" && "randomUUID" in crypto

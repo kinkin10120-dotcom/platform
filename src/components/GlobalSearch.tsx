@@ -272,7 +272,7 @@ export default function GlobalSearch() {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="프로젝트, 업무, 클라이언트, 계약 등 검색"
+                placeholder={zh(isZh, "프로젝트, 업무, 클라이언트, 계약 등 검색")}
                 className="min-w-0 flex-1 text-sm text-[#1d1d1f] outline-none placeholder:text-[#c7c7cc]"
               />
               <button onClick={() => setOpen(false)} className="shrink-0 text-[#86868b] hover:text-[#1d1d1f]">
@@ -296,7 +296,7 @@ export default function GlobalSearch() {
                     category === c.key ? "bg-[#1d1d1f] text-white" : "bg-[#f5f5f7] text-[#86868b] hover:text-[#1d1d1f]"
                   }`}
                 >
-                  {c.label}
+                  {zh(isZh, c.label)}
                 </button>
               ))}
             </div>
@@ -306,16 +306,16 @@ export default function GlobalSearch() {
                 <p className="mx-1 mb-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-500">{loadError}</p>
               )}
               {!q && (
-                <p className="px-3 py-6 text-center text-sm text-[#86868b]">검색어를 입력하세요.</p>
+                <p className="px-3 py-6 text-center text-sm text-[#86868b]">{zh(isZh, "검색어를 입력하세요.")}</p>
               )}
 
               {noResults && (
-                <p className="px-3 py-6 text-center text-sm text-[#86868b]">검색 결과가 없습니다.</p>
+                <p className="px-3 py-6 text-center text-sm text-[#86868b]">{zh(isZh, "검색 결과가 없습니다.")}</p>
               )}
 
               {showSection("project") && matchedProjects.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">프로젝트</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "프로젝트")}</p>
                   {matchedProjects.map((p) => (
                     <button
                       key={p.id}
@@ -332,7 +332,7 @@ export default function GlobalSearch() {
 
               {showSection("task") && matchedTasks.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">업무</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "업무")}</p>
                   {matchedTasks.map((t) => (
                     <button
                       key={t.id}
@@ -350,7 +350,7 @@ export default function GlobalSearch() {
 
               {showSection("comment") && matchedComments.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">코멘트</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "코멘트")}</p>
                   {matchedComments.map((c) => (
                     <button
                       key={c.id}
@@ -360,7 +360,7 @@ export default function GlobalSearch() {
                       <MessageSquare size={15} className="mt-0.5 shrink-0 text-[#86868b]" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-[#1d1d1f]">{c.text}</span>
-                        <span className="block truncate text-xs text-[#86868b]">{taskName(c.taskId) || "업무"}</span>
+                        <span className="block truncate text-xs text-[#86868b]">{taskName(c.taskId) || zh(isZh, "업무")}</span>
                       </span>
                     </button>
                   ))}
@@ -369,7 +369,7 @@ export default function GlobalSearch() {
 
               {showSection("file") && matchedFiles.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">첨부 자료</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "첨부 자료")}</p>
                   {matchedFiles.map((f) => (
                     <button
                       key={f.id}
@@ -378,7 +378,7 @@ export default function GlobalSearch() {
                     >
                       <Paperclip size={15} className="shrink-0 text-[#86868b]" />
                       <span className="min-w-0 flex-1 truncate text-sm text-[#1d1d1f]">{f.name}</span>
-                      <span className="shrink-0 truncate text-xs text-[#86868b]">{taskName(f.taskId) || "업무"}</span>
+                      <span className="shrink-0 truncate text-xs text-[#86868b]">{taskName(f.taskId) || zh(isZh, "업무")}</span>
                     </button>
                   ))}
                 </div>
@@ -386,7 +386,7 @@ export default function GlobalSearch() {
 
               {showSection("client") && matchedClients.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">클라이언트</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "클라이언트")}</p>
                   {matchedClients.map((c) => (
                     <button
                       key={c.id}
@@ -402,7 +402,7 @@ export default function GlobalSearch() {
 
               {showSection("quote") && matchedQuotes.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">견적 요청</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "견적 요청")}</p>
                   {matchedQuotes.map((qt) => (
                     <button
                       key={qt.id}
@@ -419,7 +419,7 @@ export default function GlobalSearch() {
 
               {showSection("order") && matchedOrders.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">발주</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "발주")}</p>
                   {matchedOrders.map((o) => (
                     <button
                       key={o.id}
@@ -436,7 +436,7 @@ export default function GlobalSearch() {
 
               {showSection("contract") && matchedContracts.length > 0 && (
                 <div className="mb-2">
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">계약</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "계약")}</p>
                   {matchedContracts.map((c) => (
                     <button
                       key={c.id}
@@ -453,7 +453,7 @@ export default function GlobalSearch() {
 
               {showSection("notice") && matchedNotices.length > 0 && (
                 <div>
-                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">공지사항</p>
+                  <p className="px-3 py-1.5 text-xs font-semibold text-[#86868b]">{zh(isZh, "공지사항")}</p>
                   {matchedNotices.map((n) => (
                     <button
                       key={n.id}

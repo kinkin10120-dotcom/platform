@@ -102,7 +102,7 @@ export default function HomePage() {
   }, []);
 
   // 프로젝트명은 관리자가 직접 입력한 자유 텍스트라 기계 번역으로 처리한다.
-  const zhProjectNames = useZhAutoTranslate(isZh, [...projects.map((p) => p.name), ...projects.map((p) => p.clientDisplayName ?? "")]);
+  const zhProjectNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
   // 공지 배너 제목도 마찬가지 — 관리자가 쓴 자유 텍스트다.
   const zhNoticeTitle = useZhAutoTranslate(isZh, latestNotice ? [latestNotice.title] : []);
 
@@ -692,7 +692,8 @@ export default function HomePage() {
                     className="mr-2.5 h-7 w-auto max-w-[120px] shrink-0 object-contain md:h-11 md:max-w-[180px]"
                   />
                 )}
-                <span className="truncate text-xs font-medium text-[#86868b]">{zhProjectNames[p.clientDisplayName] || p.clientDisplayName}</span>
+                {/* 고객사명은 일부러 번역하지 않고 한국어 원문 그대로 둔다(회사 고유명사). */}
+                <span className="truncate text-xs font-medium text-[#86868b]">{p.clientDisplayName}</span>
               </div>
             )}
             <Link href={`/projects/${p.id}`} className={`block px-6 pb-6 ${isAdmin || (isPartner && p.clientDisplayName) ? "pt-0.5" : "pt-6"}`}>

@@ -11,7 +11,7 @@ import { enablePushNotifications, disablePushNotifications, syncPushToken } from
 import { isIosDevice, isStandaloneMode } from "@/lib/pwa";
 import { AppNotification } from "@/lib/types";
 import IosAddToHomeScreenGuide from "@/components/IosAddToHomeScreenGuide";
-import { zh, usePartnerZh } from "@/lib/i18n";
+import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 
 export default function NotificationBell() {
   const router = useRouter();
@@ -52,6 +52,12 @@ export default function NotificationBell() {
   }, [appUser]);
 
   const unreadCount = items.filter((i) => !i.read).length;
+
+  // 알림 문구는 업무명·번호·금액이 그때그때 끼워 넣어지는 자유 텍스트라 고정 사전(ZH_DICT)
+  // 으로는 못 돌린다 — 프로젝트명 등과 같은 기계 번역으로 처리한다. 만드는 쪽에서 이미
+  // 중국어로 써서 보낸 알림(견적서 승인·반려 등)은 한글이 없으니 번역 대상에서 빼둔다.
+  const zhMessages = useZhAutoTranslate(isZh, items.map((n) => (/[가-힣]/.test(n.message) ? n.message : "")));
+  const trMessage = (s: string) => zhMessages[s] ?? s;
 
   function handleMarkAllRead() {
     markAllNotificationsRead(items.filter((i) => !i.read).map((i) => i.id));
@@ -187,7 +193,7 @@ export default function NotificationBell() {
                 }`}
               >
                 <button onClick={() => handleNotificationClick(n)} className="min-w-0 flex-1 text-left">
-                  <p>{n.message}</p>
+                  <p>{trMessage(n.message)}</p>
                   <p className="mt-1 text-xs text-[#d1d1d6]">
                     {formatDistanceToNow(n.createdAt, { addSuffix: true, locale: isZh ? zhCN : ko })}
                   </p>

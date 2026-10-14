@@ -447,7 +447,7 @@ export default function MyInvoicesPage() {
               >
                 <option value="USD">USD $</option>
                 <option value="CNY">CNY ¥</option>
-                <option value="KRW">KRW 원</option>
+                <option value="KRW">KRW ₩</option>
               </select>
             )}
           </div>

@@ -30,6 +30,45 @@ const NOTIFICATION_TITLE: Record<string, string> = {
   contract_signed: "계약서 서명이 완료되었습니다",
   contract_revision_requested: "계약서 수정 요청이 도착했습니다",
   contract_expiring: "계약 만료가 임박했습니다",
+  partner_archive: "협력사 자료함에 새 활동이 있습니다",
+  supplier_invoice_submitted: "협력사 청구서가 제출되었습니다",
+  supplier_invoice_paid: "청구서 지급이 완료되었습니다",
+  supplier_quote_submitted: "협력사 견적서가 제출되었습니다",
+  supplier_quote_approved: "견적서가 승인되었습니다",
+  supplier_quote_rejected: "견적서가 반려되었습니다",
+  supplier_quote_revision_requested: "견적서에 수정 요청이 왔습니다",
+};
+
+// 중국 협력사 계정(partnerLang === "zh")에게 가는 푸시·이메일 제목 — 본문(notif.message)은
+// 만드는 쪽에서 이미 수신자 언어에 맞춰 쓰거나, 인앱 목록에서는 화면에서 자동 번역된다.
+const NOTIFICATION_TITLE_ZH: Record<string, string> = {
+  assigned: "已分配新任务",
+  status_change: "任务状态已变更",
+  comment: "有新留言",
+  unblocked: "任务可以开始了",
+  due_soon: "截止日期临近",
+  overdue: "已超过截止日期",
+  rescheduled: "日程已调整",
+  weekly_summary: "本周工作摘要",
+  notice: "发布了新公告",
+  decision_needed: "需要确认/批准",
+  inquiry: "收到新咨询",
+  inquiry_answered: "咨询已回复",
+  quote_request: "收到新报价请求",
+  quote_response: "收到报价单回复",
+  purchase_order: "收到新订单",
+  order_status_change: "订单状态已变更",
+  order_cancel_request: "收到订单取消请求",
+  contract_signed: "合同签署已完成",
+  contract_revision_requested: "收到合同修改请求",
+  contract_expiring: "合同即将到期",
+  partner_archive: "合作伙伴资料库有新动态",
+  supplier_invoice_submitted: "已提交合作伙伴账单",
+  supplier_invoice_paid: "账单已支付完成",
+  supplier_quote_submitted: "已提交合作伙伴报价单",
+  supplier_quote_approved: "报价单已批准",
+  supplier_quote_rejected: "报价单已驳回",
+  supplier_quote_revision_requested: "报价单收到修改请求",
 };
 
 export const onNotificationCreated = onDocumentCreated(
@@ -62,7 +101,10 @@ export const onNotificationCreated = onDocumentCreated(
     const prefs = userData?.notificationPrefs as Record<string, boolean> | undefined;
     if (prefs?.[notif.type as string] === false) return;
 
-    const title = NOTIFICATION_TITLE[notif.type as string] ?? "새 알림";
+    const isZhPartner = userData?.partnerLang === "zh";
+    const title = isZhPartner
+      ? NOTIFICATION_TITLE_ZH[notif.type as string] ?? "新通知"
+      : NOTIFICATION_TITLE[notif.type as string] ?? "새 알림";
     // 새 발주 알림은 관리자가 바로 발주서를 볼 수 있도록, 청구서 발행 알림은 클라이언트가
     // 바로 해당 회차 청구서를 볼 수 있도록 각각 발주서/청구서 페이지로 직접 연결한다.
     const link = notif.projectId

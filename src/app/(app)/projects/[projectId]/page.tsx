@@ -84,7 +84,7 @@ export default function ProjectWorkspacePage() {
   // 미리 번역된 캐시)가 없는 기존 데이터에 한해 여기서 즉석 번역으로 대체한다. project가
   // 아직 로딩 전(undefined)이거나 없음(null)이어도 훅은 항상 같은 순서로 호출되어야 하므로
   // 조건 없이 여기서 호출한다.
-  const zhProjectName = useZhAutoTranslate(isZh, project ? [project.name, project.description ?? "", project.clientDisplayName ?? ""] : []);
+  const zhProjectName = useZhAutoTranslate(isZh, project ? [project.name, project.description ?? ""] : []);
 
   useEffect(() => {
     try {
@@ -387,8 +387,9 @@ export default function ProjectWorkspacePage() {
               </div>
             )}
             <div>
+              {/* 고객사명은 일부러 번역하지 않고 한국어 원문 그대로 둔다(회사 고유명사). */}
               {displayClientName && (
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{zhProjectName[displayClientName] || displayClientName}</p>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-[#86868b]">{displayClientName}</p>
               )}
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold text-[#1d1d1f]">{(isZh && project.nameZh) || zhProjectName[project.name] || project.name}</h1>

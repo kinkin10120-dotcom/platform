@@ -334,9 +334,9 @@ async function callClassify(
   try {
     data = JSON.parse(raw);
   } catch {
-    throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
+    throw new Error(lang === "zh" ? `无法读取服务器响应 (${res.status})。` : `서버 응답을 읽을 수 없습니다 (${res.status}).`);
   }
-  if (!res.ok) throw new Error(data.error ?? "요청 실패");
+  if (!res.ok) throw new Error(data.error ?? zh(lang === "zh", "요청 실패"));
   return data as { projectId: string | null; taskId: string | null; confidence?: "high" | "medium" | "low"; comment?: string };
 }
 
@@ -697,9 +697,9 @@ export default function OrganizePage() {
       try {
         data = JSON.parse(raw);
       } catch {
-        throw new Error(`서버 응답을 읽을 수 없습니다 (${res.status}).`);
+        throw new Error(isZh ? `无法读取服务器响应 (${res.status})。` : `서버 응답을 읽을 수 없습니다 (${res.status}).`);
       }
-      if (!res.ok) throw new Error(data.error ?? "요청에 실패했습니다.");
+      if (!res.ok) throw new Error(data.error ?? zh(isZh, "요청에 실패했습니다."));
       // 대화 목록 제목 — 첫 메시지 원문을 그대로 자르는 대신, AI가 이번 대화 전체를
       // 대표하도록 새로 지어준 짧은 제목으로 바꿔 붙인다(클로드·제미나이 대화 목록과 동일한 방식).
       if (isNewConversation && data.title) {
@@ -961,7 +961,7 @@ export default function OrganizePage() {
 
       updateItem(item.id, { status: "done" });
     } catch (e) {
-      updateItem(item.id, { status: "error", errorMessage: e instanceof Error ? e.message : "업로드 중 오류가 발생했습니다." });
+      updateItem(item.id, { status: "error", errorMessage: e instanceof Error ? e.message : zh(isZh, "업로드 중 오류가 발생했습니다.") });
     }
   }
 
@@ -1409,7 +1409,7 @@ function OrganizeItemCard({
         </div>
         <div className="flex shrink-0 items-center gap-2 text-xs text-[#86868b]">
           {first.confidence && <span>{zh(isZh, "확신도")}: {first.confidence}</span>}
-          {onUngroup && <button onClick={onUngroup} className="underline underline-offset-2 hover:text-[#1d1d1f]">묶음 풀기</button>}
+          {onUngroup && <button onClick={onUngroup} className="underline underline-offset-2 hover:text-[#1d1d1f]">{zh(isZh, "묶음 풀기")}</button>}
           <button onClick={onRemove} className="hover:text-red-500"><Trash2 size={14} /></button>
         </div>
       </div>
@@ -1444,7 +1444,7 @@ function OrganizeItemCard({
             value={first.commentText}
             onChange={(e) => onChangeComment(e.target.value)}
             rows={2}
-            placeholder="코멘트"
+            placeholder={zh(isZh, "코멘트")}
             className="w-full resize-none rounded-xl border border-[#d1d1d6] px-3 py-1.5 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
           />
         </>
@@ -1498,7 +1498,7 @@ function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectC
         if (comments.length > 0 || fileNames.length > 0) taskActivities.push({ taskName: t.taskName, status: t.status, comments, fileNames });
       }
       if (taskActivities.length === 0) {
-        setError(`최근 ${days}일간 이 프로젝트의 업로드·코멘트 기록이 없습니다.`);
+        setError(isZh ? `最近 ${days} 天内该项目没有上传·留言记录。` : `최근 ${days}일간 이 프로젝트의 업로드·코멘트 기록이 없습니다.`);
         return;
       }
       const res = await fetch("/api/weekly-report", {
@@ -1507,10 +1507,10 @@ function OrganizeWeeklyReport({ candidates, isZh, lang }: { candidates: ProjectC
         body: JSON.stringify({ projectName: project.projectName, clientName: project.clientName, days, taskActivities, lang }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "보고서 생성에 실패했습니다.");
+      if (!res.ok) throw new Error(data.error ?? zh(isZh, "보고서 생성에 실패했습니다."));
       setReport(data.report ?? "");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "보고서 생성 중 오류가 발생했습니다.");
+      setError(e instanceof Error ? e.message : zh(isZh, "보고서 생성 중 오류가 발생했습니다."));
     } finally {
       setGenerating(false);
     }

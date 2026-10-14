@@ -38,48 +38,61 @@ function groupByName(files: TaskFile[]) {
 const COST_LABEL: Record<number, string> = { 1: "낮음", 2: "보통", 3: "높음" };
 
 function CostBadges({ initial, unit }: { initial: number; unit: number }) {
+  const isZh = usePartnerZh();
   return (
     <span className="flex shrink-0 flex-wrap gap-1">
-      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">초기투자 {COST_LABEL[initial] ?? "-"}</span>
-      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">개당단가 {COST_LABEL[unit] ?? "-"}</span>
+      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">
+        {zh(isZh, "초기투자")} {COST_LABEL[initial] ? zh(isZh, COST_LABEL[initial]) : "-"}
+      </span>
+      <span className="rounded-full bg-[#f5f5f7] px-1.5 py-0.5 text-[10px] text-[#86868b]">
+        {zh(isZh, "개당단가")} {COST_LABEL[unit] ? zh(isZh, COST_LABEL[unit]) : "-"}
+      </span>
     </span>
   );
 }
 
 function AiAnalysisPanel({ f }: { f: TaskFile }) {
+  const isZh = usePartnerZh();
+  // AI가 생성한 요약·공법명·재질은 매번 내용이 달라지는 자유 텍스트라 고정 사전으로는
+  // 못 돌린다 — 프로젝트명 등과 같은 기계 번역으로 처리한다.
   const ai = f.aiAnalysis;
+  const zhTexts = useZhAutoTranslate(
+    isZh,
+    ai ? [ai.summary ?? "", ai.partName ?? "", ai.material ?? "", ...(ai.recommendedMethods ?? []).map((m) => m.method)] : []
+  );
+  const tr = (s: string) => zhTexts[s] ?? s;
   if (!ai) return null;
 
   if (ai.status === "pending") {
     return (
       <div className="mt-1.5 flex items-center gap-1.5 rounded-2xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
-        <Loader2 size={12} className="animate-spin" /> AI 형상 분석 중...
+        <Loader2 size={12} className="animate-spin" /> {zh(isZh, "AI 형상 분석 중...")}
       </div>
     );
   }
   if (ai.status === "error") {
-    return <div className="mt-1.5 rounded-2xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">AI 분석에 실패했습니다.</div>;
+    return <div className="mt-1.5 rounded-2xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">{zh(isZh, "AI 분석에 실패했습니다.")}</div>;
   }
   return (
     <div className="mt-1.5 space-y-2 rounded-2xl bg-[#f5f5f7] p-3 text-xs">
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="font-semibold text-[#1d1d1f]">{ai.partName || "추정 부품"}</span>
-        {ai.complexity && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">복잡도 {ai.complexity}</span>}
-        {ai.material && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">{ai.material}</span>}
+        <span className="font-semibold text-[#1d1d1f]">{ai.partName ? tr(ai.partName) : zh(isZh, "추정 부품")}</span>
+        {ai.complexity && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">{zh(isZh, "복잡도")} {ai.complexity}</span>}
+        {ai.material && <span className="rounded-full bg-white px-2 py-0.5 text-[#86868b]">{tr(ai.material)}</span>}
       </div>
       {ai.recommendedMethods && ai.recommendedMethods.length > 0 && (
         <div className="space-y-1.5">
           {ai.recommendedMethods.map((m, i) => (
             <div key={i} className="flex flex-wrap items-center gap-1.5 rounded-xl bg-white px-2.5 py-1.5">
-              <span className="text-[#86868b]">{i === 0 ? "1순위" : "2순위"}</span>
-              <span className="font-medium text-[#1d1d1f]">{m.method}</span>
+              <span className="text-[#86868b]">{i === 0 ? zh(isZh, "1순위") : zh(isZh, "2순위")}</span>
+              <span className="font-medium text-[#1d1d1f]">{tr(m.method)}</span>
               <CostBadges initial={m.initialCostLevel} unit={m.unitCostLevel} />
             </div>
           ))}
         </div>
       )}
-      {ai.summary && <p className="text-[#86868b]">{ai.summary}</p>}
-      <p className="text-[10px] text-[#d1d1d6]">* AI 추정 결과로 참고용입니다.</p>
+      {ai.summary && <p className="text-[#86868b]">{tr(ai.summary)}</p>}
+      <p className="text-[10px] text-[#d1d1d6]">{zh(isZh, "* AI 추정 결과로 참고용입니다.")}</p>
     </div>
   );
 }
@@ -97,6 +110,7 @@ function FileRow({
   hideAi: boolean;
   isAdmin: boolean;
 }) {
+  const isZh = usePartnerZh();
   const [open, setOpen] = useState(false);
   const [showAi, setShowAi] = useState(false);
   const isImage = f.contentType.startsWith("image/");
@@ -129,7 +143,7 @@ function FileRow({
               className="ml-1 flex shrink-0 items-center gap-1 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#1d1d1f] hover:bg-[#e5e5e5]"
             >
               {f.aiAnalysis.status === "pending" ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-              AI 분석
+              {zh(isZh, "AI 분석")}
             </button>
           )}
           {isAdmin && f.visibleToClient === false && (

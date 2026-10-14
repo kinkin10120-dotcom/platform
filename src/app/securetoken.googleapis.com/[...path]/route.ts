@@ -5,8 +5,8 @@ import { forwardToHost } from "@/lib/fbProxyForward";
 // 보낸다. Edge 런타임 이유는 identitytoolkit.googleapis.com 라우트 주석 참고.
 export const runtime = "edge";
 
-async function handle(req: NextRequest, { params }: { params: { path: string[] } }) {
-  return forwardToHost(req, "securetoken.googleapis.com", params.path);
+async function handle(req: NextRequest) {
+  return forwardToHost(req, "securetoken.googleapis.com", "/securetoken.googleapis.com");
 }
 
 export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };

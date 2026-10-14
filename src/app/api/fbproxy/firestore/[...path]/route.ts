@@ -10,8 +10,8 @@ import { forwardToHost } from "@/lib/fbProxyForward";
 // Edge가 특히 체감 속도에 큰 영향을 준다.
 export const runtime = "edge";
 
-async function handle(req: NextRequest, { params }: { params: { path: string[] } }) {
-  return forwardToHost(req, "firestore.googleapis.com", params.path);
+async function handle(req: NextRequest) {
+  return forwardToHost(req, "firestore.googleapis.com", "/api/fbproxy/firestore");
 }
 
 export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };

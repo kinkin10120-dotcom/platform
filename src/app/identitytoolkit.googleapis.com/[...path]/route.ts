@@ -8,8 +8,8 @@ import { forwardToHost } from "@/lib/fbProxyForward";
 // 필요 없어 Edge로 바꿔도 동작은 동일하다).
 export const runtime = "edge";
 
-async function handle(req: NextRequest, { params }: { params: { path: string[] } }) {
-  return forwardToHost(req, "identitytoolkit.googleapis.com", params.path);
+async function handle(req: NextRequest) {
+  return forwardToHost(req, "identitytoolkit.googleapis.com", "/identitytoolkit.googleapis.com");
 }
 
 export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };

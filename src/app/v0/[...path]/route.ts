@@ -7,10 +7,10 @@ import { forwardToHost } from "@/lib/fbProxyForward";
 // 호출하는 방식을 쓴다.
 export const runtime = "edge";
 
-async function handle(req: NextRequest, { params }: { params: { path: string[] } }) {
-  // 라우트 폴더명 "v0" 자체가 실제 Storage REST 경로의 첫 세그먼트라, Next.js가 그 부분을
-  // params.path에서 빼고 넘겨준다 — 업스트림으로 보낼 땐 다시 앞에 붙여줘야 한다.
-  return forwardToHost(req, "firebasestorage.googleapis.com", ["v0", ...params.path]);
+async function handle(req: NextRequest) {
+  // 라우트 폴더명 "v0" 자체가 실제 Storage REST 경로의 첫 세그먼트와 같아서, 로컬 경로와
+  // 업스트림 경로가 동일하다 — 떼어낼 접두사가 없다.
+  return forwardToHost(req, "firebasestorage.googleapis.com", "");
 }
 
 export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE };

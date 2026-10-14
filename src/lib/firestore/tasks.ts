@@ -111,6 +111,29 @@ export function listenTasksByProject(
   );
 }
 
+// 협력사 홈 화면용 — listenTasksByProject를 프로젝트마다 하나씩 호출하면(기존 방식)
+// 프로젝트 수만큼 실시간 리스너 채널이 동시에 열려 프록시 경유 세션에서 느렸다.
+// where("projectId","in",...)는 한 번에 최대 10개까지 지원해 10개씩 묶어서 연다 —
+// tasks의 list 규칙은 문서별로 재평가되므로(firestore.rules 참고) 쿼리를 "=="에서
+// "in"으로 바꿔도 권한 판정은 동일하다.
+export function listenTasksByProjectIds(projectIds: string[], cb: (tasks: Task[]) => void) {
+  if (projectIds.length === 0) {
+    cb([]);
+    return () => {};
+  }
+  const chunks: string[][] = [];
+  for (let i = 0; i < projectIds.length; i += 10) chunks.push(projectIds.slice(i, i + 10));
+  const byChunk: Task[][] = chunks.map(() => []);
+  const unsubs = chunks.map((chunk, i) => {
+    const q = query(colRef, where("projectId", "in", chunk));
+    return onSnapshot(q, (snap) => {
+      byChunk[i] = snap.docs.map(fromDoc);
+      cb(byChunk.flat().sort((a, b) => a.order - b.order));
+    });
+  });
+  return () => unsubs.forEach((u) => u());
+}
+
 /** 관리자 전용: 전체 프로젝트를 아우르는 업무 목록(홈 화면 통합 요약용) */
 export function listenAllTasks(cb: (tasks: Task[]) => void) {
   return onSnapshot(colRef, (snap) => {

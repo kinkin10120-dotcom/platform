@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { ChevronUp, ChevronDown, Trash2, Search, Megaphone, X, AlertCircle, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
-import { listenAllProjects, listenProjectsByClient, listenProject, updateProject, deleteProject, createProject } from "@/lib/firestore/projects";
+import { listenAllProjects, listenProjectsByClient, listenProjectsByIds, updateProject, deleteProject, createProject } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
-import { listenAllTasks, listenTasksByProject } from "@/lib/firestore/tasks";
+import { listenAllTasks, listenTasksByProject, listenTasksByProjectIds } from "@/lib/firestore/tasks";
 import { listenNotices, markNoticeRead } from "@/lib/firestore/notices";
 import { listenAllContracts } from "@/lib/firestore/contracts";
 import { listenAllPurchaseOrders } from "@/lib/firestore/purchaseOrders";
@@ -94,7 +94,8 @@ export default function HomePage() {
 
   const isAdmin = appUser?.role === "admin";
   // 협력사(파트너) 계정 — clients 컬렉션 접근 권한이 없어 clientId로 묶어 조회할 수 없다.
-  // 관리자가 배정한 projectIds 각각을 개별 문서 구독(listenProject)으로 가져온다.
+  // 관리자가 배정한 projectIds를 listenProjectsByIds로 배치 구독한다(10개씩 묶음) —
+  // 개별 문서를 하나씩 구독하면 프로젝트 수만큼 리스너 채널이 열려 프록시 경유 시 느리다.
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
 
@@ -151,18 +152,12 @@ export default function HomePage() {
         setLoaded(true);
         return;
       }
-      const results: Record<string, Project> = {};
-      const unsubs = ids.map((id) =>
-        listenProject(id, (p) => {
-          if (p) results[id] = p;
-          else delete results[id];
-          const list = Object.values(results);
-          setProjects(list);
-          setLoaded(true);
-          if (ids.length === 1 && list.length === 1) router.replace(`/projects/${list[0].id}`);
-        })
-      );
-      return () => unsubs.forEach((u) => u());
+      const unsub = listenProjectsByIds(ids, (list) => {
+        setProjects(list);
+        setLoaded(true);
+        if (ids.length === 1 && list.length === 1) router.replace(`/projects/${list[0].id}`);
+      });
+      return () => unsub();
     } else {
       setLoaded(true);
     }
@@ -180,14 +175,15 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!isPartner || projects.length === 0) return;
-    // clientId 없이(undefined) 호출 — belongsToPartnerProject 규칙이 projectId만으로 허용한다.
-    // hiddenFromPartner는 list 규칙에서 걸러줄 수 없어(문서 하나라도 조건을 못 넘으면 쿼리
-    // 전체가 거부되는 함정) 쿼리는 전체를 받아온 뒤 여기서 걸러낸다.
-    const unsubs = projects.map((p) => listenTasksByProject(p.id, (ts) => {
-      const visible = ts.filter((t) => !t.hiddenFromPartner);
-      setAllTasks((prev) => [...prev.filter((t) => t.projectId !== p.id), ...visible]);
-    }));
-    return () => unsubs.forEach((u) => u());
+    // listenTasksByProjectIds로 배치 구독한다(10개씩 묶음) — belongsToPartnerProject
+    // 규칙이 projectId만으로 허용하므로 clientId는 필요 없다. hiddenFromPartner는 list
+    // 규칙에서 걸러줄 수 없어(문서 하나라도 조건을 못 넘으면 쿼리 전체가 거부되는 함정)
+    // 쿼리는 전체를 받아온 뒤 여기서 걸러낸다.
+    const unsub = listenTasksByProjectIds(
+      projects.map((p) => p.id),
+      (ts) => setAllTasks(ts.filter((t) => !t.hiddenFromPartner))
+    );
+    return () => unsub();
   }, [isPartner, projects]);
 
   const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? clientId : "");

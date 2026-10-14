@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
   onSnapshot,
@@ -59,6 +60,30 @@ export function listenProjectsByClient(clientId: string, cb: (projects: Project[
 export function listenAllProjects(cb: (projects: Project[]) => void) {
   const q = query(colRef, orderBy("startDate", "asc"));
   return onSnapshot(q, (snap) => cb(snap.docs.map(fromDoc)));
+}
+
+// 협력사 홈 화면용 — 배정된 프로젝트 ID 목록을 listenProject로 하나씩 개별 구독하면,
+// 프록시를 거치는 세션에서는 프로젝트 수만큼 실시간 리스너 채널이 동시에 열려(연결당
+// 왕복 지연이 있는 중국 우회 경로에서 특히 느리게 느껴졌다) 전체 로딩이 오래 걸렸다.
+// Firestore의 list 규칙은 문서별로 재평가되므로(firestore.rules의 projects 참고)
+// where(documentId(),"in",...) 배치 쿼리도 개별 구독과 동일하게 안전하다 — "in"은
+// 한 번에 최대 10개까지만 지원해 10개씩 묶어서 리스너를 연다.
+export function listenProjectsByIds(ids: string[], cb: (projects: Project[]) => void) {
+  if (ids.length === 0) {
+    cb([]);
+    return () => {};
+  }
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+  const byChunk: Project[][] = chunks.map(() => []);
+  const unsubs = chunks.map((chunk, i) => {
+    const q = query(colRef, where(documentId(), "in", chunk));
+    return onSnapshot(q, (snap) => {
+      byChunk[i] = snap.docs.map(fromDoc);
+      cb(byChunk.flat());
+    });
+  });
+  return () => unsubs.forEach((u) => u());
 }
 
 export function listenProject(projectId: string, cb: (project: Project | null) => void) {

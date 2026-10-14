@@ -31,11 +31,34 @@ const useCnProxy = typeof window !== "undefined" && localStorage.getItem("fbProx
 // 재로딩 시점엔 localStorage가 비어있고 IndexedDB만 있음) 세션이 사라졌다. localStorage만
 // 쓰도록 강제해서 이 경로 자체를 없앤다 — 우회를 안 쓰는 세션은 지금까지와 동일하게
 // getAuth()의 기본 동작(IndexedDB 우선)을 그대로 쓴다.
+function debugBeacon(payload: Record<string, unknown>) {
+  try {
+    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+      navigator.sendBeacon("/api/debug-auth-restore", JSON.stringify(payload));
+    }
+  } catch {
+    // 진단용이라 실패해도 무시
+  }
+}
+
+let authInitError: string | null = null;
 export const auth = useCnProxy
-  ? initializeAuth(app, { persistence: [browserLocalPersistence, browserSessionPersistence] })
+  ? (() => {
+      try {
+        return initializeAuth(app, { persistence: [browserLocalPersistence, browserSessionPersistence] });
+      } catch (e) {
+        authInitError = String(e);
+        return getAuth(app);
+      }
+    })()
   : getAuth(app);
 if (useCnProxy) {
-  connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
+  try {
+    connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
+  } catch (e) {
+    authInitError = (authInitError ? authInitError + " | " : "") + "connectAuthEmulator: " + String(e);
+  }
+  debugBeacon({ stage: "firebase-init", authInitError, standalone: typeof navigator !== "undefined" ? (navigator as any).standalone : null });
 }
 
 // initializeFirestore는 같은 app에 대해 getFirestore보다 먼저, 딱 한 번만 호출해야 한다 —

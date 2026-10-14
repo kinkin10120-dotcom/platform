@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, initializeAuth, browserLocalPersistence, browserSessionPersistence, connectAuthEmulator } from "firebase/auth";
+import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getStorage, ref, getBlob } from "firebase/storage";
 
@@ -24,41 +24,9 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 // 실행되지 않고 지금까지와 똑같이 Firebase에 직접 접속한다.
 const useCnProxy = typeof window !== "undefined" && localStorage.getItem("fbProxyCN") === "1";
 
-// 중국 우회 세션은 "자동 로그인"이 계속 풀리는 문제가 있었다 — 로그인 직후엔 세션이
-// localStorage에 정상 저장되는데, getAuth()의 기본 저장소 우선순위([indexedDB, localStorage,
-// sessionStorage]) 때문에 다음 로딩 때 Firebase가 그걸 IndexedDB로 옮겨버리고, iOS에서
-// "홈 화면에 추가"한 PWA는 IndexedDB가 안정적으로 안 남아(실제 기기 로그로 확인함 —
-// 재로딩 시점엔 localStorage가 비어있고 IndexedDB만 있음) 세션이 사라졌다. localStorage만
-// 쓰도록 강제해서 이 경로 자체를 없앤다 — 우회를 안 쓰는 세션은 지금까지와 동일하게
-// getAuth()의 기본 동작(IndexedDB 우선)을 그대로 쓴다.
-function debugBeacon(payload: Record<string, unknown>) {
-  try {
-    if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-      navigator.sendBeacon("/api/debug-auth-restore", JSON.stringify(payload));
-    }
-  } catch {
-    // 진단용이라 실패해도 무시
-  }
-}
-
-let authInitError: string | null = null;
-export const auth = useCnProxy
-  ? (() => {
-      try {
-        return initializeAuth(app, { persistence: [browserLocalPersistence, browserSessionPersistence] });
-      } catch (e) {
-        authInitError = String(e);
-        return getAuth(app);
-      }
-    })()
-  : getAuth(app);
+export const auth = getAuth(app);
 if (useCnProxy) {
-  try {
-    connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
-  } catch (e) {
-    authInitError = (authInitError ? authInitError + " | " : "") + "connectAuthEmulator: " + String(e);
-  }
-  debugBeacon({ stage: "firebase-init", authInitError, standalone: typeof navigator !== "undefined" ? (navigator as any).standalone : null });
+  connectAuthEmulator(auth, window.location.origin, { disableWarnings: true });
 }
 
 // initializeFirestore는 같은 app에 대해 getFirestore보다 먼저, 딱 한 번만 호출해야 한다 —

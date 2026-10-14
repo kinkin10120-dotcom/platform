@@ -96,9 +96,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       settled = true;
       clearTimeout(timeoutId);
-      if (typeof window !== "undefined" && localStorage.getItem("fbProxyCN") === "1" && navigator.sendBeacon) {
-        navigator.sendBeacon("/api/debug-auth-restore", JSON.stringify({ stage: "resolved", userFound: !!user }));
-      }
       setFirebaseUser(user);
       if (user) {
         const { data, failed } = await fetchUserProfile(user.uid);

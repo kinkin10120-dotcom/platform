@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, br
 import { X } from "lucide-react";
 import Image from "next/image";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   return (
@@ -30,6 +31,18 @@ function LoginPageInner() {
   // 영향이 없다(src/lib/firebase.ts의 opt-in 플래그 참고).
   const [networkBlocked, setNetworkBlocked] = useState(false);
   const [cnProxyOn, setCnProxyOn] = useState(false);
+  const { firebaseUser, loading: authLoading } = useAuth();
+
+  // 로그인 페이지 자체엔 "이미 로그인돼 있으면 넘어가기" 로직이 없었다 — 그래서 PWA를
+  // 로그인 화면에서 "홈 화면에 추가"한 경우(앱의 시작 주소가 /login으로 고정됨) 열 때마다
+  // 세션은 백그라운드에서 멀쩡히 복원되는데 화면은 계속 로그인 폼에 머물러 있었다. 중국
+  // 우회 세션이 "자동 로그인이 풀린다"고 느낀 사례 상당수가 실은 이거였다(실제론 세션이
+  // 안 풀렸는데 로그인 폼만 계속 보임) — 복원되는 즉시 넘어가게 한다.
+  useEffect(() => {
+    if (authLoading || !firebaseUser) return;
+    const safeRedirect = redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/home";
+    router.replace(safeRedirect);
+  }, [authLoading, firebaseUser, redirectTo, router]);
 
   useEffect(() => {
     const saved = localStorage.getItem("savedEmail");

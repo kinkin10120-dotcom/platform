@@ -10,7 +10,16 @@ const HOP_BY_HOP_REQUEST_HEADERS = new Set(["host", "connection", "content-lengt
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set(["content-encoding", "content-length", "transfer-encoding", "connection"]);
 
 export async function forwardToHost(req: NextRequest, targetHost: string, pathSegments: string[]) {
-  const targetUrl = `https://${targetHost}/${pathSegments.join("/")}${req.nextUrl.search}`;
+  // 실제 버그로 확인된 부분: 우리 라우트는 전부 [...path] 캐치올 세그먼트를 쓰는데,
+  // 요청 경로에 콜론이 들어가면(Firestore의 documents:batchGet처럼 RPC 메서드를 콜론으로
+  // 붙이는 형식 — getDoc()이 내부적으로 이 방식을 쓴다) Next.js/Vercel이 그 경로 매칭을
+  // 쿼리 파라미터 "path="로도 흘려보낸다. 이걸 그대로 업스트림에 전달하면 Google API가
+  // "Unknown name \"path\""로 거부한다(직접 호출과 비교해 실제로 재현·확인함) — 우리
+  // 라우팅이 만든 파라미터일 뿐 원래 요청에는 없던 것이라 제거하고 보낸다.
+  const search = new URLSearchParams(req.nextUrl.search);
+  search.delete("path");
+  const query = search.toString();
+  const targetUrl = `https://${targetHost}/${pathSegments.join("/")}${query ? `?${query}` : ""}`;
 
   const headers = new Headers();
   req.headers.forEach((value, key) => {

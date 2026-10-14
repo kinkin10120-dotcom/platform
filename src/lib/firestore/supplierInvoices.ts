@@ -8,6 +8,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -34,6 +35,8 @@ function fromDoc(d: any): SupplierInvoice {
     status: data.status === "paid" ? "paid" : "submitted",
     submittedAt: data.submittedAt?.toMillis ? data.submittedAt.toMillis() : Date.now(),
     paidAt: data.paidAt?.toMillis ? data.paidAt.toMillis() : undefined,
+    paidAmount: typeof data.paidAmount === "number" ? data.paidAmount : undefined,
+    carriedForward: data.carriedForward === true,
     receiptUrl: data.receiptUrl || undefined,
     receiptStoragePath: data.receiptStoragePath || undefined,
     receiptName: data.receiptName || undefined,
@@ -77,6 +80,9 @@ export interface CreateSupplierInvoiceInput {
   memo?: string;
   memoKo?: string;
   createdBy: string;
+  // 이번 청구서의 "adjustment" 항목이 반영한 과거 청구서들 — 새 청구서 생성과 한 배치로
+  // carriedForward: true 처리해서, 생성은 됐는데 표시만 안 되는 식의 불일치가 안 생기게 한다.
+  adjustmentSourceInvoiceIds?: string[];
 }
 
 export async function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
@@ -101,7 +107,8 @@ export async function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
     ...(it.descriptionKo ? { descriptionKo: it.descriptionKo } : {}),
   }));
 
-  await setDoc(docRef, {
+  const batch = writeBatch(db);
+  batch.set(docRef, {
     invoiceNumber,
     partnerId: input.partnerId,
     partnerName: input.partnerName,
@@ -116,6 +123,10 @@ export async function createSupplierInvoice(input: CreateSupplierInvoiceInput) {
     submittedAt: serverTimestamp(),
     createdBy: input.createdBy,
   });
+  (input.adjustmentSourceInvoiceIds ?? []).forEach((id) => {
+    batch.update(doc(db, "supplierInvoices", id), { carriedForward: true });
+  });
+  await batch.commit();
   return docRef;
 }
 
@@ -124,8 +135,14 @@ export async function deleteSupplierInvoice(id: string) {
   return deleteDoc(doc(db, "supplierInvoices", id));
 }
 
-// 관리자 전용 — 송금 영수증을 첨부하며 지급 완료로 바꾼다.
-export async function markSupplierInvoicePaid(id: string, receiptFile: File, onProgress?: (ratio: number) => void) {
+// 관리자 전용 — 송금 영수증을 첨부하며 지급 완료로 바꾼다. paidAmount(실제 입금액)를 따로
+// 지정하지 않으면 청구액 전액이 입금된 것으로 본다 — 지금까지의 동작과 동일하게 유지된다.
+export async function markSupplierInvoicePaid(
+  id: string,
+  receiptFile: File,
+  paidAmount?: number,
+  onProgress?: (ratio: number) => void
+) {
   const storagePath = `supplierInvoiceReceipts/${id}/${Date.now()}_${receiptFile.name}`;
   const storageRef = ref(storage, storagePath);
   const url = await new Promise<string>((resolve, reject) => {
@@ -140,6 +157,7 @@ export async function markSupplierInvoicePaid(id: string, receiptFile: File, onP
   return updateDoc(doc(db, "supplierInvoices", id), {
     status: "paid" as SupplierInvoiceStatus,
     paidAt: serverTimestamp(),
+    ...(typeof paidAmount === "number" ? { paidAmount } : {}),
     receiptUrl: url,
     receiptStoragePath: storagePath,
     receiptName: receiptFile.name,
@@ -158,6 +176,8 @@ export async function unmarkSupplierInvoicePaid(invoice: SupplierInvoice) {
   return updateDoc(doc(db, "supplierInvoices", invoice.id), {
     status: "submitted" as SupplierInvoiceStatus,
     paidAt: null,
+    paidAmount: null,
+    carriedForward: false,
     receiptUrl: null,
     receiptStoragePath: null,
     receiptName: null,

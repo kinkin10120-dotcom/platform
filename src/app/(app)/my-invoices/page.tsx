@@ -171,6 +171,18 @@ export default function MyInvoicesPage() {
     return Math.max(0, Math.round((o.totalAmount - invoiced) * 100) / 100);
   }
 
+  // 지급완료된 과거 청구서 중, 실제 입금액이 청구액과 달랐는데 아직 다음 청구서에 반영 안 된
+  // 것들 — 같은 통화끼리만 합산한다(통화가 섞이면 "하나의 금액"으로 더할 수 없다). 양수면
+  // 미납(이번에 더 받아야 함), 음수면 초과입금(이번에 덜 받아야 함).
+  const unreconciled = useMemo(() => {
+    const matches = invoices.filter(
+      (inv) => inv.status === "paid" && typeof inv.paidAmount === "number" && !inv.carriedForward && inv.currency === currency
+    );
+    const amount = matches.reduce((sum, inv) => sum + (inv.totalAmount - (inv.paidAmount ?? inv.totalAmount)), 0);
+    return { invoiceIds: matches.map((inv) => inv.id), amount: Math.round(amount * 100) / 100 };
+  }, [invoices, currency]);
+  const [includeAdjustment, setIncludeAdjustment] = useState(true);
+
   // 선금/잔금 구분을 쓰는 발주이거나, 이미 일부 청구된 적 있는 발주만 "이번 청구 차수"
   // 선택지를 보여준다 — 그 기능을 전혀 안 쓰는 평범한 단일 발주는 예전처럼 깔끔하게 전액만 보인다.
   function needsPhaseSelector(o: SupplierOrder): boolean {
@@ -234,6 +246,7 @@ export default function MyInvoicesPage() {
     setSelectedOrderIds([]);
     setOrderBillingOverrides({});
     setCustomItems([]);
+    setIncludeAdjustment(true);
     const now = new Date();
     setTitle(isZh ? `${now.getMonth() + 1}月账单` : `${now.getMonth() + 1}월 청구서`);
     setMemo("");
@@ -250,10 +263,28 @@ export default function MyInvoicesPage() {
   }
 
   const selectedOrders = orders.filter((o) => selectedOrderIds.includes(o.id));
-  const total = selectedOrders.reduce((sum, o) => sum + billedAmountForOrder(o), 0) + customItems.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const adjustmentApplied = includeAdjustment && unreconciled.invoiceIds.length > 0 && unreconciled.amount !== 0;
+  const total =
+    selectedOrders.reduce((sum, o) => sum + billedAmountForOrder(o), 0) +
+    customItems.reduce((sum, c) => sum + (c.amount || 0), 0) +
+    (adjustmentApplied ? unreconciled.amount : 0);
+  // 미납금 반영 조정 항목 때문에 합계가 0 이하로 내려갈 수 있다(초과입금이 이번 신규 청구액보다
+  // 큰 경우) — 그럴 땐 금액이 아니라 "청구할 내용이 있는지"로 제출 가능 여부를 판단한다.
+  const hasItems = selectedOrders.length > 0 || customItems.some((c) => c.description.trim() && c.amount > 0) || adjustmentApplied;
 
   function buildItems(): SupplierInvoiceLineItem[] {
     return [
+      ...(adjustmentApplied
+        ? [
+            {
+              id: newId(),
+              source: "adjustment" as const,
+              description: zh(isZh, unreconciled.amount > 0 ? "이전 청구서 미납금 반영" : "이전 청구서 초과입금 반영"),
+              descriptionKo: unreconciled.amount > 0 ? "이전 청구서 미납금 반영" : "이전 청구서 초과입금 반영",
+              amount: unreconciled.amount,
+            },
+          ]
+        : []),
       ...selectedOrders.map((o) => {
         const billing = getBilling(o);
         const showBracket = needsPhaseSelector(o);
@@ -323,6 +354,7 @@ export default function MyInvoicesPage() {
         memo: memo.trim() || undefined,
         memoKo,
         createdBy: appUser.uid,
+        adjustmentSourceInvoiceIds: adjustmentApplied ? unreconciled.invoiceIds : undefined,
       });
       setShowForm(false);
     } catch (e) {
@@ -463,6 +495,27 @@ export default function MyInvoicesPage() {
             />
           </div>
 
+          {unreconciled.invoiceIds.length > 0 && unreconciled.amount !== 0 && (
+            <div className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-xs ${unreconciled.amount > 0 ? "bg-amber-50" : "bg-blue-50"}`}>
+              <div>
+                <p className={`font-semibold ${unreconciled.amount > 0 ? "text-amber-700" : "text-blue-700"}`}>
+                  {zh(isZh, "미납금 현황")}: {formatSupplierMoney(unreconciled.amount, currency)}
+                </p>
+                <p className="mt-0.5 text-[#86868b]">{zh(isZh, "지난 청구서 중 실제 입금액이 청구액보다 적었던 차액입니다.")}</p>
+              </div>
+              <button
+                onClick={() => setIncludeAdjustment((v) => !v)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                  includeAdjustment
+                    ? "bg-[#1d1d1f] text-white"
+                    : "border border-[#d1d1d6] text-[#1d1d1f] hover:border-[#86868b]"
+                }`}
+              >
+                {includeAdjustment ? zh(isZh, "포함 취소") : zh(isZh, "이번 청구서에 포함")}
+              </button>
+            </div>
+          )}
+
           <div>
             <p className="mb-1.5 text-xs font-medium text-[#86868b]">{zh(isZh, "미청구 발주서 중 이번에 청구할 건 선택")}</p>
             <div className="space-y-1.5">
@@ -597,7 +650,7 @@ export default function MyInvoicesPage() {
           <div className="flex gap-2">
             <button
               onClick={handleSubmit}
-              disabled={submitting || total <= 0}
+              disabled={submitting || !hasItems}
               className="rounded-full bg-[#1d1d1f] px-5 py-2 text-sm font-medium text-white transition hover:bg-black disabled:opacity-50"
             >
               {submitting ? zh(isZh, "제출 중...") : zh(isZh, "청구서 제출")}
@@ -613,7 +666,7 @@ export default function MyInvoicesPage() {
                   setPreviewLoading(false);
                 }
               }}
-              disabled={total <= 0 || previewLoading}
+              disabled={!hasItems || previewLoading}
               className="flex items-center gap-1.5 rounded-full border border-[#d1d1d6] px-5 py-2 text-sm font-medium text-[#1d1d1f] transition hover:border-[#86868b] disabled:opacity-50"
             >
               <Eye size={14} /> {previewLoading ? zh(isZh, "불러오는 중...") : zh(isZh, "미리보기")}
@@ -667,6 +720,12 @@ export default function MyInvoicesPage() {
                 )}
               </div>
             </div>
+            {inv.status === "paid" && typeof inv.paidAmount === "number" && inv.paidAmount !== inv.totalAmount && (
+              <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-medium ${inv.paidAmount < inv.totalAmount ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+                {zh(isZh, "실제 입금액")} {formatSupplierMoney(inv.paidAmount, inv.currency)}
+                {inv.carriedForward && ` · ${zh(isZh, "다음 청구서에 반영됨")}`}
+              </p>
+            )}
             {inv.status === "paid" && inv.receiptUrl && (
               <a href={toProxiedUrl(inv.receiptUrl)} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-green-600 underline underline-offset-2">
                 <Receipt size={12} /> {zh(isZh, "영수증 보기")}

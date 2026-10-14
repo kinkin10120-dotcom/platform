@@ -367,6 +367,14 @@ service cloud.firestore {
       // 협력사가 건드릴 수 없다.
       allow delete: if isSignedIn() && myProfile().role == 'partner'
         && resource.data.partnerId == request.auth.uid && resource.data.status == 'submitted';
+      // 미납/초과입금 차액을 새 청구서에 반영해 제출할 때, 그 차액의 출처가 된 지급완료
+      // 청구서들을 carriedForward: true로만 표시한다 — 다른 필드는 못 건드리고, false로
+      // 되돌릴 수도 없다(반영 취소는 관리자만, 지급완료 되돌리기를 통해서만 가능).
+      allow update: if isSignedIn() && myProfile().role == 'partner'
+        && resource.data.partnerId == request.auth.uid
+        && resource.data.status == 'paid'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['carriedForward'])
+        && request.resource.data.carriedForward == true;
     }
 
     // ---- 협력사 견적서 (협력사 → HANDYHAND 방향, 아직 발주 전인 건에 대한 사전 제안) ----

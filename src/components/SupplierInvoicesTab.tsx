@@ -11,6 +11,7 @@ import {
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import { createNotification } from "@/lib/firestore/notifications";
 import { SupplierInvoice, SUPPLIER_INVOICE_STATUS_LABEL } from "@/lib/types";
+import NumberInput from "@/components/NumberInput";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -24,6 +25,10 @@ export default function SupplierInvoicesTab() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  // 지급완료 처리 시 "실제 입금액" — 보통은 청구액과 같아서 기본값으로 미리 채워두고, 다르게
+  // 보낸 경우에만 고쳐 입력한다. 선택한 청구서가 바뀔 때만 다시 채운다(목록 리스너가 갱신될
+  // 때마다 덮어쓰면 입력 중이던 값이 날아간다).
+  const [paidAmountInput, setPaidAmountInput] = useState(0);
 
   useEffect(() => listenAllSupplierInvoices(setInvoices), []);
 
@@ -33,6 +38,11 @@ export default function SupplierInvoicesTab() {
     if (fresh) setSelected(fresh);
   }, [invoices]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (selected) setPaidAmountInput(selected.totalAmount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
   async function handleUploadReceipt(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
@@ -40,7 +50,7 @@ export default function SupplierInvoicesTab() {
     setUploadError("");
     setUploadProgress(0);
     try {
-      await markSupplierInvoicePaid(selected.id, file, setUploadProgress);
+      await markSupplierInvoicePaid(selected.id, file, paidAmountInput, setUploadProgress);
       await createNotification({
         userId: selected.createdBy,
         type: "supplier_invoice_paid",
@@ -122,6 +132,17 @@ export default function SupplierInvoicesTab() {
             <span className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(selected.totalAmount, selected.currency)}</span>
           </div>
 
+          {selected.status === "paid" && typeof selected.paidAmount === "number" && selected.paidAmount !== selected.totalAmount && (
+            <p className={`rounded-xl px-3 py-2 text-xs font-medium ${selected.paidAmount < selected.totalAmount ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+              실제 입금액 {formatSupplierMoney(selected.paidAmount, selected.currency)}
+              {" · "}
+              {selected.paidAmount < selected.totalAmount
+                ? `미납 ${formatSupplierMoney(selected.totalAmount - selected.paidAmount, selected.currency)}`
+                : `초과입금 ${formatSupplierMoney(selected.paidAmount - selected.totalAmount, selected.currency)}`}
+              {selected.carriedForward && " · 다음 청구서에 반영됨"}
+            </p>
+          )}
+
           {(selected.memoKo || selected.memo) && (
             <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">{selected.memoKo || selected.memo}</p>
           )}
@@ -135,10 +156,25 @@ export default function SupplierInvoicesTab() {
             </Link>
 
             {selected.status === "submitted" ? (
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]">
-                <Upload size={13} /> {uploading ? `업로드 중... ${uploadProgress}%` : "영수증 첨부하고 지급완료 처리"}
-                <input type="file" className="hidden" onChange={handleUploadReceipt} disabled={uploading} />
-              </label>
+              <div className="flex w-full flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1.5 text-xs text-[#86868b]">
+                  실제 입금액
+                  <NumberInput
+                    value={paidAmountInput}
+                    onChange={setPaidAmountInput}
+                    className="w-28 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+                  />
+                  {paidAmountInput !== selected.totalAmount && (
+                    <span className={paidAmountInput < selected.totalAmount ? "text-amber-600" : "text-blue-600"}>
+                      ({paidAmountInput < selected.totalAmount ? "미납" : "초과"} {formatSupplierMoney(Math.abs(selected.totalAmount - paidAmountInput), selected.currency)})
+                    </span>
+                  )}
+                </span>
+                <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]">
+                  <Upload size={13} /> {uploading ? `업로드 중... ${uploadProgress}%` : "영수증 첨부하고 지급완료 처리"}
+                  <input type="file" className="hidden" onChange={handleUploadReceipt} disabled={uploading} />
+                </label>
+              </div>
             ) : (
               <>
                 {selected.receiptUrl && (

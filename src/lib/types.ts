@@ -835,7 +835,10 @@ export const SUPPLIER_INVOICE_STATUS_LABEL: Record<SupplierInvoiceStatus, string
 
 export interface SupplierInvoiceLineItem {
   id: string;
-  source: "order" | "custom";
+  // "adjustment" — 과거 청구서 중 실제 입금액이 청구액과 달랐던 차액(미납이면 +, 초과입금이면
+  // -)을 이번 청구서에 반영하는 줄. 금액은 시스템이 과거 청구서에서 계산해 채우므로, 다른
+  // 항목과 달리 화면에서 직접 수정하지 않는다(SupplierInvoice.carriedForward 참고).
+  source: "order" | "custom" | "adjustment";
   // source === "order"일 때만 — 원본 발주서를 그대로 참조하지 않고 당시 금액을 복사해 둔다
   // (발주서가 나중에 바뀌어도 이미 제출한 청구서 금액은 그대로 남아야 한다).
   supplierOrderId?: string;
@@ -867,6 +870,12 @@ export interface SupplierInvoice {
   status: SupplierInvoiceStatus;
   submittedAt: number;
   paidAt?: number;
+  // 지급 완료 처리 시 관리자가 입력하는 실제 입금액 — 입력 안 하면(기존 데이터 포함) 청구액
+  // 전액이 입금된 것으로 본다. totalAmount - paidAmount가 양수면 미납, 음수면 초과입금.
+  paidAmount?: number;
+  // 위 차액이 다음 청구서의 "미납/초과입금 반영" 조정 항목으로 이미 포함됐는지 — 한 번
+  // 반영되면 다시 미반영 목록에 안 뜨게 막는다.
+  carriedForward?: boolean;
   // 지급 완료 처리 시 관리자가 첨부하는 송금 영수증.
   receiptUrl?: string;
   receiptStoragePath?: string;

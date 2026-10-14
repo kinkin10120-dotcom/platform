@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useAuth } from "@/lib/auth-context";
 import { QuoteModal } from "@/components/QuoteModal";
 import { CadAnalysisModal } from "@/components/CadAnalysisModal";
 import { ContactModal } from "@/components/ContactModal";
@@ -214,7 +213,6 @@ function AiAnalysisMobileIntro({ onCadOpen, onQuoteOpen }: { onCadOpen: () => vo
 }
 
 export default function EnglishRootPage() {
-  const { loading } = useAuth();
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [quotePrefill, setQuotePrefill] = useState<string>("");
   const [cadOpen, setCadOpen] = useState(false);
@@ -247,19 +245,6 @@ export default function EnglishRootPage() {
       window.removeEventListener("click", onFirstInteraction);
     };
   }, []);
-
-  if (loading) {
-    return (
-      <div className="relative flex h-screen items-center justify-center overflow-hidden bg-black">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(241,206,0,0.12) 0%, transparent 70%)", filter: "blur(40px)" }}
-        />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="HANDYHAND" className="relative h-7 w-auto animate-pulse" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-white text-[#1d1d1f]">

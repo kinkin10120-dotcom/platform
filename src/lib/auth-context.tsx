@@ -46,8 +46,8 @@ async function fetchUserProfile(uid: string, attempt = 1): Promise<{ data: AppUs
     const snap = await getDoc(doc(db, "users", uid));
     return { data: snap.exists() ? ({ uid, ...(snap.data() as Omit<AppUser, "uid">) }) : null, failed: false };
   } catch (e) {
-    if (attempt < 3) {
-      await new Promise((r) => setTimeout(r, attempt * 1000));
+    if (attempt < 4) {
+      await new Promise((r) => setTimeout(r, attempt * 400));
       return fetchUserProfile(uid, attempt + 1);
     }
     console.error("사용자 프로필 조회 실패", e);

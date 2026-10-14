@@ -1,5 +1,6 @@
 import { formatMoney, calcOrderTotals } from "@/lib/orderCalc";
 import { Client, Currency, PURCHASE_ORDER_STATUS_LABEL, PurchaseOrderStatus } from "@/lib/types";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 export interface PurchaseOrderDocumentItem {
   productName: string;
@@ -40,7 +41,7 @@ export default function PurchaseOrderDocument({ data }: { data: PurchaseOrderDoc
         <div className="text-right text-sm">
           {data.client?.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={data.client.logoUrl} alt={data.clientName} className="ml-auto h-[62px] max-w-[286px] object-contain object-right" />
+            <img src={toProxiedUrl(data.client.logoUrl)} alt={data.clientName} className="ml-auto h-[62px] max-w-[286px] object-contain object-right" />
           ) : (
             <p className="font-semibold">{data.clientName}</p>
           )}
@@ -129,7 +130,7 @@ export default function PurchaseOrderDocument({ data }: { data: PurchaseOrderDoc
             <div className="flex h-20 items-center justify-center">
               {data.signatureUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={data.signatureUrl} alt="서명" className="h-full object-contain" />
+                <img src={toProxiedUrl(data.signatureUrl)} alt="서명" className="h-full object-contain" />
               ) : (
                 <span className="text-xs text-[#d1d1d6]">서명 없음</span>
               )}

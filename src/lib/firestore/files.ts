@@ -2,7 +2,7 @@ import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, orderBy, query
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { TaskFile } from "@/lib/types";
-import { isCnProxyOn, uploadFileViaProxy, deleteFileViaProxy } from "@/lib/storageProxy";
+import { isCnProxyOn, uploadFileViaProxy, deleteFileViaProxy, toProxiedUrl } from "@/lib/storageProxy";
 
 const CAD_EXTS = ["stp", "step", "dxf", "dwg", "ipt", "iam", "sldprt", "sldasm"];
 
@@ -51,7 +51,7 @@ export function listenFiles(taskId: string, cb: (files: TaskFile[]) => void) {
           id: d.id,
           taskId,
           name: data.name,
-          url: data.url,
+          url: toProxiedUrl(data.url),
           storagePath: data.storagePath,
           size: data.size,
           contentType: data.contentType,

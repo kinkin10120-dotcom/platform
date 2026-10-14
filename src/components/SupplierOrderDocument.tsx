@@ -1,5 +1,6 @@
 import { SUPPLIER_ORDER_KIND_CN, SUPPLIER_ORDER_KIND_LABEL, SUPPLIER_ORDER_INSTALLMENT_LABEL, SupplierCurrency, SupplierOrderItem } from "@/lib/types";
 import { calcSupplierItemTotal, calcSupplierOrderTotal, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
+import { toProxiedUrl } from "@/lib/storageProxy";
 
 // 발주서를 받는 쪽이 중국 공장이라 라벨을 전부 중문/영문 병기로 쓴다. 우리 쪽 발주서(매출)는
 // PurchaseOrderDocument가 그리고, 이건 나가는 발주(매입) 전용이다 — 서명란 대신 공장이 도장을
@@ -136,7 +137,7 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
                       제품 이미지는 공개 읽기가 열린 경로라 인쇄 시에도 그대로 나온다. */}
                   {it.imageUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={it.imageUrl} alt="" className="h-14 w-14 shrink-0 rounded border border-[#e5e5e5] object-cover" />
+                    <img src={toProxiedUrl(it.imageUrl)} alt="" className="h-14 w-14 shrink-0 rounded border border-[#e5e5e5] object-cover" />
                   )}
                   <div className="min-w-0">
                     <p className="font-medium">

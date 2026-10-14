@@ -19,6 +19,7 @@ import { groupDateHistory } from "@/lib/groupDateHistory";
 import { calcOrderTotals } from "@/lib/orderCalc";
 import MonthlyOrderChart, { buildMonthlyOrderData } from "@/components/dashboard/MonthlyOrderChart";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
   active: "진행 중",
@@ -68,10 +69,14 @@ function renderDateChangeRow(
 export default function HomePage() {
   const { appUser } = useAuth();
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>([]);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const projectsCacheKey = `home:projects:${appUser?.uid}`;
+  const tasksCacheKey = `home:tasks:${appUser?.uid}`;
+  const [projects, setProjects] = useState<Project[]>(() => getCached(projectsCacheKey) ?? []);
   const [clients, setClients] = useState<Client[]>([]);
-  const [allTasks, setAllTasks] = useState<Task[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [allTasks, setAllTasks] = useState<Task[]>(() => getCached(tasksCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(projectsCacheKey) !== undefined);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [deleteInput, setDeleteInput] = useState("");
   const [search, setSearch] = useState("");
@@ -154,6 +159,7 @@ export default function HomePage() {
       }
       const unsub = listenProjectsByIds(ids, (list) => {
         setProjects(list);
+        setCached(projectsCacheKey, list);
         setLoaded(true);
         if (ids.length === 1 && list.length === 1) router.replace(`/projects/${list[0].id}`);
       });
@@ -161,7 +167,7 @@ export default function HomePage() {
     } else {
       setLoaded(true);
     }
-  }, [appUser, isAdmin, isPartner, router]);
+  }, [appUser, isAdmin, isPartner, router, projectsCacheKey]);
 
   useEffect(() => {
     if (isAdmin || projects.length === 0 || !appUser?.clientId) return;
@@ -181,10 +187,14 @@ export default function HomePage() {
     // 쿼리는 전체를 받아온 뒤 여기서 걸러낸다.
     const unsub = listenTasksByProjectIds(
       projects.map((p) => p.id),
-      (ts) => setAllTasks(ts.filter((t) => !t.hiddenFromPartner))
+      (ts) => {
+        const visible = ts.filter((t) => !t.hiddenFromPartner);
+        setAllTasks(visible);
+        setCached(tasksCacheKey, visible);
+      }
     );
     return () => unsub();
-  }, [isPartner, projects]);
+  }, [isPartner, projects, tasksCacheKey]);
 
   const clientName = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.name ?? clientId : "");
   const clientLogo = (clientId?: string) => (clientId ? clients.find((c) => c.id === clientId)?.logoUrl : undefined);

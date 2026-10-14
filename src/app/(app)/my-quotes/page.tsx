@@ -23,6 +23,7 @@ import { zh, usePartnerZh, useZhAutoTranslate, translateToKoreanForCache } from 
 import NumberInput from "@/components/NumberInput";
 import PrintablePreview from "@/components/PrintablePreview";
 import SupplierQuoteDocument from "@/components/SupplierQuoteDocument";
+import { getCached, setCached } from "@/lib/queryCache";
 
 const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
@@ -53,8 +54,11 @@ export default function MyQuotesPage() {
   const { appUser } = useAuth();
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
-  const [quotes, setQuotes] = useState<SupplierQuote[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const quotesCacheKey = `my-quotes:${appUser?.uid}`;
+  const [quotes, setQuotes] = useState<SupplierQuote[]>(() => getCached(quotesCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(quotesCacheKey) !== undefined);
   const [loadError, setLoadError] = useState("");
   const [projects, setProjects] = useState<{ id: string; name: string; nameZh?: string }[]>([]);
   // 발주 목록과 같은 방식으로 기본은 접어두고 필요할 때만 펼친다.
@@ -96,6 +100,7 @@ export default function MyQuotesPage() {
       (q) => {
         setLoadError("");
         setQuotes(q);
+        setCached(quotesCacheKey, q);
         setLoaded(true);
       },
       (e) => {
@@ -103,7 +108,7 @@ export default function MyQuotesPage() {
         setLoaded(true);
       }
     );
-  }, [appUser, isPartner]);
+  }, [appUser, isPartner, quotesCacheKey]);
 
   // /organize의 AI 비서가 "견적서 작성"으로 판단한 결과를 여기로 넘겨받는다 — 받는 즉시
   // 작성 폼을 그 내용으로 채워서 열어준다(실제 제출은 사람이 확인하고 직접 눌러야 한다).

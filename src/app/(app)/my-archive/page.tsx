@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { Lock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenProject } from "@/lib/firestore/projects";
+import { listenProjectsByIds } from "@/lib/firestore/projects";
 import { listenTasksByProject } from "@/lib/firestore/tasks";
 import { Project, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import PartnerArchiveTab from "@/components/PartnerArchiveTab";
+import { getCached, setCached } from "@/lib/queryCache";
 
 // 협력사(파트너) 계정 전용 — 사이드바에서 바로 들어올 수 있는 자료함. 한 협력사가 프로젝트를
 // 여러 개 동시에 진행하는 경우가 많아, 매번 홈에서 프로젝트를 먼저 찾아 들어가 탭을 눌러야
@@ -16,8 +17,11 @@ import PartnerArchiveTab from "@/components/PartnerArchiveTab";
 export default function MyArchivePage() {
   const { appUser } = useAuth();
   const isZh = usePartnerZh();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const projectsCacheKey = `my-archive:projects:${appUser?.uid}`;
+  const [projects, setProjects] = useState<Project[]>(() => getCached(projectsCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(projectsCacheKey) !== undefined);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   // 완료된 프로젝트까지 탭에 계속 남아있으면, 진행 중인 프로젝트를 찾을 때 거슬린다 — 홈
@@ -32,17 +36,13 @@ export default function MyArchivePage() {
       setLoaded(true);
       return;
     }
-    const results: Record<string, Project> = {};
-    const unsubs = ids.map((id) =>
-      listenProject(id, (p) => {
-        if (p) results[id] = p;
-        else delete results[id];
-        setProjects(Object.values(results));
-        setLoaded(true);
-      })
-    );
-    return () => unsubs.forEach((u) => u());
-  }, [appUser]);
+    const unsub = listenProjectsByIds(ids, (list) => {
+      setProjects(list);
+      setCached(projectsCacheKey, list);
+      setLoaded(true);
+    });
+    return () => unsub();
+  }, [appUser, projectsCacheKey]);
 
   const zhNames = useZhAutoTranslate(isZh, projects.map((p) => p.name));
   const trName = (p: Project) => (isZh && p.nameZh) || zhNames[p.name] || p.name;

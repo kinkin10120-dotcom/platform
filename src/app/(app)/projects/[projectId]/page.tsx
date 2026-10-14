@@ -37,6 +37,7 @@ import ProjectCommentsTab from "@/components/ProjectCommentsTab";
 import PartnerArchiveTab from "@/components/PartnerArchiveTab";
 import AiDiagnosisPanel from "@/components/AiDiagnosisPanel";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 
 type Tab = "gantt" | "list" | "dashboard" | "files" | "comments" | "partner";
 
@@ -72,11 +73,15 @@ export default function ProjectWorkspacePage() {
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
 
-  const [project, setProject] = useState<Project | null | undefined>(undefined);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const projectCacheKey = `project:${projectId}`;
+  const tasksCacheKey = `project-tasks:${projectId}`;
+  const [project, setProject] = useState<Project | null | undefined>(() => getCached(projectCacheKey) ?? undefined);
   const [client, setClient] = useState<Client | null>(null);
   // 고객사를 나중에 지정/변경할 수 있게 하는 수정 화면 드롭다운용 — 관리자만 필요하다.
   const [allClients, setAllClients] = useState<Client[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>(() => getCached(tasksCacheKey) ?? []);
   const [assigneeOptions, setAssigneeOptions] = useState<AppUser[]>([]);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [tab, setTab] = useState<Tab>("gantt");
@@ -120,7 +125,10 @@ export default function ProjectWorkspacePage() {
   const [saving, setSaving] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
 
-  useEffect(() => listenProject(projectId, setProject), [projectId]);
+  useEffect(() => listenProject(projectId, (p) => {
+    setProject(p);
+    if (p) setCached(projectCacheKey, p);
+  }), [projectId, projectCacheKey]);
   useEffect(() => {
     if (!appUser) return;
     return listenTasksByProject(
@@ -130,12 +138,14 @@ export default function ProjectWorkspacePage() {
         // hiddenFromPartner는 firestore.rules의 list 규칙에서 걸러줄 수 없다(문서 하나라도
         // 조건을 통과 못 하면 쿼리 전체가 거부되는 함정 — clientVisible과 동일) — 그래서
         // 쿼리는 전체를 받아온 뒤 여기서 협력사 계정에 한해 숨김 업무를 걸러낸다.
-        setTasks(isPartner ? t.filter((task) => !task.hiddenFromPartner) : t);
+        const visible = isPartner ? t.filter((task) => !task.hiddenFromPartner) : t;
+        setTasks(visible);
+        setCached(tasksCacheKey, visible);
       },
       (e) => setTasksError(e.message),
       (isAdmin || isPartner) ? undefined : appUser.clientId
     );
-  }, [projectId, appUser, isAdmin, isPartner]);
+  }, [projectId, appUser, isAdmin, isPartner, tasksCacheKey]);
 
   // 검색 결과(코멘트·자료)에서 ?task=taskId 로 들어오면 해당 업무 상세를 바로 연다.
   useEffect(() => {

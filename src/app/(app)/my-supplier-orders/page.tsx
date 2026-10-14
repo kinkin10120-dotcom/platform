@@ -14,6 +14,7 @@ import {
   SUPPLIER_ORDER_KIND_BADGE_CLASS,
 } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
+import { getCached, setCached } from "@/lib/queryCache";
 
 const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
@@ -29,8 +30,11 @@ export default function MySupplierOrdersPage() {
   const { appUser } = useAuth();
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
-  const [orders, setOrders] = useState<SupplierOrder[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const ordersCacheKey = `my-supplier-orders:${appUser?.uid}`;
+  const [orders, setOrders] = useState<SupplierOrder[]>(() => getCached(ordersCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(ordersCacheKey) !== undefined);
   const [loadError, setLoadError] = useState("");
   // 내역이 많아지면 한눈에 찾기 어려워서, 기본은 접어두고 번호·금액 등 핵심만 보여준 뒤
   // 눌러서 펼치게 한다.
@@ -52,6 +56,7 @@ export default function MySupplierOrdersPage() {
       (o) => {
         setLoadError("");
         setOrders(o);
+        setCached(ordersCacheKey, o);
         setLoaded(true);
       },
       (e) => {
@@ -59,7 +64,7 @@ export default function MySupplierOrdersPage() {
         setLoaded(true);
       }
     );
-  }, [appUser, isPartner]);
+  }, [appUser, isPartner, ordersCacheKey]);
 
   // 아직 발행 전(작성중)인 발주는 관리자가 검토 중인 내부 문서라 협력사에게 보여줄 필요가
   // 없다 — "발행하기"를 눌러야 비로소 여기 목록에 나타난다.

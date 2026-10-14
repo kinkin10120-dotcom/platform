@@ -9,6 +9,7 @@ import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import { ClientProductInternal, SupplierProduct, SupplierOrderKind, SupplierCurrency, SupplierPartItem, SUPPLIER_ORDER_KIND_LABEL } from "@/lib/types";
 import { zh, usePartnerZh } from "@/lib/i18n";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 
 const KIND_ORDER: SupplierOrderKind[] = ["production", "development", "mold", "sample"];
 
@@ -34,9 +35,13 @@ export default function MyProductsPage() {
   const { appUser } = useAuth();
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
-  const [internals, setInternals] = useState<ClientProductInternal[]>([]);
-  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서 갱신한다.
+  const internalsCacheKey = `my-products:internals:${appUser?.uid}`;
+  const supplierProductsCacheKey = `my-products:supplierProducts:${appUser?.uid}`;
+  const [internals, setInternals] = useState<ClientProductInternal[]>(() => getCached(internalsCacheKey) ?? []);
+  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>(() => getCached(supplierProductsCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(internalsCacheKey) !== undefined && getCached(supplierProductsCacheKey) !== undefined);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -46,16 +51,16 @@ export default function MyProductsPage() {
     const check = () => { if (got1 && got2) setLoaded(true); };
     const unsub1 = listenClientProductInternalsByPartner(
       appUser.uid,
-      (list) => { setInternals(list); got1 = true; check(); },
+      (list) => { setInternals(list); setCached(internalsCacheKey, list); got1 = true; check(); },
       (e) => { setLoadError(e.message); got1 = true; check(); }
     );
     const unsub2 = listenSupplierProductsByPartner(
       appUser.uid,
-      (list) => { setSupplierProducts(list); got2 = true; check(); },
+      (list) => { setSupplierProducts(list); setCached(supplierProductsCacheKey, list); got2 = true; check(); },
       (e) => { setLoadError(e.message); got2 = true; check(); }
     );
     return () => { unsub1(); unsub2(); };
-  }, [appUser, isPartner]);
+  }, [appUser, isPartner, internalsCacheKey, supplierProductsCacheKey]);
 
   if (appUser && !isPartner) {
     return <p className="text-sm text-[#86868b]">{zh(isZh, "접근 권한이 없습니다.")}</p>;

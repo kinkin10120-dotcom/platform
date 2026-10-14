@@ -29,6 +29,7 @@ import PrintablePreview from "@/components/PrintablePreview";
 import SupplierInvoiceDocument from "@/components/SupplierInvoiceDocument";
 import { takeAiAssistantDraft } from "@/lib/aiAssistantHandoff";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 
 const STATUS_STYLE: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-600",
@@ -51,9 +52,14 @@ export default function MyInvoicesPage() {
   const { appUser } = useAuth();
   const isPartner = appUser?.role === "partner";
   const isZh = usePartnerZh();
-  const [orders, setOrders] = useState<SupplierOrder[]>([]);
-  const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // 메뉴 전환 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "불러오는 중..."이 매번
+  // 길게 보였다 — 직전에 받아온 값을 캐시에서 먼저 꺼내 보여주고, 리스너는 그대로
+  // 백그라운드에서 다시 맺어 최신값으로 조용히 갱신한다.
+  const ordersCacheKey = `my-invoices:orders:${appUser?.uid}`;
+  const invoicesCacheKey = `my-invoices:invoices:${appUser?.uid}`;
+  const [orders, setOrders] = useState<SupplierOrder[]>(() => getCached(ordersCacheKey) ?? []);
+  const [invoices, setInvoices] = useState<SupplierInvoice[]>(() => getCached(invoicesCacheKey) ?? []);
+  const [loaded, setLoaded] = useState(() => getCached(invoicesCacheKey) !== undefined);
   const [projects, setProjects] = useState<{ id: string; name: string; nameZh?: string }[]>([]);
 
   const [showForm, setShowForm] = useState(false);
@@ -81,8 +87,11 @@ export default function MyInvoicesPage() {
 
   useEffect(() => {
     if (!appUser || !isPartner) return;
-    return listenSupplierOrdersByPartner(appUser.uid, setOrders);
-  }, [appUser, isPartner]);
+    return listenSupplierOrdersByPartner(appUser.uid, (o) => {
+      setOrders(o);
+      setCached(ordersCacheKey, o);
+    });
+  }, [appUser, isPartner, ordersCacheKey]);
 
   // /organize의 AI 비서가 "청구서 작성"으로 판단한 결과를 여기로 넘겨받는다. 자유 품목은
   // 직접 추가 항목(설명·금액)으로 채우고, orderNumbers(이미 발행된 발주서를 그대로 담으라는
@@ -125,9 +134,10 @@ export default function MyInvoicesPage() {
     if (!appUser || !isPartner) return;
     return listenSupplierInvoicesByPartner(appUser.uid, (inv) => {
       setInvoices(inv);
+      setCached(invoicesCacheKey, inv);
       setLoaded(true);
     });
-  }, [appUser, isPartner]);
+  }, [appUser, isPartner, invoicesCacheKey]);
 
   useEffect(() => {
     const ids = appUser?.projectIds ?? [];

@@ -20,6 +20,7 @@ import { createNotification } from "@/lib/firestore/notifications";
 import { PartnerArchiveFile, PartnerArchiveComment, Task } from "@/lib/types";
 import { zh, usePartnerZh, useZhAutoTranslate } from "@/lib/i18n";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 
 // 관리자가 올리면 이 프로젝트에 배정된 협력사 계정에게, 협력사가 올리면 관리자 전원에게
 // 알린다 — 지금까지는 자료함에 새 파일·코멘트가 생겨도 상대쪽에 아무 알림이 안 가서,
@@ -300,8 +301,13 @@ function CommentItem({ comment: c, isMine, onUpdate, onDelete, isZh }: {
 export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId: string; tasks?: Task[] }) {
   const { appUser } = useAuth();
   const isZh = usePartnerZh();
-  const [files, setFiles] = useState<PartnerArchiveFile[]>([]);
-  const [comments, setComments] = useState<PartnerArchiveComment[]>([]);
+  // 탭을 오갈 때마다 리스너를 새로 맺고 첫 응답을 기다리느라 "자료가 없다"는 빈 화면이
+  // 잠깐 보였다 사라지곤 했다 — 직전 값을 캐시에서 먼저 보여주고 리스너는 백그라운드에서
+  // 갱신한다.
+  const filesCacheKey = `partnerArchive:files:${projectId}`;
+  const commentsCacheKey = `partnerArchive:comments:${projectId}`;
+  const [files, setFiles] = useState<PartnerArchiveFile[]>(() => getCached(filesCacheKey) ?? []);
+  const [comments, setComments] = useState<PartnerArchiveComment[]>(() => getCached(commentsCacheKey) ?? []);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState<{ name: string; index: number; total: number; pct: number } | null>(null);
@@ -313,8 +319,14 @@ export default function PartnerArchiveTab({ projectId, tasks = [] }: { projectId
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
-  useEffect(() => listenPartnerArchiveFiles(projectId, setFiles), [projectId]);
-  useEffect(() => listenPartnerArchiveComments(projectId, setComments), [projectId]);
+  useEffect(() => listenPartnerArchiveFiles(projectId, (f) => {
+    setFiles(f);
+    setCached(filesCacheKey, f);
+  }), [projectId, filesCacheKey]);
+  useEffect(() => listenPartnerArchiveComments(projectId, (c) => {
+    setComments(c);
+    setCached(commentsCacheKey, c);
+  }), [projectId, commentsCacheKey]);
 
   const zhFileNames = useZhAutoTranslate(isZh, files.map((f) => f.name));
 

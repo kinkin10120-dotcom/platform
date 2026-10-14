@@ -41,6 +41,7 @@ import { getAdmins } from "@/lib/firestore/users";
 import { createNotification } from "@/lib/firestore/notifications";
 import { listenConversations, listenMessages, createConversation, renameConversation, addMessage, deleteConversation } from "@/lib/firestore/assistantChat";
 import { toProxiedUrl } from "@/lib/storageProxy";
+import { getCached, setCached } from "@/lib/queryCache";
 import { AssistantConversation, AssistantMessage } from "@/lib/types";
 import { compressImage } from "@/lib/imageCompress";
 import { extractFileText } from "@/lib/extractFileText";
@@ -380,8 +381,12 @@ export default function OrganizePage() {
   const actorName = appUser?.name ?? "협력사";
   const router = useRouter();
 
-  const [candidates, setCandidates] = useState<ProjectCandidate[]>([]);
-  const [loadingCandidates, setLoadingCandidates] = useState(true);
+  // 메뉴 전환 때마다 프로젝트·업무 목록을 새로 받아오느라 전송 버튼이 매번 한동안 막혀
+  // 있었다 — 직전 값을 캐시에서 먼저 보여주고(전송 가능 상태로 바로 시작) 백그라운드에서
+  // 최신값으로 갱신한다.
+  const candidatesCacheKey = `organize:candidates:${appUser?.uid}`;
+  const [candidates, setCandidates] = useState<ProjectCandidate[]>(() => getCached(candidatesCacheKey) ?? []);
+  const [loadingCandidates, setLoadingCandidates] = useState(() => getCached(candidatesCacheKey) === undefined);
   const [draftText, setDraftText] = useState("");
   const [items, setItems] = useState<IntakeItem[]>([]);
   const [classifyingAll, setClassifyingAll] = useState(false);
@@ -519,9 +524,10 @@ export default function OrganizePage() {
         list.push(...chunkResults);
       }
       setCandidates(list);
+      setCached(candidatesCacheKey, list);
       setLoadingCandidates(false);
     })();
-  }, [appUser]);
+  }, [appUser, candidatesCacheKey]);
 
   function updateItem(id: string, patch: Partial<IntakeItem>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));

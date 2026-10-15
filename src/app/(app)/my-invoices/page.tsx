@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, documentId, getDocs, query, where } from "firebase/firestore";
-import { Eye, FileText, Plus, Receipt, Trash2 } from "lucide-react";
+import { Eye, FileText, Plus, Receipt, Trash2, CheckSquare } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierOrdersByPartner, formatSupplierMoney } from "@/lib/firestore/supplierOrders";
@@ -505,7 +505,10 @@ export default function MyInvoicesPage() {
             />
           </div>
 
-          {unreconciled.invoiceIds.length > 0 && unreconciled.amount !== 0 && (
+          {/* 미납금이 있을 때만 배너가 뜨다 보니, "확인은 했는데 없는 건지" "아직 확인이
+              안 된 건지" 구분이 안 가서 헷갈린다는 요청이 있었다 — 미납금이 없는 경우에도
+              "미납금 없음"을 체크된 상태로 명시해, 조회 자체는 항상 됐다는 걸 보여준다. */}
+          {unreconciled.invoiceIds.length > 0 && unreconciled.amount !== 0 ? (
             <div className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 text-xs ${unreconciled.amount > 0 ? "bg-amber-50" : "bg-blue-50"}`}>
               <div>
                 <p className={`font-semibold ${unreconciled.amount > 0 ? "text-amber-700" : "text-blue-700"}`}>
@@ -523,6 +526,11 @@ export default function MyInvoicesPage() {
               >
                 {includeAdjustment ? zh(isZh, "포함 취소") : zh(isZh, "이번 청구서에 포함")}
               </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-2xl bg-[#f5f5f7] px-4 py-3 text-xs text-[#86868b]">
+              <CheckSquare size={14} className="shrink-0 text-[#1d1d1f]" />
+              {zh(isZh, "미납금 없음")}
             </div>
           )}
 

@@ -403,6 +403,23 @@ export default function OrganizePage() {
     const saved = localStorage.getItem("organizeVoiceLang");
     if (saved === "ko" || saved === "zh") setVoiceLang(saved);
   }, []);
+
+  // 임시 진단 — "첨부해도 반응 없다" 문제 원인 추적용. 페이지 전체에서 잡히지 않은
+  // 에러/프라미스 거부를 서버 로그로 보낸다. 원인 찾으면 지운다.
+  useEffect(() => {
+    const onError = (e: ErrorEvent) => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "window-error", message: e.message, filename: e.filename, lineno: e.lineno }));
+    };
+    const onRejection = (e: PromiseRejectionEvent) => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "unhandled-rejection", reason: String(e.reason) }));
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
   function toggleVoiceLang() {
     setVoiceLang((prev) => {
       const next = prev === "ko" ? "zh" : "ko";
@@ -627,6 +644,7 @@ export default function OrganizePage() {
   // 자료 정리/견적서/청구서/질문 중 맞는 결과만 돌려준다. 결과에 따라 이 페이지
   // 업로드 큐에 바로 담거나, 작성 페이지로 넘기거나, 바로 이 자리에 답을 보여준다.
   function addChatAttachments(fileList: FileList | null) {
+    navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "addChatAttachments-called", hasFileList: !!fileList, count: fileList?.length ?? 0 }));
     if (!fileList || fileList.length === 0) return;
     setChatAttachments((prev) => [...prev, ...Array.from(fileList)]);
   }
@@ -1163,7 +1181,7 @@ export default function OrganizePage() {
                       줄어든다. */}
                   <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
                     <Paperclip size={15} />
-                    <input type="file" multiple onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
+                    <input type="file" multiple onChange={(e) => { navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "onChange-fired", count: e.target.files?.length ?? 0 })); addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
                   </label>
                   <textarea
                     value={draftText}

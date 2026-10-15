@@ -404,22 +404,6 @@ export default function OrganizePage() {
     if (saved === "ko" || saved === "zh") setVoiceLang(saved);
   }, []);
 
-  // 임시 진단 — "첨부해도 반응 없다" 문제 원인 추적용. 페이지 전체에서 잡히지 않은
-  // 에러/프라미스 거부를 서버 로그로 보낸다. 원인 찾으면 지운다.
-  useEffect(() => {
-    const onError = (e: ErrorEvent) => {
-      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "window-error", message: e.message, filename: e.filename, lineno: e.lineno }));
-    };
-    const onRejection = (e: PromiseRejectionEvent) => {
-      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "unhandled-rejection", reason: String(e.reason) }));
-    };
-    window.addEventListener("error", onError);
-    window.addEventListener("unhandledrejection", onRejection);
-    return () => {
-      window.removeEventListener("error", onError);
-      window.removeEventListener("unhandledrejection", onRejection);
-    };
-  }, []);
   function toggleVoiceLang() {
     setVoiceLang((prev) => {
       const next = prev === "ko" ? "zh" : "ko";
@@ -437,6 +421,7 @@ export default function OrganizePage() {
   // e.nativeEvent.isComposing이 이미 false로 바뀌어 있어, 그것만으로는 못 거른다 —
   // compositionstart/end로 직접 조합 상태를 추적해 이중으로 막는다.
   const composingRef = useRef(false);
+  const chatAttachmentsRef = useRef<HTMLDivElement | null>(null);
   // Enter 핸들러와 전송 버튼 양쪽에서 호출될 수 있는데, assistantLoading 상태만으로 막으면
   // React 상태 반영이 한 템포 늦어 거의 동시에 두 번 눌리는 경우(엔터+클릭 등) 막지 못해
   // 같은 메시지가 두 번 전송되는 문제가 있었다 — ref로 즉시(동기적으로) 막는다.
@@ -644,9 +629,11 @@ export default function OrganizePage() {
   // 자료 정리/견적서/청구서/질문 중 맞는 결과만 돌려준다. 결과에 따라 이 페이지
   // 업로드 큐에 바로 담거나, 작성 페이지로 넘기거나, 바로 이 자리에 답을 보여준다.
   function addChatAttachments(fileList: FileList | null) {
-    navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "addChatAttachments-called", hasFileList: !!fileList, count: fileList?.length ?? 0 }));
     if (!fileList || fileList.length === 0) return;
     setChatAttachments((prev) => [...prev, ...Array.from(fileList)]);
+    // 첨부칩이 입력창 위에 작은 회색 배지로만 붙어서 "반응이 없다"는 오해를 자주 샀다 —
+    // 첨부 직후 그 영역이 화면에 확실히 보이도록 스크롤해 눈에 띄게 한다.
+    requestAnimationFrame(() => chatAttachmentsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
   function removeChatAttachment(index: number) {
     setChatAttachments((prev) => prev.filter((_, i) => i !== index));
@@ -1163,12 +1150,12 @@ export default function OrganizePage() {
 
               <div className="border-t border-[#f0f0f0] p-3">
                 {chatAttachments.length > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
+                  <div ref={chatAttachmentsRef} className="mb-2 flex flex-wrap gap-1.5">
                     {chatAttachments.map((f, i) => (
-                      <span key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full bg-[#f5f5f7] px-2.5 py-1 text-xs text-[#1d1d1f]">
+                      <span key={`${f.name}-${i}`} className="flex items-center gap-1 rounded-full bg-[#1d1d1f] px-2.5 py-1 text-xs text-white">
                         <Paperclip size={11} />
                         <span className="max-w-[8rem] truncate">{f.name}</span>
-                        <button onClick={() => removeChatAttachment(i)} className="text-[#86868b] hover:text-red-500"><X size={11} /></button>
+                        <button onClick={() => removeChatAttachment(i)} className="text-white/70 hover:text-white"><X size={11} /></button>
                       </span>
                     ))}
                   </div>
@@ -1181,7 +1168,7 @@ export default function OrganizePage() {
                       줄어든다. */}
                   <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
                     <Paperclip size={15} />
-                    <input type="file" multiple onChange={(e) => { navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "onChange-fired", count: e.target.files?.length ?? 0 })); addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
+                    <input type="file" multiple onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
                   </label>
                   <textarea
                     value={draftText}

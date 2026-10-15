@@ -1156,13 +1156,14 @@ export default function OrganizePage() {
                   </div>
                 )}
                 <div className="flex items-end gap-2">
+                  {/* 카메라 버튼은 따로 안 둔다 — 아래 첨부 버튼의 <input type="file">이
+                      iOS/대부분 브라우저에서 "사진 보관함·사진 또는 비디오 찍기·파일 선택"을
+                      한 번에 묶어 보여줘서 이미 포함돼 있다. 버튼 하나를 줄인 만큼 입력창이
+                      더 넓어져, 좁은 화면에서 짧은 플레이스홀더조차 두 줄로 밀리던 문제가
+                      줄어든다. */}
                   <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
                     <Paperclip size={15} />
                     <input type="file" multiple onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
-                  </label>
-                  <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-                    <Camera size={15} />
-                    <input type="file" accept="image/*" capture="environment" onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
                   </label>
                   <textarea
                     value={draftText}

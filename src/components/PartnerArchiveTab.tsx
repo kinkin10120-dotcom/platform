@@ -132,23 +132,23 @@ function FileRow({
           </a>
         )}
         {preview && isPdf && <iframe src={toProxiedUrl(f.url)} className="h-96 w-full bg-[#f5f5f7]" title={f.name} />}
-        <div className="flex items-center justify-between px-3 py-2 text-sm">
-          <div className="flex min-w-0 items-center gap-2">
-            {isImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={toProxiedUrl(f.url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
-            ) : (
-              <Paperclip size={13} className="shrink-0 text-[#86868b]" />
-            )}
-            <span className="truncate text-[#1d1d1f]">{displayName}</span>
-            <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
-            <span className="shrink-0 text-xs text-[#86868b]">{formatUploadedAt(f.uploadedAt, isZh)}</span>
-            {f.taskName && (
-              <span className="shrink-0 truncate rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">{f.taskName}</span>
-            )}
-            {badge}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+        {/* 실제 버그로 확인된 부분: 파일명·용량·업로드시각·업무 라벨·아이콘 버튼 전부를
+            한 줄에 shrink-0로 몰아넣고 있어서, 모바일 좁은 화면에서는 칸이 모자라 아이콘이
+            텍스트 위에 겹쳐 보였다(스크린샷으로 직접 확인함). 아이콘 버튼은 파일명과 같은
+            줄에 두고(절대 안 밀리게), 용량·시각·업무 라벨은 별도 줄로 내려 자유롭게
+            줄바꿈되게 분리했다. */}
+        <div className="px-3 py-2 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {isImage ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={toProxiedUrl(f.url)} alt="" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+              ) : (
+                <Paperclip size={13} className="shrink-0 text-[#86868b]" />
+              )}
+              <span className="truncate text-[#1d1d1f]">{displayName}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
             {hasPreview && (
               <>
                 <button onClick={() => setPreview((v) => !v)} className="text-[#86868b] hover:text-[#1d1d1f]">
@@ -176,6 +176,15 @@ function FileRow({
                 <Trash2 size={14} />
               </button>
             )}
+            </div>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[1.3rem]">
+            <span className="shrink-0 text-xs text-[#86868b]">{formatSize(f.size)}</span>
+            <span className="shrink-0 text-xs text-[#86868b]">{formatUploadedAt(f.uploadedAt, isZh)}</span>
+            {f.taskName && (
+              <span className="shrink-0 truncate rounded-full bg-[#f5f5f7] px-2 py-0.5 text-xs text-[#86868b]">{f.taskName}</span>
+            )}
+            {badge}
           </div>
         </div>
       </div>

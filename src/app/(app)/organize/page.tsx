@@ -405,9 +405,34 @@ export default function OrganizePage() {
   }, []);
 
   // 임시 진단(2차) — "재배포 후에도 반응 없다" 재현 확인용. 지금 로드된 페이지가
-  // 최신 배포본인지(마운트 즉시 한 번) 본다. 원인 찾으면 지운다.
+  // 최신 배포본인지(마운트 즉시 한 번) 본다. addChatAttachments-called는 매번 찍히는데
+  // 그 다음 state 커밋(렌더 반영)이 한 번도 안 잡혀서, 그 사이에서 조용히 죽는 예외가
+  // 있는지 전역 에러/거부 리스너도 다시 건다. 원인 찾으면 지운다.
   useEffect(() => {
     navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "organize-page-mounted", ua: navigator.userAgent, ts: Date.now() }));
+    const onError = (e: ErrorEvent) => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "window-error", message: e.message, filename: e.filename, lineno: e.lineno, colno: e.colno, stack: e.error?.stack }));
+    };
+    const onRejection = (e: PromiseRejectionEvent) => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "unhandled-rejection", reason: String(e.reason), stack: e.reason?.stack }));
+    };
+    const onVisibility = () => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "visibilitychange", state: document.visibilityState }));
+    };
+    const onPageHide = (e: PageTransitionEvent) => {
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "pagehide", persisted: e.persisted }));
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "organize-page-unmounting" }));
+    };
   }, []);
 
   function toggleVoiceLang() {

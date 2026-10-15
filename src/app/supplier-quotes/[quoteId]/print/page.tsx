@@ -52,7 +52,14 @@ export default function SupplierQuotePrintPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#e5e5e5] py-10 print:bg-white print:py-0">
+    // 실제 버그로 확인된 부분: Pretendard는 한자 글리프를 자체 포함해서, lang="zh"가 안
+    // 걸려있으면 폴백 없이 그 모양 그대로(획이 더 얇고 줄 높이가 미묘하게 다름) 그려버린다
+    // (globals.css :lang(zh) 참고). 이 lang 전환은 AppLayoutClient에서만 해주는데, 인쇄
+    // 전용 페이지는 그 레이아웃 바깥의 독립 라우트라 전혀 안 걸려 있었다 — 중국어 견적서를
+    // 인쇄하면 글자 높이가 쌓여 A4 한 장에 안 들어가고 둘째 장에 한 줄 넘치는 문제가 있었다
+    // (헤드리스 크롬으로 폰트 차이만 재현해 직접 확인함). 실제로 화면에 그려지는 언어
+    // (docLang)에 맞춰 이 영역에 lang을 걸어 올바른 중국어 서체로 렌더링되게 한다.
+    <div lang={docLang} className="min-h-screen bg-[#e5e5e5] py-10 print:bg-white print:py-0">
       <style>{`
         @page { size: 210mm 297mm; margin: 0; }
         @media print {

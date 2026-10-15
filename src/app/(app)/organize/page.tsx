@@ -404,6 +404,12 @@ export default function OrganizePage() {
     if (saved === "ko" || saved === "zh") setVoiceLang(saved);
   }, []);
 
+  // 임시 진단(2차) — "재배포 후에도 반응 없다" 재현 확인용. 지금 로드된 페이지가
+  // 최신 배포본인지(마운트 즉시 한 번) 본다. 원인 찾으면 지운다.
+  useEffect(() => {
+    navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "organize-page-mounted", ua: navigator.userAgent, ts: Date.now() }));
+  }, []);
+
   function toggleVoiceLang() {
     setVoiceLang((prev) => {
       const next = prev === "ko" ? "zh" : "ko";
@@ -441,6 +447,11 @@ export default function OrganizePage() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
+  // 임시 진단(2차) — 첨부 state가 실제로 커밋/렌더까지 됐는지 배열 길이 변화 때마다 본다.
+  // 원인 찾으면 지운다.
+  useEffect(() => {
+    navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "chatAttachments-committed", count: chatAttachments.length, names: chatAttachments.map((f) => f.name) }));
+  }, [chatAttachments]);
   const [assistantLoading, setAssistantLoading] = useState(false);
   const [assistantError, setAssistantError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -629,6 +640,7 @@ export default function OrganizePage() {
   // 자료 정리/견적서/청구서/질문 중 맞는 결과만 돌려준다. 결과에 따라 이 페이지
   // 업로드 큐에 바로 담거나, 작성 페이지로 넘기거나, 바로 이 자리에 답을 보여준다.
   function addChatAttachments(fileList: FileList | null) {
+    navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "addChatAttachments-called", hasFileList: !!fileList, count: fileList?.length ?? 0 }));
     if (!fileList || fileList.length === 0) return;
     setChatAttachments((prev) => [...prev, ...Array.from(fileList)]);
     // 첨부칩이 입력창 위에 작은 회색 배지로만 붙어서 "반응이 없다"는 오해를 자주 샀다 —
@@ -1168,7 +1180,7 @@ export default function OrganizePage() {
                       줄어든다. */}
                   <label className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
                     <Paperclip size={15} />
-                    <input type="file" multiple onChange={(e) => { addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
+                    <input type="file" multiple onChange={(e) => { navigator.sendBeacon?.("/api/debug-upload", JSON.stringify({ stage: "onChange-fired", count: e.target.files?.length ?? 0 })); addChatAttachments(e.target.files); e.target.value = ""; }} className="hidden" />
                   </label>
                   <textarea
                     value={draftText}

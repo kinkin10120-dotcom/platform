@@ -11,6 +11,7 @@ import {
   listenSupplierInvoicesByPartner,
   createSupplierInvoice,
   deleteSupplierInvoice,
+  reportSupplierInvoicePaidAmount,
 } from "@/lib/firestore/supplierInvoices";
 import {
   SupplierOrder,
@@ -61,6 +62,11 @@ export default function MyInvoicesPage() {
   const [invoices, setInvoices] = useState<SupplierInvoice[]>(() => getCached(invoicesCacheKey) ?? []);
   const [loaded, setLoaded] = useState(() => getCached(invoicesCacheKey) !== undefined);
   const [projects, setProjects] = useState<{ id: string; name: string; nameZh?: string }[]>([]);
+
+  // 실제 입금액은 관리자가 추측해서 적는 게 아니라, 송금을 받은 협력사 본인만 정확히
+  // 아는 값이라 여기서 직접 입력한다 — 청구서별로 입력 중인 값과 저장 중 여부를 따로 든다.
+  const [paidAmountDrafts, setPaidAmountDrafts] = useState<Record<string, number>>({});
+  const [savingPaidAmountId, setSavingPaidAmountId] = useState<string | null>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [currencyChoice, setCurrencyChoice] = useState<SupplierCurrency>("USD");
@@ -378,6 +384,16 @@ export default function MyInvoicesPage() {
     if (inv.status !== "submitted") return;
     if (!confirm(zh(isZh, "이 청구서를 삭제할까요?"))) return;
     await deleteSupplierInvoice(inv.id);
+  }
+
+  async function handleReportPaidAmount(inv: SupplierInvoice) {
+    const amount = paidAmountDrafts[inv.id] ?? inv.paidAmount ?? inv.totalAmount;
+    setSavingPaidAmountId(inv.id);
+    try {
+      await reportSupplierInvoicePaidAmount(inv.id, amount);
+    } finally {
+      setSavingPaidAmountId(null);
+    }
   }
 
   if (appUser && !isPartner) {
@@ -739,10 +755,29 @@ export default function MyInvoicesPage() {
                 )}
               </div>
             </div>
-            {inv.status === "paid" && typeof inv.paidAmount === "number" && inv.paidAmount !== inv.totalAmount && (
+            {inv.status === "paid" && !inv.carriedForward && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-xl bg-[#f5f5f7] px-3 py-2">
+                <span className="text-xs text-[#86868b]">{zh(isZh, "실제 입금액")}</span>
+                <NumberInput
+                  value={paidAmountDrafts[inv.id] ?? inv.paidAmount ?? inv.totalAmount}
+                  onChange={(n) => setPaidAmountDrafts((prev) => ({ ...prev, [inv.id]: n }))}
+                  className="w-28 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
+                />
+                <button
+                  onClick={() => handleReportPaidAmount(inv)}
+                  disabled={savingPaidAmountId === inv.id}
+                  className="rounded-full bg-[#1d1d1f] px-3 py-1 text-xs font-medium text-white transition hover:bg-black disabled:opacity-50"
+                >
+                  {savingPaidAmountId === inv.id ? zh(isZh, "저장 중...") : zh(isZh, "확인")}
+                </button>
+                {typeof inv.paidAmount !== "number" && (
+                  <span className="text-xs text-amber-600">{zh(isZh, "실제로 받으신 금액을 입력해주세요")}</span>
+                )}
+              </div>
+            )}
+            {inv.status === "paid" && typeof inv.paidAmount === "number" && inv.paidAmount !== inv.totalAmount && inv.carriedForward && (
               <p className={`mt-3 rounded-xl px-3 py-2 text-xs font-medium ${inv.paidAmount < inv.totalAmount ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
-                {zh(isZh, "실제 입금액")} {formatSupplierMoney(inv.paidAmount, inv.currency)}
-                {inv.carriedForward && ` · ${zh(isZh, "다음 청구서에 반영됨")}`}
+                {zh(isZh, "실제 입금액")} {formatSupplierMoney(inv.paidAmount, inv.currency)} · {zh(isZh, "다음 청구서에 반영됨")}
               </p>
             )}
             {inv.status === "paid" && inv.receiptUrl && (

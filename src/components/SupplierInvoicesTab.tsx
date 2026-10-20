@@ -2,15 +2,16 @@
 
 import { ChangeEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { Printer, Upload, Download, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { Printer, Upload, Download, RotateCcw, ChevronDown, ChevronUp, Pencil, Plus, Trash2, Check, X } from "lucide-react";
 import {
   listenAllSupplierInvoices,
   markSupplierInvoicePaid,
   unmarkSupplierInvoicePaid,
+  updateSupplierInvoiceItems,
 } from "@/lib/firestore/supplierInvoices";
 import { formatSupplierMoney } from "@/lib/firestore/supplierOrders";
 import { createNotification } from "@/lib/firestore/notifications";
-import { SupplierInvoice, SUPPLIER_INVOICE_STATUS_LABEL } from "@/lib/types";
+import { SupplierInvoice, SupplierInvoiceLineItem, SUPPLIER_INVOICE_STATUS_LABEL } from "@/lib/types";
 import NumberInput from "@/components/NumberInput";
 
 const STATUS_STYLE: Record<string, string> = {
@@ -25,10 +26,9 @@ export default function SupplierInvoicesTab() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
-  // 지급완료 처리 시 "실제 입금액" — 보통은 청구액과 같아서 기본값으로 미리 채워두고, 다르게
-  // 보낸 경우에만 고쳐 입력한다. 선택한 청구서가 바뀔 때만 다시 채운다(목록 리스너가 갱신될
-  // 때마다 덮어쓰면 입력 중이던 값이 날아간다).
-  const [paidAmountInput, setPaidAmountInput] = useState(0);
+  // 협력사가 빠뜨렸거나 잘못 적은 항목을 관리자가 대신 고칠 때 — 제출됨 상태일 때만 연다.
+  const [editingItems, setEditingItems] = useState<SupplierInvoiceLineItem[] | null>(null);
+  const [savingItems, setSavingItems] = useState(false);
 
   useEffect(() => listenAllSupplierInvoices(setInvoices), []);
 
@@ -39,8 +39,7 @@ export default function SupplierInvoicesTab() {
   }, [invoices]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (selected) setPaidAmountInput(selected.totalAmount);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setEditingItems(null);
   }, [selected?.id]);
 
   async function handleUploadReceipt(e: ChangeEvent<HTMLInputElement>) {
@@ -50,7 +49,7 @@ export default function SupplierInvoicesTab() {
     setUploadError("");
     setUploadProgress(0);
     try {
-      await markSupplierInvoicePaid(selected.id, file, paidAmountInput, setUploadProgress);
+      await markSupplierInvoicePaid(selected.id, file, setUploadProgress);
       await createNotification({
         userId: selected.createdBy,
         type: "supplier_invoice_paid",
@@ -69,6 +68,30 @@ export default function SupplierInvoicesTab() {
     if (!selected) return;
     if (!confirm("지급 완료 처리를 되돌릴까요? 첨부된 영수증도 함께 삭제됩니다.")) return;
     await unmarkSupplierInvoicePaid(selected);
+  }
+
+  function startEditingItems() {
+    if (!selected) return;
+    setEditingItems(selected.items.map((it) => ({ ...it })));
+  }
+
+  function patchEditingItem(id: string, patch: Partial<SupplierInvoiceLineItem>) {
+    setEditingItems((prev) => prev && prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+
+  function addEditingItem() {
+    setEditingItems((prev) => [...(prev ?? []), { id: `admin-${Date.now()}`, source: "custom", description: "", amount: 0 }]);
+  }
+
+  async function saveEditingItems() {
+    if (!selected || !editingItems) return;
+    setSavingItems(true);
+    try {
+      await updateSupplierInvoiceItems(selected.id, editingItems.filter((it) => it.description.trim()));
+      setEditingItems(null);
+    } finally {
+      setSavingItems(false);
+    }
   }
 
   const pending = invoices.filter((i) => i.status === "submitted");
@@ -115,32 +138,93 @@ export default function SupplierInvoicesTab() {
             </span>
           </div>
 
-          <div className="space-y-1.5 rounded-2xl bg-[#f5f5f7] p-3">
-            {selected.items.map((it) => (
-              <div key={it.id} className="flex items-center justify-between gap-2 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate text-[#1d1d1f]">{it.descriptionKo || it.description}</p>
-                  {it.linkedProjectName && <p className="text-xs text-[#86868b]">{it.linkedProjectName}{it.soNumber ? ` · ${it.soNumber}` : ""}</p>}
+          {editingItems ? (
+            <div className="space-y-1.5 rounded-2xl bg-[#f5f5f7] p-3">
+              {editingItems.map((it) => (
+                <div key={it.id} className="flex items-center gap-1.5">
+                  <input
+                    value={it.descriptionKo ?? it.description}
+                    onChange={(e) => patchEditingItem(it.id, { descriptionKo: e.target.value, description: it.description || e.target.value })}
+                    placeholder="내용"
+                    className="min-w-0 flex-1 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
+                  />
+                  <NumberInput
+                    value={it.amount}
+                    onChange={(n) => patchEditingItem(it.id, { amount: n })}
+                    className="w-24 shrink-0 rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
+                  />
+                  <button
+                    onClick={() => setEditingItems((prev) => prev && prev.filter((x) => x.id !== it.id))}
+                    className="shrink-0 rounded-full p-1 text-[#d1d1d6] hover:bg-red-50 hover:text-red-500"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
-                <span className="shrink-0 font-medium text-[#1d1d1f]">{formatSupplierMoney(it.amount, selected.currency)}</span>
+              ))}
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={addEditingItem} className="flex items-center gap-1 text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">
+                  <Plus size={12} /> 항목 추가
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setEditingItems(null)}
+                    className="flex items-center gap-1 rounded-full border border-[#d1d1d6] px-3 py-1 text-xs font-medium text-[#86868b] hover:border-[#86868b]"
+                  >
+                    <X size={12} /> 취소
+                  </button>
+                  <button
+                    onClick={saveEditingItems}
+                    disabled={savingItems}
+                    className="flex items-center gap-1 rounded-full bg-[#1d1d1f] px-3 py-1 text-xs font-medium text-white hover:bg-black disabled:opacity-50"
+                  >
+                    <Check size={12} /> {savingItems ? "저장 중..." : "저장"}
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5 rounded-2xl bg-[#f5f5f7] p-3">
+              {selected.items.map((it) => (
+                <div key={it.id} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-[#1d1d1f]">{it.descriptionKo || it.description}</p>
+                    {it.linkedProjectName && <p className="text-xs text-[#86868b]">{it.linkedProjectName}{it.soNumber ? ` · ${it.soNumber}` : ""}</p>}
+                  </div>
+                  <span className="shrink-0 font-medium text-[#1d1d1f]">{formatSupplierMoney(it.amount, selected.currency)}</span>
+                </div>
+              ))}
+              {/* 지급완료된 뒤에는 "지급완료 되돌리기"로 먼저 되돌려야 고칠 수 있다 — 이미
+                  정산된 금액을 조용히 바꾸는 경로를 막는다. */}
+              {selected.status === "submitted" && (
+                <button onClick={startEditingItems} className="flex items-center gap-1 text-xs font-medium text-[#86868b] hover:text-[#1d1d1f]">
+                  <Pencil size={11} /> 내가 추가·수정하기
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="flex items-center justify-between border-t border-[#f0f0f0] pt-3">
             <span className="text-sm text-[#86868b]">합계</span>
             <span className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(selected.totalAmount, selected.currency)}</span>
           </div>
 
-          {selected.status === "paid" && typeof selected.paidAmount === "number" && selected.paidAmount !== selected.totalAmount && (
-            <p className={`rounded-xl px-3 py-2 text-xs font-medium ${selected.paidAmount < selected.totalAmount ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
-              실제 입금액 {formatSupplierMoney(selected.paidAmount, selected.currency)}
-              {" · "}
-              {selected.paidAmount < selected.totalAmount
-                ? `미납 ${formatSupplierMoney(selected.totalAmount - selected.paidAmount, selected.currency)}`
-                : `초과입금 ${formatSupplierMoney(selected.paidAmount - selected.totalAmount, selected.currency)}`}
-              {selected.carriedForward && " · 다음 청구서에 반영됨"}
-            </p>
+          {selected.status === "paid" && (
+            typeof selected.paidAmount === "number" ? (
+              selected.paidAmount !== selected.totalAmount && (
+                <p className={`rounded-xl px-3 py-2 text-xs font-medium ${selected.paidAmount < selected.totalAmount ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+                  실제 입금액 {formatSupplierMoney(selected.paidAmount, selected.currency)}
+                  {" · "}
+                  {selected.paidAmount < selected.totalAmount
+                    ? `미납 ${formatSupplierMoney(selected.totalAmount - selected.paidAmount, selected.currency)}`
+                    : `초과입금 ${formatSupplierMoney(selected.paidAmount - selected.totalAmount, selected.currency)}`}
+                  {selected.carriedForward && " · 다음 청구서에 반영됨"}
+                </p>
+              )
+            ) : (
+              <p className="rounded-xl bg-[#f5f5f7] px-3 py-2 text-xs text-[#86868b]">
+                실제 입금액 — 협력사 확인 대기 중 (협력사가 직접 입력합니다)
+              </p>
+            )
           )}
 
           {(selected.memoKo || selected.memo) && (
@@ -156,25 +240,10 @@ export default function SupplierInvoicesTab() {
             </Link>
 
             {selected.status === "submitted" ? (
-              <div className="flex w-full flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1.5 text-xs text-[#86868b]">
-                  실제 입금액
-                  <NumberInput
-                    value={paidAmountInput}
-                    onChange={setPaidAmountInput}
-                    className="w-28 rounded-lg border border-[#d1d1d6] bg-white px-2 py-1 text-xs text-[#1d1d1f] outline-none focus:border-[#86868b]"
-                  />
-                  {paidAmountInput !== selected.totalAmount && (
-                    <span className={paidAmountInput < selected.totalAmount ? "text-amber-600" : "text-blue-600"}>
-                      ({paidAmountInput < selected.totalAmount ? "미납" : "초과"} {formatSupplierMoney(Math.abs(selected.totalAmount - paidAmountInput), selected.currency)})
-                    </span>
-                  )}
-                </span>
-                <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]">
-                  <Upload size={13} /> {uploading ? `업로드 중... ${uploadProgress}%` : "영수증 첨부하고 지급완료 처리"}
-                  <input type="file" className="hidden" onChange={handleUploadReceipt} disabled={uploading} />
-                </label>
-              </div>
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#d1d1d6] px-4 py-2 text-xs font-medium text-[#1d1d1f] transition hover:border-[#86868b]">
+                <Upload size={13} /> {uploading ? `업로드 중... ${uploadProgress}%` : "영수증 첨부하고 지급완료 처리"}
+                <input type="file" className="hidden" onChange={handleUploadReceipt} disabled={uploading} />
+              </label>
             ) : (
               <>
                 {selected.receiptUrl && (

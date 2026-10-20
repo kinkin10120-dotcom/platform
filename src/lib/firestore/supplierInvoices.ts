@@ -135,12 +135,12 @@ export async function deleteSupplierInvoice(id: string) {
   return deleteDoc(doc(db, "supplierInvoices", id));
 }
 
-// 관리자 전용 — 송금 영수증을 첨부하며 지급 완료로 바꾼다. paidAmount(실제 입금액)를 따로
-// 지정하지 않으면 청구액 전액이 입금된 것으로 본다 — 지금까지의 동작과 동일하게 유지된다.
+// 관리자 전용 — 송금 영수증을 첨부하며 지급 완료로 바꾼다. 실제 입금액은 관리자가 추측해서
+// 적는 값이 아니라 송금을 실제로 받은 협력사만 정확히 아는 값이라, 여기서는 받지 않는다 —
+// 협력사가 지급완료 상태가 된 뒤 본인 화면에서 직접 적는다(reportSupplierInvoicePaidAmount).
 export async function markSupplierInvoicePaid(
   id: string,
   receiptFile: File,
-  paidAmount?: number,
   onProgress?: (ratio: number) => void
 ) {
   const storagePath = `supplierInvoiceReceipts/${id}/${Date.now()}_${receiptFile.name}`;
@@ -157,11 +157,24 @@ export async function markSupplierInvoicePaid(
   return updateDoc(doc(db, "supplierInvoices", id), {
     status: "paid" as SupplierInvoiceStatus,
     paidAt: serverTimestamp(),
-    ...(typeof paidAmount === "number" ? { paidAmount } : {}),
     receiptUrl: url,
     receiptStoragePath: storagePath,
     receiptName: receiptFile.name,
   });
+}
+
+// 협력사 전용 — 송금을 실제로 받은 본인만 정확한 금액을 알 수 있어, 지급완료된 자기
+// 청구서에 한해 이 값을 직접 적게 한다(firestore.rules에서 paidAmount 필드만 허용).
+export async function reportSupplierInvoicePaidAmount(id: string, paidAmount: number) {
+  return updateDoc(doc(db, "supplierInvoices", id), { paidAmount });
+}
+
+// 관리자 전용 — 협력사가 빠뜨렸거나 잘못 적은 항목을 관리자가 대신 고쳐줄 때 쓴다. 제출
+// 직후(submitted)에만 허용한다 — 지급완료된 뒤에는 "지급완료 되돌리기"로 먼저 되돌려야
+// 고칠 수 있다(이미 정산된 기록을 조용히 바꾸면 안 된다).
+export async function updateSupplierInvoiceItems(id: string, items: SupplierInvoiceLineItem[]) {
+  const totalAmount = items.reduce((sum, it) => sum + (it.amount || 0), 0);
+  return updateDoc(doc(db, "supplierInvoices", id), { items, totalAmount });
 }
 
 // 지급 완료 처리를 실수로 했을 때 되돌리는 용도 — 영수증 파일도 같이 정리한다.

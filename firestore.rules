@@ -375,6 +375,15 @@ service cloud.firestore {
         && resource.data.status == 'paid'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['carriedForward'])
         && request.resource.data.carriedForward == true;
+      // 실제 입금액은 관리자가 추측해서 적는 값이 아니라, 송금을 실제로 받은 협력사 본인만
+      // 정확히 알 수 있는 값이다 — 지급완료된 자기 청구서에 한해 이 필드만 직접 적게 한다.
+      // 이미 다음 청구서 미납금에 반영된(carriedForward) 뒤에는 더 못 건드린다 — 그 반영이
+      // 가리키던 차액이 조용히 바뀌어버리면 안 된다.
+      allow update: if isSignedIn() && myProfile().role == 'partner'
+        && resource.data.partnerId == request.auth.uid
+        && resource.data.status == 'paid'
+        && resource.data.carriedForward != true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paidAmount']);
     }
 
     // ---- 협력사 견적서 (협력사 → HANDYHAND 방향, 아직 발주 전인 건에 대한 사전 제안) ----

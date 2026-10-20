@@ -28,7 +28,17 @@ const KR_COMPANY = {
   bizNo: "128-87-00105",
 };
 
-export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: SupplierInvoiceDocumentData; lang?: "ko" | "zh" }) {
+export default function SupplierInvoiceDocument({
+  data,
+  lang = "ko",
+  brandName,
+}: {
+  data: SupplierInvoiceDocumentData;
+  lang?: "ko" | "zh";
+  // 특정 협력사가 자기 회사명으로 문서를 내고 싶을 때, 상단 HANDYHAND 로고 대신 보여줄
+  // 텍스트 — 관리자가 협력사 계정에 지정해둔 값(AppUser.brandName)을 호출하는 쪽에서 넘긴다.
+  brandName?: string;
+}) {
   const issuedDate = new Date(data.submittedAt).toLocaleDateString("en-CA");
   const ko = lang === "ko";
   const L = (cn: string, kr: string) => (ko ? kr : cn);
@@ -43,9 +53,15 @@ export default function SupplierInvoiceDocument({ data, lang = "ko" }: { data: S
           <p className="mt-1 text-xs tracking-wide text-[#86868b]">INVOICE</p>
         </div>
         <div className="text-right text-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
-          <p className="mt-1.5 text-xs text-[#86868b]">{L("产品规划·设计·开发·模具·量产", "제품기획 · 설계 · 개발 · 금형 · 양산")}</p>
+          {brandName ? (
+            <p className="text-lg font-bold tracking-tight">{brandName}</p>
+          ) : (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="ml-auto h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+              <p className="mt-1.5 text-xs text-[#86868b]">{L("产品规划·设计·开发·模具·量产", "제품기획 · 설계 · 개발 · 금형 · 양산")}</p>
+            </>
+          )}
         </div>
       </div>
 

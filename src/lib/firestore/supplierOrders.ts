@@ -41,6 +41,7 @@ function fromDoc(d: any): SupplierOrder {
         ? data.installmentType
         : undefined,
     installmentPercent: typeof data.installmentPercent === "number" ? data.installmentPercent : undefined,
+    vatApplicable: !!data.vatApplicable,
     linkedPurchaseOrderId: data.linkedPurchaseOrderId || undefined,
     linkedPurchaseOrderNo: data.linkedPurchaseOrderNo || undefined,
     partnerId: data.partnerId || undefined,
@@ -72,6 +73,13 @@ export function calcCostsTotal(costs?: SupplierCostItem[]): number {
 
 export function calcSupplierOrderTotal(items: SupplierOrderItem[]): number {
   return items.reduce((sum, it) => sum + calcSupplierItemTotal(it), 0);
+}
+
+// 국내(KRW) 업체 발주에서 "VAT 별도"를 켰을 때만 의미가 있다 — items 단가 합계(totalAmount)를
+// 공급가액으로 보고 그 위에 10%를 더한다. 외화 발주는 국내 부가세 대상이 아니다.
+export function calcSupplierOrderVat(order: Pick<SupplierOrder, "totalAmount" | "currency" | "vatApplicable">): number {
+  if (order.currency !== "KRW" || !order.vatApplicable) return 0;
+  return Math.round(order.totalAmount * 0.1);
 }
 
 // 이번 차수(선금/잔금)에 실제로 청구할 금액 — totalAmount(발주서 전체 금액)는 그대로 두고
@@ -134,6 +142,7 @@ export interface CreateSupplierOrderInput {
   lotNo?: string;
   installmentType?: "deposit" | "balance" | "full";
   installmentPercent?: number;
+  vatApplicable?: boolean;
   linkedPurchaseOrderId?: string;
   linkedPurchaseOrderNo?: string;
   partnerId?: string;
@@ -167,6 +176,7 @@ export async function createSupplierOrder(input: CreateSupplierOrderInput) {
     lotNo: input.lotNo ?? "",
     installmentType: input.installmentType ?? null,
     installmentPercent: input.installmentPercent ?? null,
+    vatApplicable: input.vatApplicable ?? false,
     linkedPurchaseOrderId: input.linkedPurchaseOrderId ?? "",
     linkedPurchaseOrderNo: input.linkedPurchaseOrderNo ?? "",
     partnerId: input.partnerId ?? "",
@@ -197,6 +207,7 @@ export type SupplierOrderPatch = Partial<
     | "lotNo"
     | "installmentType"
     | "installmentPercent"
+    | "vatApplicable"
     | "linkedPurchaseOrderId"
     | "linkedPurchaseOrderNo"
     | "partnerId"

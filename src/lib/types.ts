@@ -13,6 +13,9 @@ export interface AppUser {
   clientId?: string; // role === 'client' 일 때만 존재
   projectIds?: string[]; // role === 'partner' 일 때만 존재 — 볼 수 있는 프로젝트 목록
   partnerLang?: "ko" | "zh"; // role === 'partner' 일 때만 존재 — 협력사가 보는 화면 UI 언어
+  // role === 'partner' 일 때만 의미 있다 — 이 협력사가 견적서·청구서를 발행할 때 문서 상단
+  // HANDYHAND 로고 자리에 이미지 대신 이 텍스트를 띄운다. 비워두면 기본 HANDYHAND 로고 그대로.
+  brandName?: string;
   createdAt: number;
   notificationPrefs?: Partial<Record<NotificationType, boolean>>; // 설정 안 된 타입은 기본 on
 }
@@ -805,6 +808,10 @@ export interface SupplierOrder {
   // 적힌 단가×수량 합계와 "합계" 줄이 어긋나 보여서 혼란을 준다.
   installmentPercent?: number; // 1~100, 비워두면 100(전액)
   installmentType?: "deposit" | "balance" | "full";
+  // 원화(KRW) 국내 업체 발주일 때만 의미 있다 — PurchaseOrderItem.vatApplicable과 같은 뜻으로,
+  // items의 단가·총액은 공급가액(부가세 제외)이고 실제 지급액은 여기에 VAT 10%가 더 붙는다는
+  // 표시다. 외화(USD/CNY) 발주는 국내 부가세 대상이 아니라 늘 무시한다.
+  vatApplicable?: boolean;
   // "이 고객 발주가 들어와서 이 구매발주를 냈다"를 잇는 참조. 반드시 이쪽(매입 문서)에만 둔다 —
   // 반대로 purchaseOrders에 "이 발주로 낸 구매발주" 필드를 달면 그 컬렉션은 고객도 읽을 수 있어
   // 원가 문서의 존재와 번호가 그대로 새어나간다. supplierOrders는 관리자 전용이라 여기서

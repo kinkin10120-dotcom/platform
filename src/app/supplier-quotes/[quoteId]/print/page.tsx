@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenSupplierQuote } from "@/lib/firestore/supplierQuotes";
+import { listenUser } from "@/lib/firestore/users";
 import { SupplierQuote } from "@/lib/types";
 import PdfPageScaler from "@/components/PdfPageScaler";
 import SupplierQuoteDocument from "@/components/SupplierQuoteDocument";
@@ -22,6 +23,9 @@ export default function SupplierQuotePrintPage() {
   // 관리자는 항상 한국어판만 본다(토글 자체를 안 보여줌) — 중국 협력사 계정만 중문/한글을
   // 오가며 본인이 쓴 원문과 번역본을 둘 다 확인할 수 있다.
   const [docLang, setDocLang] = useState<"zh" | "ko">(isZh ? "zh" : "ko");
+  // 상단 로고 자리에 쓸 브랜드명 — 보는 사람(관리자/본인)과 무관하게 "이 견적서를 낸
+  // 협력사"의 설정을 따라야 하므로 appUser가 아니라 quote.partnerId로 따로 조회한다.
+  const [issuerBrandName, setIssuerBrandName] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     if (loading) return;
@@ -32,6 +36,11 @@ export default function SupplierQuotePrintPage() {
     if (!quoteId) return;
     return listenSupplierQuote(quoteId, setQuote);
   }, [quoteId]);
+
+  useEffect(() => {
+    if (!quote?.partnerId) return;
+    return listenUser(quote.partnerId, (u) => setIssuerBrandName(u?.brandName));
+  }, [quote?.partnerId]);
 
   useEffect(() => {
     if (!quote) return;
@@ -109,7 +118,7 @@ export default function SupplierQuotePrintPage() {
       </div>
 
       <PdfPageScaler>
-        <SupplierQuoteDocument data={quote} lang={appUser?.role === "admin" ? "ko" : docLang} />
+        <SupplierQuoteDocument data={quote} lang={appUser?.role === "admin" ? "ko" : docLang} brandName={issuerBrandName} />
       </PdfPageScaler>
     </div>
   );

@@ -20,6 +20,7 @@ export interface SupplierOrderDocumentData {
   lotNo?: string;
   installmentType?: "deposit" | "balance" | "full";
   installmentPercent?: number;
+  vatApplicable?: boolean;
   createdAt: number;
 }
 
@@ -46,6 +47,10 @@ const KR_COMPANY = {
 export default function SupplierOrderDocument({ data }: { data: SupplierOrderDocumentData }) {
   const issuedDate = new Date(data.createdAt).toLocaleDateString("en-CA"); // YYYY-MM-DD
   const total = calcSupplierOrderTotal(data.items);
+  // 원화 국내 발주만 VAT 별도가 의미 있다 — 품목 표의 단가·합계는 공급가액 그대로 두고
+  // (단가×수량 합계가 "합계" 줄과 어긋나 보이면 안 된다), 부가세는 그 아래 별도 줄로 더한다.
+  const vatApplied = data.currency === "KRW" && !!data.vatApplicable;
+  const vatAmount = vatApplied ? Math.round(total * 0.1) : 0;
   // 원화 발주는 국내 업체와 주고받는 문서라 한글로 쓴다. 외화(USD/CNY)는 중국 공장이
   // 받으므로 중문/영문 병기 그대로 둔다.
   const isHk = data.currency !== "KRW";
@@ -184,9 +189,21 @@ export default function SupplierOrderDocument({ data }: { data: SupplierOrderDoc
       <div className="mt-3 flex justify-end">
         <div className="w-72 space-y-1 text-sm">
           <div className="flex items-center justify-between border-t-2 border-[#1d1d1f] pt-2 text-base font-bold">
-            <span>{L("合计 / Total", "합 계")}</span>
+            <span>{vatApplied ? L("合计(不含税) / Subtotal", "공급가액") : L("合计 / Total", "합 계")}</span>
             <span>{formatSupplierMoney(total, data.currency)}</span>
           </div>
+          {vatApplied && (
+            <>
+              <div className="flex items-center justify-between">
+                <span>{L("增值税 10%", "부가세 (VAT 10%)")}</span>
+                <span>{formatSupplierMoney(vatAmount, data.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-[#e5e5e5] pt-1 text-base font-bold">
+                <span>{L("含税合计 / Total", "합계 (VAT 포함)")}</span>
+                <span>{formatSupplierMoney(total + vatAmount, data.currency)}</span>
+              </div>
+            </>
+          )}
           {/* 선금/잔금으로 나눠 이번 차수엔 전체 중 일부만 청구할 때 — 품목 표는 전체 금액
               그대로 두고(단가×수량 합계가 "합계"와 어긋나 보이면 안 됨), 이번에 실제로
               청구할 금액만 별도 줄로 추가한다. */}

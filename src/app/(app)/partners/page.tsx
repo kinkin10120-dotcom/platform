@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, KeyRound } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { listenPartners } from "@/lib/firestore/users";
+import { listenPartners, updatePartnerBrandName } from "@/lib/firestore/users";
 import { listenAllProjects } from "@/lib/firestore/projects";
 import { listenClients } from "@/lib/firestore/clients";
 import { createPartnerAccount, updatePartnerProjects, deleteClientAccount, sendPasswordResetEmail, setUserPasswordDirectly } from "@/lib/functions";
@@ -36,6 +36,7 @@ export default function PartnersPage() {
   const [email, setEmail] = useState("");
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [partnerLang, setPartnerLang] = useState<"ko" | "zh">("ko");
+  const [brandName, setBrandName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [editingUid, setEditingUid] = useState<string | null>(null);
@@ -67,6 +68,7 @@ export default function PartnersPage() {
     setEmail("");
     setSelectedProjectIds([]);
     setPartnerLang("ko");
+    setBrandName("");
     setError("");
     setShowForm(true);
   }
@@ -77,6 +79,7 @@ export default function PartnersPage() {
     setEmail(p.email);
     setSelectedProjectIds(p.projectIds ?? []);
     setPartnerLang(p.partnerLang ?? "ko");
+    setBrandName(p.brandName ?? "");
     setError("");
     setShowForm(true);
   }
@@ -92,8 +95,10 @@ export default function PartnersPage() {
     try {
       if (editingUid) {
         await updatePartnerProjects(editingUid, selectedProjectIds, partnerLang);
+        await updatePartnerBrandName(editingUid, brandName);
       } else {
-        await createPartnerAccount({ email: email.trim(), name: name.trim(), projectIds: selectedProjectIds, partnerLang });
+        const { uid } = await createPartnerAccount({ email: email.trim(), name: name.trim(), projectIds: selectedProjectIds, partnerLang });
+        if (brandName.trim()) await updatePartnerBrandName(uid, brandName);
       }
       setShowForm(false);
     } catch (err: any) {
@@ -269,6 +274,20 @@ export default function PartnersPage() {
               ))}
               {projects.length === 0 && <p className="px-2 py-1.5 text-xs text-[#86868b]">등록된 프로젝트가 없습니다.</p>}
             </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[#86868b]">
+              견적서·청구서 로고 영역에 표시할 회사명 (선택)
+            </label>
+            <input
+              value={brandName}
+              onChange={(e) => setBrandName(e.target.value)}
+              placeholder="비워두면 기본 HANDYHAND 로고가 그대로 나옵니다"
+              className="w-full rounded-xl border border-[#d1d1d6] px-3 py-2 text-sm text-[#1d1d1f] outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
+            />
+            <p className="mt-1 text-xs text-[#d1d1d6]">
+              이 협력사가 견적서·청구서를 낼 때, 상단 HANDYHAND 로고 자리에 이미지 대신 이 글자가 뜹니다.
+            </p>
           </div>
           {error && <p className="text-xs text-red-500">{error}</p>}
           <div className="flex gap-2">

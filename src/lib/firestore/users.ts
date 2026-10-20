@@ -12,6 +12,32 @@ export async function updateUserName(uid: string, name: string) {
   return updateDoc(doc(db, "users", uid), { name });
 }
 
+// 관리자 전용 — 협력사가 견적서·청구서를 발행할 때 상단 HANDYHAND 로고 자리에 대신
+// 띄울 텍스트. 비우면("") 다시 기본 로고로 돌아간다.
+export async function updatePartnerBrandName(uid: string, brandName: string) {
+  return updateDoc(doc(db, "users", uid), { brandName: brandName.trim() });
+}
+
+// 발행 주체(견적서·청구서) 화면에서, 보는 사람이 관리자든 그 협력사 본인이든 상관없이
+// 그 문서를 "낸 협력사"의 프로필(특히 brandName)을 조회해야 해서 단건 조회가 필요하다.
+export function listenUser(uid: string, cb: (user: AppUser | null) => void) {
+  return onSnapshot(doc(db, "users", uid), (snap) => {
+    if (!snap.exists()) { cb(null); return; }
+    const data = snap.data();
+    cb({
+      uid: snap.id,
+      email: data.email,
+      name: data.name,
+      role: data.role,
+      clientId: data.clientId,
+      projectIds: data.projectIds,
+      partnerLang: data.partnerLang,
+      brandName: data.brandName || undefined,
+      createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+    } as AppUser);
+  });
+}
+
 export async function getAllUsers(): Promise<AppUser[]> {
   const snap = await getDocs(colRef);
   return snap.docs.map((d) => {
@@ -105,6 +131,7 @@ export function listenPartners(cb: (users: AppUser[]) => void) {
           role: data.role,
           projectIds: data.projectIds ?? [],
           partnerLang: data.partnerLang ?? "ko",
+          brandName: data.brandName || undefined,
           createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
         } as AppUser;
       })

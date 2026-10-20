@@ -340,6 +340,7 @@ export default function MyQuotesPage() {
       >
         <SupplierQuoteDocument
           lang={previewLang}
+          brandName={appUser?.brandName}
           data={{
             quoteNumber: zh(isZh, "미리보기 (제출 전)"),
             partnerName: appUser?.name ?? "",

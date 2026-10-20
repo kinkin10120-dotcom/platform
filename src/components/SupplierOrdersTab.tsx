@@ -21,6 +21,7 @@ import {
   calcCostsTotal,
   calcSupplierItemTotal,
   calcSupplierOrderTotal,
+  calcSupplierOrderVat,
   createSupplierOrder,
   deleteSupplierOrder,
   formatSupplierMoney,
@@ -1278,6 +1279,8 @@ function SupplierOrderComposer({
     }))
   );
   const [currency, setCurrency] = useState<SupplierCurrency>(editing?.currency ?? "USD");
+  // 원화 국내 업체 발주일 때만 의미 있다 — 통화를 KRW가 아닌 쪽으로 바꾸면 저장 시 무시된다.
+  const [vatApplicable, setVatApplicable] = useState(editing?.vatApplicable ?? false);
   const [exchangeRate, setExchangeRate] = useState(editing?.exchangeRate != null ? String(editing.exchangeRate) : "");
   const [rateDate, setRateDate] = useState("");
   const [rateLoading, setRateLoading] = useState(false);
@@ -1510,6 +1513,7 @@ function SupplierOrderComposer({
           lotNo: effectiveLotNo,
           installmentType: installmentType || undefined,
           installmentPercent: effectiveInstallmentPercent,
+          vatApplicable: currency === "KRW" ? vatApplicable : false,
           // 고객 발주 목록이 아직 안 왔거나 연결된 발주가 지워진 경우, 사용자가 건드리지도
           // 않은 연결이 조용히 끊기면 안 된다 — 선택값이 그대로면 원래 값을 유지한다.
           linkedPurchaseOrderId: linkedPoId ? linkedPo?.id ?? editing.linkedPurchaseOrderId : undefined,
@@ -1536,6 +1540,7 @@ function SupplierOrderComposer({
         lotNo: effectiveLotNo,
         installmentType: installmentType || undefined,
         installmentPercent: effectiveInstallmentPercent,
+        vatApplicable: currency === "KRW" ? vatApplicable : false,
         linkedPurchaseOrderId: linkedPo?.id,
         linkedPurchaseOrderNo: linkedPo?.poNumber,
         linkedProjectId: linkedProject?.id,
@@ -1703,6 +1708,17 @@ function SupplierOrderComposer({
                   placeholder="고객명 (선택 — 발주서에 표기)"
                   className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none placeholder:text-[#d1d1d6] focus:border-[#86868b]"
                 />
+                {/* 카탈로그에서 담으면 제품에 등록된 구분을 따라오지만, 직접 입력 품목이거나
+                    이번 건만 다르게 분류하고 싶을 때 여기서 바로 바꿀 수 있어야 한다. */}
+                <select
+                  value={it.orderKind ?? "production"}
+                  onChange={(e) => patchItem(it.key, { orderKind: e.target.value as SupplierOrderKind })}
+                  className="mt-1 w-full rounded-lg border border-[#d1d1d6] bg-white px-2.5 py-1 text-xs outline-none focus:border-[#86868b]"
+                >
+                  {(Object.keys(SUPPLIER_ORDER_KIND_LABEL) as SupplierOrderKind[]).map((k) => (
+                    <option key={k} value={k}>{SUPPLIER_ORDER_KIND_LABEL[k]}</option>
+                  ))}
+                </select>
               </div>
               <button
                 onClick={() => setItems((prev) => prev.filter((x) => x.key !== it.key))}
@@ -1925,6 +1941,12 @@ function SupplierOrderComposer({
               <option value="CNY">CNY ¥</option>
               <option value="KRW">KRW 원</option>
             </select>
+            {currency === "KRW" && (
+              <label className="flex items-center gap-1.5 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs text-[#1d1d1f]">
+                <input type="checkbox" checked={vatApplicable} onChange={(e) => setVatApplicable(e.target.checked)} />
+                VAT 별도 (단가는 공급가액)
+              </label>
+            )}
             {currency !== "KRW" && (
               <div className="flex items-center gap-1">
                 <div className="flex items-center gap-1 rounded-xl border border-[#d1d1d6] bg-white px-3 py-1.5 text-xs">
@@ -2086,9 +2108,23 @@ function SupplierOrderComposer({
         </div>
 
         <div className="flex items-center justify-between border-t border-[#f0f0f0] pt-4">
-          <span className="text-sm text-[#86868b]">합계</span>
+          <span className="text-sm text-[#86868b]">{currency === "KRW" && vatApplicable ? "공급가액" : "합계"}</span>
           <span className="text-lg font-bold text-[#1d1d1f]">{formatSupplierMoney(total, currency)}</span>
         </div>
+        {currency === "KRW" && vatApplicable && (
+          <>
+            <div className="flex items-center justify-between text-sm text-[#86868b]">
+              <span>부가세 (VAT 10%)</span>
+              <span>{formatSupplierMoney(calcSupplierOrderVat({ totalAmount: total, currency, vatApplicable }), currency)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#f0f0f0] pt-2">
+              <span className="text-sm text-[#86868b]">합계 (VAT 포함)</span>
+              <span className="text-lg font-bold text-[#1d1d1f]">
+                {formatSupplierMoney(total + calcSupplierOrderVat({ totalAmount: total, currency, vatApplicable }), currency)}
+              </span>
+            </div>
+          </>
+        )}
         {exchangeRate.trim() && currency !== "KRW" && (
           <p className="-mt-2 text-right text-xs text-[#86868b]">
             약 {Math.round(total * Number(exchangeRate)).toLocaleString("ko-KR")}원

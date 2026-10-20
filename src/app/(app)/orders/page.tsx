@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle } from "lucide-react";
+import { Trash2, X, Plus, Minus, Printer, Upload, Check, FilePlus, Download, AlertTriangle, Pencil } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenClients } from "@/lib/firestore/clients";
 import { listenUsersByClient } from "@/lib/firestore/users";
@@ -457,6 +457,11 @@ function AdminCreateOrderModal({ onClose, onCreated }: { onClose: () => void; on
   const [clientUsers, setClientUsers] = useState<AppUser[]>([]);
   const [orderedByUid, setOrderedByUid] = useState("");
   const [cart, setCart] = useState<Record<string, number>>({});
+  // 선금은 이미 따로 처리됐고 이번엔 잔금만, 혹은 협의가 바뀌어 카탈로그 단가와 다른 금액을
+  // 청구해야 할 때 — 품목별로 단가를 직접 고쳐 쓸 수 있게 한다. 비어 있으면(이 Record에 없으면)
+  // 카탈로그 단가를 그대로 쓴다.
+  const [priceOverrides, setPriceOverrides] = useState<Record<string, number>>({});
+  const [editingPriceIds, setEditingPriceIds] = useState<Set<string>>(new Set());
   const [memo, setMemo] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -466,19 +471,22 @@ function AdminCreateOrderModal({ onClose, onCreated }: { onClose: () => void; on
   useEffect(() => listenClients(setClients), []);
 
   useEffect(() => {
-    if (!clientId) { setProducts([]); setClientUsers([]); setCart({}); return; }
+    if (!clientId) { setProducts([]); setClientUsers([]); setCart({}); setPriceOverrides({}); return; }
     const unsubProducts = listenClientProducts(clientId, (ps) => setProducts(ps.filter((p) => p.active)));
     const unsubUsers = listenUsersByClient(clientId, (us) => {
       setClientUsers(us);
       setOrderedByUid((prev) => (us.some((u) => u.uid === prev) ? prev : us[0]?.uid ?? ""));
     });
     setCart({});
+    setPriceOverrides({});
     return () => { unsubProducts(); unsubUsers(); };
   }, [clientId]);
 
   const client = clients.find((c) => c.id === clientId) ?? null;
   const orderedByUser = clientUsers.find((u) => u.uid === orderedByUid) ?? null;
-  const cartItems = products.filter((p) => (cart[p.id] ?? 0) > 0).map((p) => ({ product: p, quantity: cart[p.id] }));
+  const cartItems = products
+    .filter((p) => (cart[p.id] ?? 0) > 0)
+    .map((p) => ({ product: p, quantity: cart[p.id], unitPrice: priceOverrides[p.id] ?? p.unitPrice }));
 
   function setQty(id: string, qty: number) {
     setCart((prev) => ({ ...prev, [id]: Math.max(0, qty) }));
@@ -494,11 +502,11 @@ function AdminCreateOrderModal({ onClose, onCreated }: { onClose: () => void; on
         clientName: client.name,
         orderedBy: orderedByUser.uid,
         orderedByName: orderedByUser.name,
-        items: cartItems.map(({ product, quantity }) => ({
+        items: cartItems.map(({ product, quantity, unitPrice }) => ({
           productId: product.id,
           productName: product.name,
           productImageUrl: product.imageUrl,
-          unitPrice: product.unitPrice,
+          unitPrice,
           currency: product.currency,
           vatApplicable: product.vatApplicable,
           unit: product.unit,
@@ -583,24 +591,69 @@ function AdminCreateOrderModal({ onClose, onCreated }: { onClose: () => void; on
             )}
             {products.map((p) => {
               const qty = cart[p.id] ?? 0;
+              const isEditingPrice = editingPriceIds.has(p.id);
+              const effectivePrice = priceOverrides[p.id] ?? p.unitPrice;
+              const hasOverride = priceOverrides[p.id] != null;
               return (
-                <div key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#e5e5e5] px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-[#1d1d1f]">{p.name}</p>
-                    <p className="mt-0.5 text-xs text-[#86868b]">{formatMoney(p.unitPrice, p.currency)} (1{p.unit || "개"} 기준)</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button onClick={() => setQty(p.id, qty - 1)} className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-                      <Minus size={13} />
-                    </button>
-                    <input
-                      value={qty}
-                      onChange={(e) => setQty(p.id, Number(e.target.value.replace(/[^0-9]/g, "")) || 0)}
-                      className="w-10 rounded-lg border border-[#d1d1d6] py-1 text-center text-sm outline-none focus:border-[#86868b]"
-                    />
-                    <button onClick={() => setQty(p.id, qty + 1)} className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
-                      <Plus size={13} />
-                    </button>
+                <div key={p.id} className="rounded-xl border border-[#e5e5e5] px-3 py-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-[#1d1d1f]">{p.name}</p>
+                      {isEditingPrice ? (
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <NumberInput
+                            value={effectivePrice}
+                            onChange={(n) => setPriceOverrides((prev) => ({ ...prev, [p.id]: n }))}
+                            className="w-28 rounded-lg border border-[#d1d1d6] px-2 py-1 text-xs outline-none focus:border-[#86868b]"
+                          />
+                          <span className="text-xs text-[#86868b]">({p.unit || "개"}당 — 잔금 등 직접 금액을 적을 때)</span>
+                        </div>
+                      ) : (
+                        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-[#86868b]">
+                          {formatMoney(effectivePrice, p.currency)} (1{p.unit || "개"} 기준)
+                          {hasOverride && <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">직접 입력</span>}
+                          <button
+                            onClick={() => {
+                              setEditingPriceIds((prev) => new Set(prev).add(p.id));
+                              // 수량을 아직 안 올린 상태(0)에서 금액만 고치면 장바구니에 안 담겨
+                              // 청구서에서 빠진다 — 직접 입력을 켜는 순간 최소 1개로 맞춰둔다.
+                              if (qty === 0) setQty(p.id, 1);
+                            }}
+                            title="이 품목만 금액 직접 입력 (잔금 등)"
+                            className="text-[#d1d1d6] transition hover:text-[#1d1d1f]"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {isEditingPrice ? (
+                        <button
+                          onClick={() => {
+                            setEditingPriceIds((prev) => { const next = new Set(prev); next.delete(p.id); return next; });
+                            setPriceOverrides((prev) => { const next = { ...prev }; delete next[p.id]; return next; });
+                          }}
+                          className="rounded-full border border-[#d1d1d6] px-3 py-1.5 text-xs font-medium text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]"
+                        >
+                          기본 단가로
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => setQty(p.id, qty - 1)} className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                            <Minus size={13} />
+                          </button>
+                          <input
+                            value={qty}
+                            onChange={(e) => setQty(p.id, Number(e.target.value.replace(/[^0-9]/g, "")) || 0)}
+                            className="w-10 rounded-lg border border-[#d1d1d6] py-1 text-center text-sm outline-none focus:border-[#86868b]"
+                          />
+                          <button onClick={() => setQty(p.id, qty + 1)} className="flex h-7 w-7 items-center justify-center rounded-full border border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+                            <Plus size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -611,10 +664,10 @@ function AdminCreateOrderModal({ onClose, onCreated }: { onClose: () => void; on
         {cartItems.length > 0 && (
           <div className="overflow-hidden rounded-2xl border border-[#e5e5e5]">
             <OrderTotalsBox
-              items={cartItems.map(({ product, quantity }) => ({
+              items={cartItems.map(({ product, quantity, unitPrice }) => ({
                 productId: product.id,
                 productName: product.name,
-                unitPrice: product.unitPrice,
+                unitPrice,
                 currency: product.currency,
                 vatApplicable: product.vatApplicable,
                 unit: product.unit,

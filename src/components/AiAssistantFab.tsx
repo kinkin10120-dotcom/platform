@@ -23,7 +23,7 @@ export default function AiAssistantFab() {
     <Link
       href={href}
       title={zh(isZh, "AI 비서")}
-      className="fixed right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-[#1d1d1f] text-white shadow-lg shadow-black/20 transition hover:bg-black active:scale-95 md:right-6"
+      className="fixed right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-[#1d1d1f] text-white shadow-lg shadow-black/20 transition hover:bg-black active:scale-95 md:right-6 print:hidden"
       style={{ bottom: "calc(env(safe-area-inset-bottom) + 1.25rem)" }}
     >
       <Sparkles size={21} />

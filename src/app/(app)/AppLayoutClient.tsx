@@ -105,7 +105,7 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
       {/* 모바일 backdrop */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          className="fixed inset-0 z-30 bg-black/40 print:hidden md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -118,8 +118,14 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
         {/* 홈 화면에 추가한 iOS 앱(standalone)에서는 상태 표시줄이 웹 콘텐츠 위에 오버레이로
             그려져서, 안전영역 패딩이 없으면 검색/날짜/알림 아이콘 줄이 상태 표시줄과 겹친다 —
             pt로 그 높이만큼 밀어내고, h-14였던 실제 콘텐츠 줄은 그 아래 그대로 유지한다. */}
+        {/* 견적서·발주서 등은 전용 standalone 인쇄 라우트((app) 레이아웃 바깥)도 있지만,
+            관리자 화면 안에서 바로 "미리보기 → 인쇄"하는 곳들(예: /quotes, /orders의
+            인라인 미리보기)은 이 레이아웃 안에서 window.print()를 호출한다 — 그러면 이
+            헤더·사이드바·FAB가 화면에선 미리보기 오버레이에 가려 안 보여도, 인쇄는 화면
+            가림과 무관하게 DOM에 실제로 존재하는 요소를 그대로 찍어서 문서 위에 겹쳐
+            나온다. print:hidden으로 인쇄 시에는 실제로 DOM에서 빼야 한다. */}
         <header
-          className="fixed inset-x-0 top-0 z-20 flex h-14 shrink-0 items-center border-b border-[#e5e5e5] bg-white px-4 gap-3 md:left-56"
+          className="fixed inset-x-0 top-0 z-20 flex h-14 shrink-0 items-center border-b border-[#e5e5e5] bg-white px-4 gap-3 md:left-56 print:hidden"
           style={{ height: "calc(env(safe-area-inset-top) + 3.5rem)", paddingTop: "env(safe-area-inset-top)" }}
         >
           <button
@@ -134,10 +140,12 @@ export default function AppLayoutClient({ children }: { children: React.ReactNod
           <NotificationBell />
         </header>
         <main
-          className="no-scrollbar flex-1 overflow-y-auto bg-[#f5f5f7] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+4.5rem)] md:px-6 md:pb-6 md:pt-[calc(env(safe-area-inset-top)+5.5rem)]"
+          className="no-scrollbar flex-1 overflow-y-auto bg-[#f5f5f7] px-4 pb-4 pt-[calc(env(safe-area-inset-top)+4.5rem)] md:px-6 md:pb-6 md:pt-[calc(env(safe-area-inset-top)+5.5rem)] print:p-0"
         >
-          <AddToHomeScreenBanner />
-          <SystemAlertBanner />
+          <div className="print:hidden">
+            <AddToHomeScreenBanner />
+            <SystemAlertBanner />
+          </div>
           {children}
         </main>
       </div>

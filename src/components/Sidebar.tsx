@@ -152,7 +152,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   };
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-56 shrink-0 flex-col border-r border-[#e5e5e5] bg-white transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
+    <aside className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-56 shrink-0 flex-col border-r border-[#e5e5e5] bg-white transition-transform duration-300 ease-in-out print:hidden md:relative md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="px-5 pb-4 pt-6">
         <Link href="/handyworks" className="group block">
           <Image src="/handyworks-logo.png" alt="HANDYWORKS" width={120} height={36} style={{ objectFit: "contain", filter: "brightness(0)" }} />

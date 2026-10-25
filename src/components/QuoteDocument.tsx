@@ -74,9 +74,17 @@ export default function QuoteDocument({ data }: { data: QuoteDocumentData }) {
         </thead>
         <tbody>
           {data.items.map((it, i) => (
-            <tr key={i} className="border-b border-[#e5e5e5]">
+            <tr key={i} className="border-b border-[#e5e5e5] align-top">
               <td className="py-3 pr-2 text-[#86868b]">{i + 1}</td>
-              <td className="py-3 pr-2">{it.name}</td>
+              <td className="py-3 pr-2">
+                <div className="flex items-center gap-2.5">
+                  {it.imageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={it.imageUrl} alt="" className="h-12 w-12 shrink-0 rounded border border-[#e5e5e5] object-cover" />
+                  )}
+                  <span>{it.name}</span>
+                </div>
+              </td>
               <td className="py-3 pr-2 text-right text-[#86868b]">{formatMoney(it.unitPrice, it.currency)}</td>
               <td className="py-3 pr-2 text-right text-[#86868b]">{it.quantity} {it.unit || "개"}</td>
               <td className="py-3 pl-2 text-right font-medium">{formatMoney(it.unitPrice * it.quantity, it.currency)}</td>

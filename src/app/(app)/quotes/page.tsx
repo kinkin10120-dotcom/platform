@@ -13,6 +13,7 @@ import {
   listenQuoteFiles,
   uploadQuoteFile,
   deleteQuoteFile,
+  uploadQuoteItemImage,
   QuoteRequest,
   QuoteStatus,
   QuoteLineItem,
@@ -88,6 +89,8 @@ function QuoteItemsEditor({
   priceDrafts: Record<number, string>;
   setPriceDrafts: Dispatch<SetStateAction<Record<number, string>>>;
 }) {
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+
   function updateItem(index: number, patch: Partial<QuoteLineItem>) {
     onChange(items.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   }
@@ -95,12 +98,47 @@ function QuoteItemsEditor({
     onChange(items.filter((_, i) => i !== index));
     setPriceDrafts({});
   }
+  async function handleImageUpload(index: number, file: File) {
+    setUploadingIndex(index);
+    try {
+      const url = await uploadQuoteItemImage(file);
+      updateItem(index, { imageUrl: url });
+    } finally {
+      setUploadingIndex(null);
+    }
+  }
 
   return (
     <div className="space-y-2">
       {items.map((it, i) => (
         <div key={i} className="space-y-1 rounded-lg border border-[#f0f0f0] p-1.5">
           <div className="flex items-center gap-1.5">
+            <label className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-[#d1d1d6] text-[#86868b] transition hover:border-[#86868b] hover:text-[#1d1d1f]">
+              {it.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={it.imageUrl} alt="" className="h-full w-full object-cover" />
+              ) : uploadingIndex === i ? (
+                <span className="text-[9px]">...</span>
+              ) : (
+                <Paperclip size={13} />
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(i, f); e.target.value = ""; }}
+              />
+            </label>
+            {it.imageUrl && (
+              <button
+                type="button"
+                onClick={() => updateItem(i, { imageUrl: undefined })}
+                title="사진 빼기"
+                className="shrink-0 text-[#d1d1d6] hover:text-red-500"
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
             <input
               value={it.name}
               onChange={(e) => updateItem(i, { name: e.target.value })}

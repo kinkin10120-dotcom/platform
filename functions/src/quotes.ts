@@ -75,7 +75,7 @@ export const issueQuote = onCall({ invoker: "public", secrets: [internalNotifySe
 
   const { quoteId, items, memo } = request.data as {
     quoteId?: string;
-    items?: { name: string; unitPrice: number; currency: string; quantity: number; unit?: string; vatApplicable?: boolean }[];
+    items?: { name: string; unitPrice: number; currency: string; quantity: number; unit?: string; vatApplicable?: boolean; imageUrl?: string }[];
     memo?: string;
   };
   if (!quoteId || !items?.length) {

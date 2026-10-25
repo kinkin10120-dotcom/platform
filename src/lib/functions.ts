@@ -211,6 +211,7 @@ export interface IssueQuoteItemInput {
   quantity: number;
   unit?: string;
   vatApplicable?: boolean;
+  imageUrl?: string;
 }
 
 export async function issueQuote(quoteId: string, items: IssueQuoteItemInput[], memo: string) {

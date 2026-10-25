@@ -17,6 +17,7 @@ export interface QuoteLineItem {
   quantity: number;
   unit?: string;
   vatApplicable?: boolean;
+  imageUrl?: string;
 }
 
 export interface QuoteRequest {
@@ -159,6 +160,17 @@ export async function uploadQuoteFile(quoteId: string, file: File, uploadedByNam
     uploadedByName,
     uploadedAt: serverTimestamp(),
   });
+}
+
+// 견적서 품목 사진 — 문의 없이 바로 만들거나 발행 전 수정할 때 올린다. 아직 quoteRequests
+// 문서가 없을 수도 있어(견적서 바로 만들기는 작성 중엔 문서가 없다) 경로를 quoteId가 아니라
+// 업로드 시점의 임의 키로 둔다. 발행 후에는 /quotes/view에서 비로그인 고객도 봐야 하므로
+// storage.rules에서 이 경로는 읽기를 항상 열어둔다(품목 사진이라 금액 등 민감정보 없음).
+export async function uploadQuoteItemImage(file: File): Promise<string> {
+  const storagePath = `quoteItemImages/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${file.name}`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
 }
 
 export async function deleteQuoteFile(quoteId: string, fileId: string, storagePath: string) {

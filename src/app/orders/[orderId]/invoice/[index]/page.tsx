@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { X, Copy, Check } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenPurchaseOrder } from "@/lib/firestore/purchaseOrders";
@@ -13,12 +13,16 @@ import PdfPageScaler from "@/components/PdfPageScaler";
 
 export default function PurchaseOrderInvoicePage() {
   const { orderId, index } = useParams<{ orderId: string; index: string }>();
+  const searchParams = useSearchParams();
   const { firebaseUser, appUser, loading } = useAuth();
   const router = useRouter();
   const [order, setOrder] = useState<PurchaseOrder | null | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
   const [standalone, setStandalone] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 같은 회차 금액을 거래처가 요구하는 형식에 맞게 청구서/영수증과 거래명세서 사이에서
+  // 바로 바꿔 보여준다 — 별도 발행 절차 없이 같은 데이터를 다른 양식으로만 찍는다.
+  const [docType, setDocType] = useState<"invoice" | "statement">(searchParams.get("doc") === "statement" ? "statement" : "invoice");
 
   useEffect(() => {
     setStandalone(isInAppBrowser() || (isIosDevice() && isStandaloneMode()));
@@ -52,9 +56,9 @@ export default function PurchaseOrderInvoicePage() {
     const installment = order.payment.installments[Number(index)];
     if (!installment?.issuedAt) return;
     const itemSummary = order.items.map((it) => it.productName).join(",");
-    const prefix = installment.paid ? "RCP-" : "INV-";
+    const prefix = docType === "statement" ? "거래명세서-" : installment.paid ? "RCP-" : "INV-";
     document.title = `${order.poNumber.replace(/^(PO|INV|RCP)-/, prefix)}-${itemSummary}`;
-  }, [order, index]);
+  }, [order, index, docType]);
 
   if (loading || order === undefined) return null;
 
@@ -117,7 +121,23 @@ export default function PurchaseOrderInvoicePage() {
             >
               <X size={16} />
             </button>
-            <p className="text-sm text-[#86868b]">{isReceipt ? "영수증" : "청구서"} 미리보기 — 인쇄 시 배경/여백이 자동 조정됩니다.</p>
+            <p className="text-sm text-[#86868b]">{docType === "statement" ? "거래명세서" : isReceipt ? "영수증" : "청구서"} 미리보기 — 인쇄 시 배경/여백이 자동 조정됩니다.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex overflow-hidden rounded-full border border-[#d1d1d6]">
+              <button
+                onClick={() => setDocType("invoice")}
+                className={`px-3 py-1.5 text-xs font-medium ${docType === "invoice" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+              >
+                {isReceipt ? "영수증" : "청구서"}
+              </button>
+              <button
+                onClick={() => setDocType("statement")}
+                className={`px-3 py-1.5 text-xs font-medium ${docType === "statement" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+              >
+                거래명세서
+              </button>
+            </div>
           </div>
           {standalone ? (
             <button
@@ -144,6 +164,19 @@ export default function PurchaseOrderInvoicePage() {
       </div>
 
       <PdfPageScaler>
+        {docType === "statement" ? (
+          <TransactionStatementBody
+            order={order}
+            client={client}
+            installment={installment}
+            installmentIndex={installmentIndex}
+            totalInstallments={totalInstallments}
+            invoiceNumber={invoiceNumber}
+            issuedDate={issuedDate}
+            isHk={isHk}
+            totals={totals}
+          />
+        ) : (
         <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
         <div className="flex items-start justify-between border-b-2 border-[#1d1d1f] pb-6">
           <div>
@@ -289,7 +322,143 @@ export default function PurchaseOrderInvoicePage() {
           </div>
         </div>
         </div>
+        )}
       </PdfPageScaler>
+    </div>
+  );
+}
+
+// 거래처에 따라 청구서·영수증 대신 거래명세서 양식이 필요한 경우가 있다 — 공급자/공급받는자
+// 두 박스와 품목별 공급가액·세액 줄로 구성되는 표준 양식으로, 같은 회차 금액(installment)만
+// 담는다(여러 회차로 나뉘어도 거래명세서는 항상 그 회차 금액 기준 1장).
+function TransactionStatementBody({
+  order,
+  client,
+  installment,
+  installmentIndex,
+  totalInstallments,
+  invoiceNumber,
+  issuedDate,
+  isHk,
+  totals,
+}: {
+  order: PurchaseOrder;
+  client: Client | null;
+  installment: { label: string; amount: number };
+  installmentIndex: number;
+  totalInstallments: number;
+  invoiceNumber: string;
+  issuedDate: string;
+  isHk: boolean;
+  totals: ReturnType<typeof calcOrderTotals>;
+}) {
+  const grandCurrency = isHk ? "USD" : "KRW";
+  const vatRatio = totals.krwSupply > 0 ? totals.krwVat / totals.krwSupply : 0;
+  const installmentVat = grandCurrency === "KRW" ? Math.round(installment.amount * vatRatio) : 0;
+  const installmentPayable = installment.amount + installmentVat;
+  const statementNumber = invoiceNumber.replace(/^(PO|INV|RCP)-/, "STMT-");
+  const itemSummary = order.items.map((it) => it.productName).join(", ");
+
+  return (
+    <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
+      <div className="flex items-start justify-between border-b-2 border-[#1d1d1f] pb-6">
+        <div>
+          <p className="text-3xl font-bold tracking-tight">거래명세서</p>
+          <p className="mt-1 text-xs text-[#86868b]">TRANSACTION STATEMENT · 공급받는자 보관용</p>
+        </div>
+        {isHk ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/logo-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY" className="h-[30px] object-contain" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/logo-handyhand-trim.png" alt="HANDYHAND" className="h-[22px] object-contain" style={{ filter: "brightness(0)" }} />
+        )}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between text-sm">
+        <Row label="문서번호" value={statementNumber} />
+        <Row label="작성일자" value={issuedDate} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+        <div className="rounded-xl border border-[#e5e5e5] p-3">
+          <p className="mb-1.5 text-xs font-semibold text-[#86868b]">공급자</p>
+          <div className="space-y-1">
+            {isHk ? (
+              <>
+                <Row label="상호" value="AIM TECHNOLOGY (HK) COMPANY" />
+                <Row label="주소" value="11/F, CNT House, 120 Johnston Rd., Wanchai, Hong Kong" />
+              </>
+            ) : (
+              <>
+                <Row label="등록번호" value="128-87-00105" />
+                <Row label="상호" value="주식회사 핸디핸드" />
+                <Row label="성명" value="최형준" />
+                <Row label="사업장주소" value="경기도 고양시 덕양구 삼원로63 고양아크비즈지식산업센터 F804호" />
+              </>
+            )}
+          </div>
+        </div>
+        <div className="rounded-xl border border-[#e5e5e5] p-3">
+          <p className="mb-1.5 text-xs font-semibold text-[#86868b]">공급받는자</p>
+          <div className="space-y-1">
+            {client?.bizRegNumber && <Row label="등록번호" value={client.bizRegNumber} />}
+            <Row label="상호" value={client?.bizCompanyName || order.clientName} />
+            {client?.bizCeoName && <Row label="성명" value={client.bizCeoName} />}
+            <Row label="담당자" value={order.orderedByName} />
+            {client?.bizAddress && <Row label="사업장주소" value={client.bizAddress} />}
+          </div>
+        </div>
+      </div>
+
+      <table className="mt-8 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-y-2 border-[#1d1d1f] text-xs">
+            <th className="py-2.5 pr-2 text-left font-semibold">품목</th>
+            <th className="w-20 py-2.5 pr-2 text-center font-semibold">수량</th>
+            <th className="w-28 py-2.5 pr-2 text-right font-semibold">공급가액</th>
+            <th className="w-24 py-2.5 pl-2 text-right font-semibold">세액</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-[#e5e5e5] align-top">
+            <td className="py-3 pr-2">
+              <p className="font-medium">{itemSummary}</p>
+              <p className="mt-0.5 text-xs text-[#86868b]">{installment.label} ({installmentIndex + 1}/{totalInstallments}회차)</p>
+            </td>
+            <td className="whitespace-nowrap py-3 pr-2 text-center text-[#86868b]">1</td>
+            <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{formatMoney(installment.amount, grandCurrency)}</td>
+            <td className="whitespace-nowrap py-3 pl-2 text-right text-[#86868b]">{installmentVat > 0 ? formatMoney(installmentVat, grandCurrency) : "-"}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div className="mt-3 flex justify-end">
+        <div className="w-72 space-y-1 text-sm">
+          <div className="flex items-center justify-between border-t-2 border-[#1d1d1f] pt-2 text-base font-bold">
+            <span>합계금액</span>
+            <span>{formatMoney(installmentPayable, grandCurrency)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-auto text-xs text-[#86868b]">
+        <div className="flex justify-end">
+          <div className="w-40 text-center">
+            {isHk ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/stamp-aim-technology-hk.png" alt="AIM TECHNOLOGY (HK) COMPANY 직인" className="mx-auto h-[65px] object-contain" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src="/stamp.PNG" alt="HANDYHAND 직인" className="mx-auto h-[65px] object-contain" />
+            )}
+          </div>
+        </div>
+        <div className="flex items-end justify-between border-t border-[#e5e5e5] pt-3 mt-3">
+          <p>본 거래명세서는 HANDYWORKS 플랫폼에서 생성되었습니다.</p>
+          <p>{isHk ? "AIM TECHNOLOGY (HK) COMPANY" : "HANDYHAND"}</p>
+        </div>
+      </div>
     </div>
   );
 }

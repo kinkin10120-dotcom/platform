@@ -1018,6 +1018,12 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
                 <Link href={`/orders/${order.id}/invoice/${i}`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
                   {it.paid ? "영수증 PDF" : "청구서 PDF"}
                 </Link>
+                {/* 거래처에 따라 청구서·영수증 대신(또는 추가로) 거래명세서가 필요한 경우가
+                    있다 — 같은 회차 금액을 다른 양식으로 보여줄 뿐이라 별도 발행 절차 없이
+                    같은 페이지에서 바로 전환해 인쇄할 수 있게 한다. */}
+                <Link href={`/orders/${order.id}/invoice/${i}?doc=statement`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
+                  거래명세서 PDF
+                </Link>
                 {/* 완료 처리된 발주는 발행취소를 막는다 — 요청의 핵심 조건. */}
                 {!locked && (
                   <button

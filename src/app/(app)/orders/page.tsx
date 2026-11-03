@@ -1036,13 +1036,20 @@ function PaymentSection({ order }: { order: PurchaseOrder }) {
                 )}
               </>
             ) : (
-              <button
-                onClick={() => handleIssue(i)}
-                disabled={saving}
-                className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f] disabled:opacity-50"
-              >
-                {it.paid ? "영수증 발행하기" : "청구서 발행하기"}
-              </button>
+              <>
+                {/* 거래명세서는 청구서 발행 여부와 무관하게 그 회차 금액만 있으면 뽑을 수
+                    있다 — 발행 전에 거래처가 먼저 요청하는 경우가 있어 여기서도 열어둔다. */}
+                <Link href={`/orders/${order.id}/invoice/${i}?doc=statement`} className="text-xs font-medium text-[#1d1d1f] underline underline-offset-2">
+                  거래명세서 PDF
+                </Link>
+                <button
+                  onClick={() => handleIssue(i)}
+                  disabled={saving}
+                  className="text-xs font-medium text-[#86868b] underline underline-offset-2 hover:text-[#1d1d1f] disabled:opacity-50"
+                >
+                  {it.paid ? "영수증 발행하기" : "청구서 발행하기"}
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -74,12 +74,15 @@ export default function PurchaseOrderInvoicePage() {
   const installmentIndex = Number(index);
   const installment = order.payment?.installments[installmentIndex];
 
-  if (!order.payment || !installment || !installment.issuedAt) {
+  // 거래명세서는 청구서와 달리 "이미 청구를 발행했다"는 뜻이 아니라 그 회차 금액을 다른
+  // 양식으로 보여주는 것뿐이라, 청구서 발행 전에도 거래처 요청으로 먼저 뽑아야 할 때가
+  // 있다 — 회차 자체(금액·라벨)만 있으면 되고 issuedAt은 거래명세서 쪽만 요구하지 않는다.
+  if (!order.payment || !installment || (!installment.issuedAt && docType !== "statement")) {
     return <p className="p-10 text-center text-sm text-[#86868b]">아직 발행되지 않은 청구서입니다.</p>;
   }
 
   const totalInstallments = order.payment.installments.length;
-  const issuedDate = new Date(installment.issuedAt).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+  const issuedDate = new Date(installment.issuedAt ?? Date.now()).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
   // 문서를 발행하는 시점이 아니라 "지금 이 회차가 입금 확인된 상태인지"를 매번 다시 계산한다 —
   // 청구서 발행 전에 입금부터 확인된 경우(무통장입금을 먼저 받고 나중에 서류를 챙기는 경우 등)
   // "청구서"(아직 안 받은 돈을 청구하는 문서)라고 찍히면 앞뒤가 안 맞는다. 반대로 청구서를
@@ -126,8 +129,10 @@ export default function PurchaseOrderInvoicePage() {
           <div className="flex items-center gap-2">
             <div className="flex overflow-hidden rounded-full border border-[#d1d1d6]">
               <button
-                onClick={() => setDocType("invoice")}
-                className={`px-3 py-1.5 text-xs font-medium ${docType === "invoice" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
+                onClick={() => installment.issuedAt && setDocType("invoice")}
+                disabled={!installment.issuedAt}
+                title={installment.issuedAt ? undefined : "청구서 발행 후 확인할 수 있습니다"}
+                className={`px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${docType === "invoice" ? "bg-[#1d1d1f] text-white" : "text-[#1d1d1f]"}`}
               >
                 {isReceipt ? "영수증" : "청구서"}
               </button>

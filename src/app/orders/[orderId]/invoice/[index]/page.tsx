@@ -379,7 +379,9 @@ function TransactionStatementBody({
   // 구성 내역(부품명)만 보여준다 — 매입 단가(원가)는 절대 같이 보여주지 않는다. 품목이
   // 여럿이면 어느 품목 소속인지 알 수 있게 품목명과 함께 적는다.
   const partNames = order.items.flatMap((it) => {
-    const parts = internalByProductId[it.productId]?.parts;
+    // "구성 부품별 참고 단가" 화면(제품 카탈로그)이 쓰는 필드는 parts가 아니라 refParts다 —
+    // parts/purchasePrice는 실제 공급사 발주서에 그대로 복사되는 별개의 템플릿 값이다.
+    const parts = internalByProductId[it.productId]?.refParts;
     if (!parts || parts.length === 0) return [];
     return parts.map((p) => (order.items.length > 1 ? `${it.productName} - ${p.name}` : p.name));
   });
@@ -442,7 +444,7 @@ function TransactionStatementBody({
             <th className="py-2.5 pr-2 text-left font-semibold">품목</th>
             <th className="w-20 py-2.5 pr-2 text-center font-semibold">수량</th>
             <th className="w-28 py-2.5 pr-2 text-right font-semibold">공급가액</th>
-            <th className="w-24 py-2.5 pl-2 text-right font-semibold">세액</th>
+            <th className="w-24 py-2.5 pl-2 text-right font-semibold">부가세</th>
           </tr>
         </thead>
         <tbody>

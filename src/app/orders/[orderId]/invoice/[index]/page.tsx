@@ -6,8 +6,9 @@ import { X, Copy, Check } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { listenPurchaseOrder } from "@/lib/firestore/purchaseOrders";
 import { listenClient } from "@/lib/firestore/clients";
+import { listenClientProductInternals } from "@/lib/firestore/productInternal";
 import { formatMoney, calcOrderTotals, DEFAULT_BANK_INFO, DEFAULT_BANK_INFO_USD } from "@/lib/orderCalc";
-import { Client, PurchaseOrder } from "@/lib/types";
+import { Client, ClientProductInternal, PurchaseOrder } from "@/lib/types";
 import { isIosDevice, isStandaloneMode, isInAppBrowser } from "@/lib/pwa";
 import PdfPageScaler from "@/components/PdfPageScaler";
 
@@ -18,6 +19,10 @@ export default function PurchaseOrderInvoicePage() {
   const router = useRouter();
   const [order, setOrder] = useState<PurchaseOrder | null | undefined>(undefined);
   const [client, setClient] = useState<Client | null>(null);
+  // 거래명세서에서 품목의 구성 내역(부품명)을 보여주기 위함 — 매입 단가(원가)는 절대
+  // 같이 내보내지 않는다(내부 전용 데이터라 firestore.rules도 클라이언트 계정에는
+  // 애초에 이 컬렉션 읽기를 막아둔다 — 관리자가 PDF를 만들어 전달하는 흐름에서만 채워진다).
+  const [internalByProductId, setInternalByProductId] = useState<Record<string, ClientProductInternal>>({});
   const [standalone, setStandalone] = useState(false);
   const [copied, setCopied] = useState(false);
   // 같은 회차 금액을 거래처가 요구하는 형식에 맞게 청구서/영수증과 거래명세서 사이에서
@@ -47,6 +52,11 @@ export default function PurchaseOrderInvoicePage() {
   useEffect(() => {
     if (!order) return;
     return listenClient(order.clientId, setClient);
+  }, [order?.clientId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!order) return;
+    return listenClientProductInternals(order.clientId, setInternalByProductId);
   }, [order?.clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 모바일 "인쇄/PDF 저장"에서 제안되는 파일명은 document.title을 그대로 따르므로,
@@ -180,6 +190,7 @@ export default function PurchaseOrderInvoicePage() {
             issuedDate={issuedDate}
             isHk={isHk}
             totals={totals}
+            internalByProductId={internalByProductId}
           />
         ) : (
         <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -346,6 +357,7 @@ function TransactionStatementBody({
   issuedDate,
   isHk,
   totals,
+  internalByProductId,
 }: {
   order: PurchaseOrder;
   client: Client | null;
@@ -356,6 +368,7 @@ function TransactionStatementBody({
   issuedDate: string;
   isHk: boolean;
   totals: ReturnType<typeof calcOrderTotals>;
+  internalByProductId: Record<string, ClientProductInternal>;
 }) {
   const grandCurrency = isHk ? "USD" : "KRW";
   const vatRatio = totals.krwSupply > 0 ? totals.krwVat / totals.krwSupply : 0;
@@ -363,6 +376,13 @@ function TransactionStatementBody({
   const installmentPayable = installment.amount + installmentVat;
   const statementNumber = invoiceNumber.replace(/^(PO|INV|RCP)-/, "STMT-");
   const itemSummary = order.items.map((it) => it.productName).join(", ");
+  // 구성 내역(부품명)만 보여준다 — 매입 단가(원가)는 절대 같이 보여주지 않는다. 품목이
+  // 여럿이면 어느 품목 소속인지 알 수 있게 품목명과 함께 적는다.
+  const partNames = order.items.flatMap((it) => {
+    const parts = internalByProductId[it.productId]?.parts;
+    if (!parts || parts.length === 0) return [];
+    return parts.map((p) => (order.items.length > 1 ? `${it.productName} - ${p.name}` : p.name));
+  });
 
   return (
     <div className="po-page flex w-[210mm] min-h-[297mm] flex-col bg-white p-[16mm] text-[#1d1d1f] shadow-xl print:w-full">
@@ -426,7 +446,7 @@ function TransactionStatementBody({
           </tr>
         </thead>
         <tbody>
-          <tr className="border-b border-[#e5e5e5] align-top">
+          <tr className={partNames.length > 0 ? "align-top" : "border-b border-[#e5e5e5] align-top"}>
             <td className="py-3 pr-2">
               <p className="font-medium">{itemSummary}</p>
               <p className="mt-0.5 text-xs text-[#86868b]">{installment.label} ({installmentIndex + 1}/{totalInstallments}회차)</p>
@@ -435,6 +455,16 @@ function TransactionStatementBody({
             <td className="whitespace-nowrap py-3 pr-2 text-right text-[#86868b]">{formatMoney(installment.amount, grandCurrency)}</td>
             <td className="whitespace-nowrap py-3 pl-2 text-right text-[#86868b]">{installmentVat > 0 ? formatMoney(installmentVat, grandCurrency) : "-"}</td>
           </tr>
+          {/* 구성 내역 — 품명만 보여준다. 단가·공급가액·세액 칸은 의도적으로 비워둔다
+              (매입원가가 아니라 "무엇이 포함돼있는지"만 전달하는 용도). */}
+          {partNames.map((name, i) => (
+            <tr key={i} className={i === partNames.length - 1 ? "border-b border-[#e5e5e5] align-top" : "align-top"}>
+              <td className="py-1.5 pr-2 pl-4 text-xs text-[#86868b]">· {name}</td>
+              <td className="py-1.5 pr-2 text-center text-xs text-[#d1d1d6]">-</td>
+              <td className="py-1.5 pr-2 text-right text-xs text-[#d1d1d6]">-</td>
+              <td className="py-1.5 pl-2 text-right text-xs text-[#d1d1d6]">-</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
